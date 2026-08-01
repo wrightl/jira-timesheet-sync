@@ -5,5 +5,12 @@
     "when": 1754050000000,
     "tag": "0000_init",
     "breakpoints": true
+  },
+  {
+    "idx": 1,
+    "version": "7",
+    "when": 1754060000000,
+    "tag": "0001_mappings_key_only",
+    "breakpoints": true
   }
 ]

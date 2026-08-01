@@ -12,7 +12,7 @@ import {
   type ParsedWorklogEvent,
   type WorklogEventType,
 } from "@/lib/worklog-parser";
-import { hashPayload } from "@/lib/webhook-signature";
+import { hashPayload } from "@/lib/webhook-auth";
 
 export interface SyncResult {
   status: "synced" | "skipped" | "failed";
@@ -66,23 +66,15 @@ async function findLatestTimesheetId(
 }
 
 async function findMapping(db: Db, event: ParsedWorklogEvent) {
-  if (event.spaceId) {
-    const byId = await db
-      .select()
-      .from(spaceProjectMappings)
-      .where(eq(spaceProjectMappings.jiraSpaceId, event.spaceId))
-      .limit(1);
-    if (byId[0]) return byId[0];
+  if (!event.spaceKey) {
+    return null;
   }
-  if (event.spaceKey) {
-    const byKey = await db
-      .select()
-      .from(spaceProjectMappings)
-      .where(eq(spaceProjectMappings.jiraSpaceKey, event.spaceKey))
-      .limit(1);
-    if (byKey[0]) return byKey[0];
-  }
-  return null;
+  const rows = await db
+    .select()
+    .from(spaceProjectMappings)
+    .where(eq(spaceProjectMappings.jiraSpaceKey, event.spaceKey))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 async function recordSync(
@@ -158,7 +150,7 @@ export async function processWorklogWebhook(
     }
 
     const input: TimesheetEntryInput = {
-      internalProjectId: mapping.internalProjectId,
+      clientId: mapping.clientId,
       jiraWorklogId: event.worklogId,
       jiraIssueKey: event.issueKey,
       authorAccountId: event.authorAccountId,

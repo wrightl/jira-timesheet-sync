@@ -2,9 +2,8 @@ CREATE TYPE "public"."sync_status" AS ENUM('synced', 'skipped', 'failed');--> st
 CREATE TYPE "public"."sync_event_type" AS ENUM('worklog_created', 'worklog_updated', 'worklog_deleted');--> statement-breakpoint
 CREATE TABLE "space_project_mappings" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"jira_space_id" text NOT NULL,
 	"jira_space_key" text NOT NULL,
-	"internal_project_id" text NOT NULL,
+	"client_id" text NOT NULL,
 	"enabled" boolean DEFAULT true NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -30,7 +29,7 @@ CREATE TABLE "worklog_syncs" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX "space_project_mappings_jira_space_id_uidx" ON "space_project_mappings" USING btree ("jira_space_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "space_project_mappings_jira_space_key_uidx" ON "space_project_mappings" USING btree ("jira_space_key");--> statement-breakpoint
 CREATE UNIQUE INDEX "worklog_syncs_worklog_event_hash_uidx" ON "worklog_syncs" USING btree ("jira_worklog_id","event_type","payload_hash");--> statement-breakpoint
 CREATE INDEX "worklog_syncs_jira_worklog_id_idx" ON "worklog_syncs" USING btree ("jira_worklog_id");--> statement-breakpoint
 CREATE INDEX "worklog_syncs_created_at_idx" ON "worklog_syncs" USING btree ("created_at");

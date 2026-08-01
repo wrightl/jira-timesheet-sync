@@ -5,9 +5,8 @@ import { processWorklogWebhook } from "@/services/worklog-sync";
 
 type Mapping = {
   id: string;
-  jiraSpaceId: string;
   jiraSpaceKey: string;
-  internalProjectId: string;
+  clientId: string;
   enabled: boolean;
 };
 
@@ -129,9 +128,8 @@ describe("processWorklogWebhook", () => {
     const db = createMockDb({
       mapping: {
         id: "m1",
-        jiraSpaceId: "10000",
         jiraSpaceKey: "ENG",
-        internalProjectId: "proj-9",
+        clientId: "client-9",
         enabled: true,
       },
     });
@@ -144,7 +142,7 @@ describe("processWorklogWebhook", () => {
     expect(result.internalTimesheetId).toBe("ts-1");
     expect(createTimesheet).toHaveBeenCalledWith(
       expect.objectContaining({
-        internalProjectId: "proj-9",
+        clientId: "client-9",
         jiraWorklogId: "wl-1",
         timeSpentSeconds: 1800,
       }),
@@ -156,9 +154,8 @@ describe("processWorklogWebhook", () => {
     const db = createMockDb({
       mapping: {
         id: "m1",
-        jiraSpaceId: "10000",
         jiraSpaceKey: "ENG",
-        internalProjectId: "proj-9",
+        clientId: "client-9",
         enabled: true,
       },
       priorSyncs: [
@@ -188,9 +185,8 @@ describe("processWorklogWebhook", () => {
     const db = createMockDb({
       mapping: {
         id: "m1",
-        jiraSpaceId: "10000",
         jiraSpaceKey: "ENG",
-        internalProjectId: "proj-9",
+        clientId: "client-9",
         enabled: true,
       },
       priorSyncs: [
@@ -216,9 +212,8 @@ describe("processWorklogWebhook", () => {
     const db = createMockDb({
       mapping: {
         id: "m1",
-        jiraSpaceId: "10000",
         jiraSpaceKey: "ENG",
-        internalProjectId: "proj-9",
+        clientId: "client-9",
         enabled: false,
       },
     });

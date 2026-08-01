@@ -1,5 +1,5 @@
 export interface TimesheetEntryInput {
-  internalProjectId: string;
+  clientId: string;
   jiraWorklogId: string;
   jiraIssueKey: string | null;
   authorAccountId: string | null;
@@ -49,7 +49,7 @@ export class StubInternalPmClient implements InternalPmClient {
       baseUrl: this.baseUrl,
       hasToken: Boolean(this.accessToken),
       timesheetId,
-      projectId: input.internalProjectId,
+      clientId: input.clientId,
       worklogId: input.jiraWorklogId,
       seconds: input.timeSpentSeconds,
     });
@@ -63,7 +63,7 @@ export class StubInternalPmClient implements InternalPmClient {
     this.store.set(timesheetId, input);
     console.info("[StubInternalPmClient] updateTimesheet", {
       timesheetId,
-      projectId: input.internalProjectId,
+      clientId: input.clientId,
       worklogId: input.jiraWorklogId,
       seconds: input.timeSpentSeconds,
     });

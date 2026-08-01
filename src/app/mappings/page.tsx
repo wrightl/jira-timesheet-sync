@@ -15,10 +15,10 @@ export default async function MappingsPage() {
       <AppNav currentPath="/mappings" />
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
         <AdminLogin initiallyAuthed={authed} />
-        <h2 className="mb-2 text-xl font-semibold">Space → project mappings</h2>
+        <h2 className="mb-2 text-xl font-semibold">Space → client mappings</h2>
         <p className="mb-6 text-sm text-muted">
-          Map each Jira space (project) to an internal project ID. The webhook
-          receives events for all spaces; only mapped and enabled spaces sync.
+          Map each Jira space key to a client ID. The webhook receives events for
+          all spaces; only mapped and enabled spaces sync.
         </p>
         <MappingsManager authed={authed} />
       </main>

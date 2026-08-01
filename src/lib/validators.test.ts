@@ -8,18 +8,16 @@ import {
 describe("mappingCreateSchema", () => {
   it("accepts a valid mapping and defaults enabled", () => {
     const result = mappingCreateSchema.parse({
-      jiraSpaceId: "10000",
       jiraSpaceKey: "ENG",
-      internalProjectId: "proj-1",
+      clientId: "client-1",
     });
     expect(result.enabled).toBe(true);
   });
 
   it("rejects missing fields", () => {
     const result = mappingCreateSchema.safeParse({
-      jiraSpaceId: "",
-      jiraSpaceKey: "ENG",
-      internalProjectId: "proj-1",
+      jiraSpaceKey: "",
+      clientId: "client-1",
     });
     expect(result.success).toBe(false);
   });

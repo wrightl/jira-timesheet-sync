@@ -19,7 +19,7 @@ export default async function HomePage() {
           <h2 className="mb-2 text-xl font-semibold">Dashboard</h2>
           <p className="mb-4 text-sm text-muted">
             Jira Cloud worklog webhooks sync into the internal PM timesheet API.
-            Spaces without a project mapping are skipped (integration listens to
+            Spaces without a client mapping are skipped (integration listens to
             all spaces by default).
           </p>
           <div className="grid gap-4 sm:grid-cols-3">
@@ -29,7 +29,7 @@ export default async function HomePage() {
             </div>
             <div className="rounded-lg border border-border bg-card p-4">
               <p className="text-xs uppercase tracking-wide text-muted">Security</p>
-              <p className="mt-1 text-sm">HMAC SHA-256 (X-Hub-Signature)</p>
+              <p className="mt-1 text-sm">Header X-Webhook-Token</p>
             </div>
             <div className="rounded-lg border border-border bg-card p-4">
               <p className="text-xs uppercase tracking-wide text-muted">Health</p>

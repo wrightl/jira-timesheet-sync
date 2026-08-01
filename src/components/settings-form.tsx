@@ -124,7 +124,7 @@ export function SettingsForm({ authed }: { authed: boolean }) {
           </li>
           <li>
             <code className="font-mono text-xs text-foreground">JIRA_WEBHOOK_SECRET</code>{" "}
-            — HMAC secret from Jira webhook registration
+            — shared secret as <code className="font-mono text-xs">X-Webhook-Token</code> header
           </li>
           <li>
             <code className="font-mono text-xs text-foreground">SETTINGS_ENCRYPTION_KEY</code>{" "}

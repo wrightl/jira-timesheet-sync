@@ -4,16 +4,14 @@ import { useEffect, useState, useTransition } from "react";
 
 type Mapping = {
   id: string;
-  jiraSpaceId: string;
   jiraSpaceKey: string;
-  internalProjectId: string;
+  clientId: string;
   enabled: boolean;
 };
 
 const emptyForm = {
-  jiraSpaceId: "",
   jiraSpaceKey: "",
-  internalProjectId: "",
+  clientId: "",
   enabled: true,
 };
 
@@ -44,7 +42,7 @@ export function MappingsManager({ authed }: { authed: boolean }) {
 
   if (!authed) {
     return (
-      <p className="text-sm text-muted">Sign in to manage space ↔ project mappings.</p>
+      <p className="text-sm text-muted">Sign in to manage space ↔ client mappings.</p>
     );
   }
 
@@ -72,33 +70,23 @@ export function MappingsManager({ authed }: { authed: boolean }) {
         }}
       >
         <h2 className="mb-3 text-base font-semibold">Add mapping</h2>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <label className="text-sm">
-            <span className="mb-1 block text-muted">Jira space ID</span>
-            <input
-              className="w-full rounded-md border border-border bg-background px-3 py-2"
-              value={form.jiraSpaceId}
-              onChange={(e) => setForm({ ...form, jiraSpaceId: e.target.value })}
-              required
-            />
-          </label>
+        <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm">
             <span className="mb-1 block text-muted">Jira space key</span>
             <input
               className="w-full rounded-md border border-border bg-background px-3 py-2"
               value={form.jiraSpaceKey}
               onChange={(e) => setForm({ ...form, jiraSpaceKey: e.target.value })}
+              placeholder="ENG"
               required
             />
           </label>
           <label className="text-sm">
-            <span className="mb-1 block text-muted">Internal project ID</span>
+            <span className="mb-1 block text-muted">Client ID</span>
             <input
               className="w-full rounded-md border border-border bg-background px-3 py-2"
-              value={form.internalProjectId}
-              onChange={(e) =>
-                setForm({ ...form, internalProjectId: e.target.value })
-              }
+              value={form.clientId}
+              onChange={(e) => setForm({ ...form, clientId: e.target.value })}
               required
             />
           </label>
@@ -128,8 +116,7 @@ export function MappingsManager({ authed }: { authed: boolean }) {
           <thead className="border-b border-border bg-background text-muted">
             <tr>
               <th className="px-4 py-3 font-medium">Space key</th>
-              <th className="px-4 py-3 font-medium">Space ID</th>
-              <th className="px-4 py-3 font-medium">Project ID</th>
+              <th className="px-4 py-3 font-medium">Client ID</th>
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium" />
             </tr>
@@ -137,7 +124,7 @@ export function MappingsManager({ authed }: { authed: boolean }) {
           <tbody>
             {mappings.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-muted">
+                <td colSpan={4} className="px-4 py-6 text-center text-muted">
                   No mappings yet. Worklogs from unmapped spaces are skipped.
                 </td>
               </tr>
@@ -145,10 +132,7 @@ export function MappingsManager({ authed }: { authed: boolean }) {
               mappings.map((m) => (
                 <tr key={m.id} className="border-b border-border last:border-0">
                   <td className="px-4 py-3 font-medium">{m.jiraSpaceKey}</td>
-                  <td className="px-4 py-3 font-mono text-xs">{m.jiraSpaceId}</td>
-                  <td className="px-4 py-3 font-mono text-xs">
-                    {m.internalProjectId}
-                  </td>
+                  <td className="px-4 py-3 font-mono text-xs">{m.clientId}</td>
                   <td className="px-4 py-3">
                     <button
                       type="button"

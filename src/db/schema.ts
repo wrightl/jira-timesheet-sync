@@ -25,9 +25,8 @@ export const spaceProjectMappings = pgTable(
   "space_project_mappings",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    jiraSpaceId: text("jira_space_id").notNull(),
     jiraSpaceKey: text("jira_space_key").notNull(),
-    internalProjectId: text("internal_project_id").notNull(),
+    clientId: text("client_id").notNull(),
     enabled: boolean("enabled").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -37,8 +36,8 @@ export const spaceProjectMappings = pgTable(
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex("space_project_mappings_jira_space_id_uidx").on(
-      table.jiraSpaceId,
+    uniqueIndex("space_project_mappings_jira_space_key_uidx").on(
+      table.jiraSpaceKey,
     ),
   ],
 );

@@ -1,16 +1,14 @@
 import { z } from "zod";
 
 export const mappingCreateSchema = z.object({
-  jiraSpaceId: z.string().min(1, "jiraSpaceId is required"),
   jiraSpaceKey: z.string().min(1, "jiraSpaceKey is required"),
-  internalProjectId: z.string().min(1, "internalProjectId is required"),
+  clientId: z.string().min(1, "clientId is required"),
   enabled: z.boolean().optional().default(true),
 });
 
 export const mappingUpdateSchema = z.object({
-  jiraSpaceId: z.string().min(1).optional(),
   jiraSpaceKey: z.string().min(1).optional(),
-  internalProjectId: z.string().min(1).optional(),
+  clientId: z.string().min(1).optional(),
   enabled: z.boolean().optional(),
 });
 

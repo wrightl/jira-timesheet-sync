@@ -42,9 +42,8 @@ export async function POST(request: NextRequest) {
     const [row] = await db
       .insert(spaceProjectMappings)
       .values({
-        jiraSpaceId: parsed.data.jiraSpaceId,
         jiraSpaceKey: parsed.data.jiraSpaceKey,
-        internalProjectId: parsed.data.internalProjectId,
+        clientId: parsed.data.clientId,
         enabled: parsed.data.enabled,
       })
       .returning();
@@ -53,7 +52,7 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error("[mappings] create failed", err);
     return Response.json(
-      { error: "Failed to create mapping (possibly duplicate space id)" },
+      { error: "Failed to create mapping (possibly duplicate space key)" },
       { status: 409 },
     );
   }

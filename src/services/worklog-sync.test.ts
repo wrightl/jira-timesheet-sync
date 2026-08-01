@@ -105,9 +105,9 @@ describe("processWorklogWebhook", () => {
     updateTimesheet = vi.fn(async (id: string) => ({ timesheetId: id }));
     deleteTimesheet = vi.fn(async () => undefined);
     pm = {
-      createTimesheet,
-      updateTimesheet,
-      deleteTimesheet,
+      createTimesheet: createTimesheet as InternalPmClient["createTimesheet"],
+      updateTimesheet: updateTimesheet as InternalPmClient["updateTimesheet"],
+      deleteTimesheet: deleteTimesheet as InternalPmClient["deleteTimesheet"],
     };
   });
 
@@ -225,5 +225,30 @@ describe("processWorklogWebhook", () => {
     expect(result.status).toBe("skipped");
     expect(result.skippedReason).toBe("mapping_disabled");
     expect(createTimesheet).not.toHaveBeenCalled();
+  });
+
+  it("records failure when the PM client rejects resolution", async () => {
+    createTimesheet.mockRejectedValueOnce(new Error("No Bitmap user found"));
+    const db = createMockDb({
+      mapping: {
+        id: "m1",
+        jiraSpaceKey: "ENG",
+        clientId: "client-9",
+        enabled: true,
+      },
+    });
+    const result = await processWorklogWebhook(
+      basePayload,
+      JSON.stringify(basePayload),
+      { db: db as never, pmClient: pm },
+    );
+    expect(result.status).toBe("failed");
+    expect(result.error).toBe("No Bitmap user found");
+    expect(db._inserts.at(-1)).toEqual(
+      expect.objectContaining({
+        status: "failed",
+        error: "No Bitmap user found",
+      }),
+    );
   });
 });

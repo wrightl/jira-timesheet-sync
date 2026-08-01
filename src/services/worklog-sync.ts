@@ -1,11 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import type { Db } from "@/db";
 import { settings, spaceProjectMappings, worklogSyncs } from "@/db/schema";
-import {
-  createInternalPmClient,
-  type InternalPmClient,
-  type TimesheetEntryInput,
-} from "@/clients/internal-pm";
+import type { InternalPmClient, TimesheetEntryInput } from "@/clients/internal-pm";
 import { decryptSecret } from "@/lib/crypto";
 import {
   parseWorklogWebhookPayload,
@@ -13,6 +9,7 @@ import {
   type WorklogEventType,
 } from "@/lib/worklog-parser";
 import { hashPayload } from "@/lib/webhook-auth";
+import { createResolvingPmClient } from "@/services/bitmap-resolver";
 
 export interface SyncResult {
   status: "synced" | "skipped" | "failed";
@@ -143,7 +140,8 @@ export async function processWorklogWebhook(
     if (!pm) {
       const token =
         (await (deps.getAccessToken?.() ?? resolveAccessToken(db))) ?? "";
-      pm = createInternalPmClient({
+      pm = createResolvingPmClient({
+        db,
         accessToken: token,
         baseUrl: process.env.INTERNAL_PM_BASE_URL,
       });

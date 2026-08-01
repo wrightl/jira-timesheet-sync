@@ -12,5 +12,12 @@
     "when": 1754060000000,
     "tag": "0001_mappings_key_only",
     "breakpoints": true
+  },
+  {
+    "idx": 2,
+    "version": "7",
+    "when": 1754070000000,
+    "tag": "0002_user_mappings_api_cache",
+    "breakpoints": true
   }
 ]

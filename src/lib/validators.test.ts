@@ -3,6 +3,8 @@ import {
   mappingCreateSchema,
   mappingUpdateSchema,
   settingsUpdateSchema,
+  userMappingCreateSchema,
+  userMappingUpdateSchema,
 } from "@/lib/validators";
 
 describe("mappingCreateSchema", () => {
@@ -27,6 +29,34 @@ describe("mappingUpdateSchema", () => {
   it("allows partial updates", () => {
     expect(mappingUpdateSchema.parse({ enabled: false })).toEqual({
       enabled: false,
+    });
+  });
+});
+
+describe("userMappingCreateSchema", () => {
+  it("accepts a valid user mapping", () => {
+    const result = userMappingCreateSchema.parse({
+      jiraDisplayName: "Ada Lovelace",
+      bitmapUserId: "bitmap-1",
+    });
+    expect(result.enabled).toBe(true);
+    expect(result.jiraDisplayName).toBe("Ada Lovelace");
+  });
+
+  it("rejects missing bitmap user id", () => {
+    expect(
+      userMappingCreateSchema.safeParse({
+        jiraDisplayName: "Ada",
+        bitmapUserId: "",
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("userMappingUpdateSchema", () => {
+  it("allows partial updates", () => {
+    expect(userMappingUpdateSchema.parse({ jobTitle: "QA Engineer" })).toEqual({
+      jobTitle: "QA Engineer",
     });
   });
 });

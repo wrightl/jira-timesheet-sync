@@ -21,6 +21,11 @@ export const syncEventTypeEnum = pgEnum("sync_event_type", [
   "worklog_deleted",
 ]);
 
+export const apiCacheResourceTypeEnum = pgEnum("api_cache_resource_type", [
+  "projects",
+  "project_budgets",
+]);
+
 export const spaceProjectMappings = pgTable(
   "space_project_mappings",
   {
@@ -39,6 +44,54 @@ export const spaceProjectMappings = pgTable(
     uniqueIndex("space_project_mappings_jira_space_key_uidx").on(
       table.jiraSpaceKey,
     ),
+  ],
+);
+
+export const userMappings = pgTable(
+  "user_mappings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    jiraDisplayName: text("jira_display_name").notNull(),
+    jiraAccountId: text("jira_account_id"),
+    bitmapUserId: text("bitmap_user_id").notNull(),
+    bitmapEmail: text("bitmap_email"),
+    jobTitle: text("job_title"),
+    enabled: boolean("enabled").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("user_mappings_jira_display_name_uidx").on(
+      table.jiraDisplayName,
+    ),
+  ],
+);
+
+export const apiCache = pgTable(
+  "api_cache",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    cacheKey: text("cache_key").notNull(),
+    resourceType: apiCacheResourceTypeEnum("resource_type").notNull(),
+    requestMeta: text("request_meta").notNull(),
+    responseBody: text("response_body").notNull(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("api_cache_cache_key_uidx").on(table.cacheKey),
+    index("api_cache_expires_at_idx").on(table.expiresAt),
+    index("api_cache_resource_type_idx").on(table.resourceType),
   ],
 );
 
@@ -82,5 +135,9 @@ export const worklogSyncs = pgTable(
 
 export type SpaceProjectMapping = typeof spaceProjectMappings.$inferSelect;
 export type NewSpaceProjectMapping = typeof spaceProjectMappings.$inferInsert;
+export type UserMapping = typeof userMappings.$inferSelect;
+export type NewUserMapping = typeof userMappings.$inferInsert;
+export type ApiCacheEntry = typeof apiCache.$inferSelect;
+export type NewApiCacheEntry = typeof apiCache.$inferInsert;
 export type WorklogSync = typeof worklogSyncs.$inferSelect;
 export type NewWorklogSync = typeof worklogSyncs.$inferInsert;

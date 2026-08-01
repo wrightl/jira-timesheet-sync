@@ -1,12 +1,15 @@
 # Jira Timesheet Sync
 
-Next.js integration that receives **Jira Cloud worklog** webhooks (`created` / `updated` / `deleted`), maps Jira space keys to client IDs, and syncs timesheet entries to an internal project management API (stubbed for now).
+Next.js integration that receives **Jira Cloud worklog** webhooks (`created` / `updated` / `deleted`), maps Jira space keys to Bitmap client IDs, resolves Bitmap project/budget/user IDs, and posts timesheet entries to the Bitmap API.
 
 ## Features
 
 - Public webhook endpoint secured with a shared secret header (`X-Webhook-Token`)
 - Site-wide webhook coverage (all spaces); sync only when a space → client mapping exists
-- Admin UI to manage mappings and the internal PM access token
+- Resolves Bitmap `project_id`, `project_budget_id`, and `user_id` from mapping + Bitmap APIs
+- Auto-creates Jira display name → Bitmap user mappings on first match
+- Caches Bitmap projects and project budgets for 24 hours (view/invalidate in UI)
+- Admin UI for space mappings, user mappings, cache, and the Bitmap access token
 - Neon Postgres via Drizzle ORM
 - Containerized for Kubernetes
 
@@ -21,7 +24,7 @@ npm run db:push   # or npm run db:migrate against Neon
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000), sign in with `ADMIN_API_KEY`, then add mappings under **Mappings** and optionally store the PM token under **Settings**.
+Open [http://localhost:3000](http://localhost:3000), sign in with `ADMIN_API_KEY`, then add mappings under **Mappings** and store the Bitmap token under **Settings**.
 
 ## Environment variables
 
@@ -30,8 +33,8 @@ Open [http://localhost:3000](http://localhost:3000), sign in with `ADMIN_API_KEY
 | `DATABASE_URL` | Neon pooled connection string |
 | `DATABASE_URL_UNPOOLED` | Neon direct URL for migrations |
 | `JIRA_WEBHOOK_SECRET` | Shared secret sent as the `X-Webhook-Token` request header |
-| `INTERNAL_PM_ACCESS_TOKEN` | Optional env fallback for the PM API token |
-| `INTERNAL_PM_BASE_URL` | Base URL for the future real PM client |
+| `INTERNAL_PM_ACCESS_TOKEN` | Optional env fallback for the Bitmap API bearer token |
+| `INTERNAL_PM_BASE_URL` | Bitmap API base URL (default `https://bitmap.app`) |
 | `SETTINGS_ENCRYPTION_KEY` | Encrypts tokens saved via the UI |
 | `ADMIN_API_KEY` | Protects admin APIs and UI session |
 | `NGROK_AUTHTOKEN` | ngrok auth token for local webhook tunneling |
@@ -63,12 +66,24 @@ npm run dev:tunnel
 4. Events: **Worklog created**, **Worklog updated**, **Worklog deleted**
 5. Leave JQL empty so **all spaces** emit events (integration on by default; unmapped spaces are skipped)
 
+## Bitmap resolution
+
+On each create/update sync:
+
+1. Look up space → `client_id` mapping
+2. Resolve Bitmap user via stored display-name mapping, or `GET /api/v1/users.json` matching `full_name` to Jira `author.displayName` (then persist the mapping)
+3. Load client projects (`POST /api/v1/projects.json`, cached 24h) and pick the first with `state === "active"` and `started === true`
+4. Load project budgets (`POST .../project_budgets`, cached 24h); prefer **QA** or **Development** by job title (`QA` in title → QA, else Development); otherwise first budget with `billable_time_remaining > 0`
+5. `POST /api/v1/timesheet_entries` with resolved IDs, `date` (`yyyy-MM-dd`), and `hours` (`timeSpentSeconds / 3600`)
+
 ## API
 
 | Method | Path | Auth |
 |--------|------|------|
 | `POST` | `/api/webhooks/jira` | Header `X-Webhook-Token` matching `JIRA_WEBHOOK_SECRET` |
 | `GET/POST/PATCH/DELETE` | `/api/mappings` | `Authorization: Bearer <ADMIN_API_KEY>` or admin cookie |
+| `GET/POST/PATCH/DELETE` | `/api/user-mappings` | Admin |
+| `GET/DELETE` | `/api/cache` | Admin (`?id=` or `?all=1` to invalidate) |
 | `GET/PUT` | `/api/settings` | Admin |
 | `GET` | `/api/syncs` | Admin |
 | `GET` | `/api/health` | None |
@@ -106,6 +121,6 @@ kubectl apply -f k8s/ingress.yaml  # set your host / TLS
 
 Point Jira at the public ingress URL for `/api/webhooks/jira`.
 
-## Internal PM client
+## Internal PM / Bitmap client
 
-`src/clients/internal-pm.ts` exposes `InternalPmClient` with a **stub** implementation. Replace `StubInternalPmClient` / `createInternalPmClient` with a real HTTP client when the PM API is ready—sync orchestration in `src/services/worklog-sync.ts` stays the same.
+`src/clients/internal-pm.ts` implements the Bitmap HTTP client. `src/services/bitmap-resolver.ts` resolves user/project/budget IDs and builds the timesheet payload used by `src/services/worklog-sync.ts`.

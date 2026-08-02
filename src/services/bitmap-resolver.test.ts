@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   budgetCategoryFromJobTitle,
   buildTimesheetBody,
+  findMappedBudget,
+  findMappedProject,
   formatBitmapDateRangeBound,
   formatTimesheetDate,
   hoursFromSeconds,
+  isBudgetActiveForTimesheet,
+  isProjectActiveForTimesheet,
   projectDateRangeFromStarted,
   selectActiveStartedProject,
   selectProjectBudget,
@@ -67,6 +71,63 @@ describe("selectActiveStartedProject", () => {
         { id: "1", state: "active", started: false },
       ]),
     ).toBeNull();
+  });
+});
+
+describe("user mapping activity checks", () => {
+  it("requires active started projects", () => {
+    expect(
+      isProjectActiveForTimesheet({
+        id: "p1",
+        state: "active",
+        started: true,
+      }),
+    ).toBe(true);
+    expect(
+      isProjectActiveForTimesheet({
+        id: "p1",
+        state: "active",
+        started: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("requires billable time remaining on budgets", () => {
+    expect(
+      isBudgetActiveForTimesheet({
+        id: "b1",
+        name: "Development",
+        billable_time_remaining: 10,
+      }),
+    ).toBe(true);
+    expect(
+      isBudgetActiveForTimesheet({
+        id: "b1",
+        name: "Development",
+        billable_time_remaining: 0,
+      }),
+    ).toBe(false);
+  });
+
+  it("finds mapped project and budget by id", () => {
+    expect(
+      findMappedProject(
+        [
+          { id: "a", state: "active", started: true },
+          { id: "b", state: "active", started: true },
+        ],
+        "b",
+      )?.id,
+    ).toBe("b");
+    expect(
+      findMappedBudget(
+        [
+          { id: "dev", name: "Development", billable_time_remaining: 1 },
+          { id: "qa", name: "QA", billable_time_remaining: 2 },
+        ],
+        "qa",
+      )?.id,
+    ).toBe("qa");
   });
 });
 

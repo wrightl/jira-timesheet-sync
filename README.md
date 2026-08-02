@@ -5,11 +5,13 @@ Next.js integration that receives **Jira Cloud worklog** webhooks (`created` / `
 ## Features
 
 - Public webhook endpoint secured with a shared secret header (`X-Webhook-Token`)
-- Site-wide webhook coverage (all spaces); sync only when a space → client mapping exists
+- Async webhook processing via Next.js `after()` (returns 202, syncs in background)
+- Admin dashboard retry for failed/skipped sync events
+- Email/password login with seeded admin and self-registration
+- Role-based access: admins manage settings/cache/global mappings; users manage their own project/budget mappings
 - Resolves Bitmap `project_id`, `project_budget_id`, and `user_id` from mapping + Bitmap APIs
-- Auto-creates Jira display name → Bitmap user mappings on first match
-- Caches Bitmap projects and project budgets for 24 hours (view/invalidate in UI)
-- Admin UI for space mappings, user mappings, cache, and the Bitmap access token
+- Optional per-user space → project/budget overrides (validated as active on sync)
+- Caches Bitmap projects and project budgets for 24 hours
 - Neon Postgres via Drizzle ORM
 - Containerized for Kubernetes
 
@@ -17,14 +19,39 @@ Next.js integration that receives **Jira Cloud worklog** webhooks (`created` / `
 
 ```bash
 cp .env.example .env.local
-# Fill DATABASE_URL, JIRA_WEBHOOK_SECRET, SETTINGS_ENCRYPTION_KEY, ADMIN_API_KEY
+# Fill DATABASE_URL, JIRA_WEBHOOK_SECRET, SETTINGS_ENCRYPTION_KEY,
+# ADMIN_EMAIL, ADMIN_PASSWORD
 
 npm install
 npm run db:push   # or npm run db:migrate against Neon
+npm run db:seed   # creates/updates the admin user
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000), sign in with `ADMIN_API_KEY`, then add mappings under **Mappings** and store the Bitmap token under **Settings**.
+Open [http://localhost:3000](http://localhost:3000), sign in with the seeded admin (or register a normal user), then configure mappings and the Bitmap token under **Settings** (admin).
+
+## Auth and roles
+
+| Role | Capabilities |
+|------|----------------|
+| `admin` | Settings, cache, users, global space→client mappings, Jira↔Bitmap user mappings, sync dashboard |
+| `user` | Own space→project/budget mappings (`/my-mappings`); read global spaces to pick from |
+
+- Login username is the **email address**
+- Self-register creates role `user`
+- Seed admin: `npm run db:seed` using `ADMIN_EMAIL` / `ADMIN_PASSWORD`
+- `ADMIN_API_KEY` remains an optional Bearer fallback for admin API tooling only
+
+## User-specific mappings
+
+On **My mappings**, a user picks a Jira space (from enabled global mappings), then a Bitmap project and budget. At sync time:
+
+1. Resolve Bitmap user by Jira `author.displayName` ↔ Bitmap `full_name`
+2. Match app user by `users.email` ↔ `user_mappings.bitmap_email` (case-insensitive)
+3. If an enabled user-space mapping exists for that space, use it after checking the project is `active`+`started` and the budget has `billable_time_remaining > 0`
+4. Otherwise auto-pick project/budget as before
+
+If a mapped project/budget is inactive, the sync **fails** (no silent fallback).
 
 ## Environment variables
 
@@ -36,7 +63,8 @@ Open [http://localhost:3000](http://localhost:3000), sign in with `ADMIN_API_KEY
 | `INTERNAL_PM_ACCESS_TOKEN` | Optional env fallback for the Bitmap API bearer token |
 | `INTERNAL_PM_BASE_URL` | Bitmap API base URL (default `https://bitmap.app`) |
 | `SETTINGS_ENCRYPTION_KEY` | Encrypts tokens saved via the UI |
-| `ADMIN_API_KEY` | Protects admin APIs and UI session |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Seeded admin credentials (`npm run db:seed`) |
+| `ADMIN_API_KEY` | Optional Bearer fallback for admin APIs |
 | `NGROK_AUTHTOKEN` | ngrok auth token for local webhook tunneling |
 | `NGROK_DOMAIN` | Optional reserved ngrok domain |
 
@@ -56,71 +84,65 @@ npm run dev:tunnel
    Or run `npm run dev` in one terminal and `npm run tunnel` in another after the app is up.
 3. Copy the printed **Jira webhook URL** (`https://…/api/webhooks/jira`) into Jira.
 4. Requests must include header `X-Webhook-Token: <JIRA_WEBHOOK_SECRET>` (same value as in `.env.local`).
-   Note: classic Jira admin webhooks cannot set custom headers—use this when calling via curl, a proxy, or another delivery path that can attach headers.
 
 ## Jira Cloud webhook setup
 
 1. In Jira: **Settings → System → WebHooks → Create** (or deliver via a path that can set headers).
-2. URL: `https://<your-public-host>/api/webhooks/jira` (use the ngrok host while testing locally)
+2. URL: `https://<your-public-host>/api/webhooks/jira`
 3. Ensure deliveries include `X-Webhook-Token: <JIRA_WEBHOOK_SECRET>`
 4. Events: **Worklog created**, **Worklog updated**, **Worklog deleted**
-5. Leave JQL empty so **all spaces** emit events (integration on by default; unmapped spaces are skipped)
+5. Leave JQL empty so **all spaces** emit events
 
 ## Bitmap resolution
 
 On each create/update sync:
 
 1. Look up space → `client_id` mapping
-2. Resolve Bitmap user via stored display-name mapping, or `GET /api/v1/users.json` matching `full_name` to Jira `author.displayName` (then persist the mapping)
-3. Load client projects (`POST /api/v1/projects.json`, cached 24h) and pick the first with `state === "active"` and `started === true`
-4. Load project budgets (`POST .../project_budgets`, cached 24h); prefer **QA** or **Development** by job title (`QA` in title → QA, else Development); otherwise first budget with `billable_time_remaining > 0`
-5. `POST /api/v1/timesheet_entries` with resolved IDs, `date` (`yyyy-MM-dd`), and `hours` (`timeSpentSeconds / 3600`)
+2. Resolve Bitmap user via stored display-name mapping, or `GET /api/v1/users.json`
+3. Apply user-specific project/budget override when matched and active; else auto-select
+4. `POST /api/v1/timesheet_entries` with resolved IDs, `date` (`yyyy-MM-dd`), and `hours` (`timeSpentSeconds / 3600`)
+
+## Async webhooks and retry
+
+`POST /api/webhooks/jira` authenticates, stores a `pending` sync row (including the raw payload), and returns **202** immediately. Bitmap processing continues via Next.js [`after()`](https://nextjs.org/docs/app/api-reference/functions/after). The dashboard shows `pending` / `synced` / `skipped` / `failed` and polls while any row is pending.
+
+Admins can **Retry** failed or skipped events from the dashboard (`POST /api/syncs?action=retry&id=`). Retry requires a stored raw payload (events accepted after this feature).
 
 ## API
 
 | Method | Path | Auth |
 |--------|------|------|
-| `POST` | `/api/webhooks/jira` | Header `X-Webhook-Token` matching `JIRA_WEBHOOK_SECRET` |
-| `GET/POST/PATCH/DELETE` | `/api/mappings` | `Authorization: Bearer <ADMIN_API_KEY>` or admin cookie |
+| `POST` | `/api/webhooks/jira` | Header `X-Webhook-Token` (returns 202; processes via `after()`) |
+| `POST` | `/api/auth/register` | Public |
+| `POST` | `/api/auth/login` | Public |
+| `POST` | `/api/auth/logout` | Session |
+| `GET` | `/api/auth/me` | Session |
+| `GET` | `/api/mappings` | Any authenticated (write = admin) |
+| `GET/POST/PATCH/DELETE` | `/api/user-space-mappings` | Session (own rows; admin can manage any) |
+| `GET` | `/api/bitmap/projects` | Session |
+| `GET` | `/api/bitmap/budgets` | Session |
 | `GET/POST/PATCH/DELETE` | `/api/user-mappings` | Admin |
-| `GET/DELETE` | `/api/cache` | Admin (`?id=` or `?all=1` to invalidate) |
+| `GET/POST/PATCH/DELETE` | `/api/users` | Admin (app account maintenance) |
+| `GET/DELETE` | `/api/cache` | Admin |
 | `GET/PUT` | `/api/settings` | Admin |
 | `GET` | `/api/syncs` | Admin |
+| `POST` | `/api/syncs?action=retry&id=` | Admin (retry failed/skipped) |
 | `GET` | `/api/health` | None |
 
 ## Scripts
 
 ```bash
 npm run dev
-npm run dev:tunnel   # Next.js + ngrok
-npm run tunnel       # ngrok only (app already running)
+npm run dev:tunnel
+npm run tunnel
 npm run build && npm start
 npm test
 npm run db:generate
 npm run db:migrate
 npm run db:push
+npm run db:seed
 ```
 
-## Docker
+## Docker / Kubernetes
 
-```bash
-docker build -t jira-timesheet-sync:latest .
-docker compose up --build
-```
-
-## Kubernetes
-
-Manifests are under `k8s/`:
-
-```bash
-kubectl apply -f k8s/secret.yaml   # edit secrets first
-kubectl apply -f k8s/deployment.yaml
-kubectl apply -f k8s/service.yaml
-kubectl apply -f k8s/ingress.yaml  # set your host / TLS
-```
-
-Point Jira at the public ingress URL for `/api/webhooks/jira`.
-
-## Internal PM / Bitmap client
-
-`src/clients/internal-pm.ts` implements the Bitmap HTTP client. `src/services/bitmap-resolver.ts` resolves user/project/budget IDs and builds the timesheet payload used by `src/services/worklog-sync.ts`.
+See `k8s/` manifests. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in the secret, then run migrations and `npm run db:seed` (or an init job) before first login.

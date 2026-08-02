@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { InternalPmClient } from "@/clients/internal-pm";
 import { spaceProjectMappings, worklogSyncs } from "@/db/schema";
-import { processWorklogWebhook } from "@/services/worklog-sync";
+import {
+  acceptWorklogWebhook,
+  processWorklogWebhook,
+  retryWorklogSync,
+} from "@/services/worklog-sync";
 
 type Mapping = {
   id: string;
@@ -11,20 +15,31 @@ type Mapping = {
 };
 
 type SyncRow = {
+  id?: string;
   jiraWorklogId: string;
+  jiraIssueKey?: string | null;
+  jiraSpaceId?: string | null;
   status: string;
   internalTimesheetId: string | null;
   eventType: string;
+  payloadHash?: string;
+  rawPayload?: string | null;
+  error?: string | null;
   createdAt: Date;
 };
 
 function createMockDb(options?: {
   mapping?: Mapping | null;
   priorSyncs?: SyncRow[];
+  byHash?: SyncRow | null;
+  useHashLookup?: boolean;
 }) {
   const inserts: unknown[] = [];
+  const updates: unknown[] = [];
   const mapping = options?.mapping ?? null;
   const priorSyncs = options?.priorSyncs ?? [];
+  const byHash = options?.byHash ?? null;
+  const useHashLookup = options?.useHashLookup ?? false;
 
   const chainFor = (table: unknown) => {
     const isMappings = table === spaceProjectMappings;
@@ -35,6 +50,9 @@ function createMockDb(options?: {
         return Promise.resolve(mapping ? [mapping] : []);
       }
       if (isSyncs) {
+        if (useHashLookup) {
+          return Promise.resolve(byHash ? [byHash] : []);
+        }
         return Promise.resolve(priorSyncs);
       }
       return Promise.resolve([]);
@@ -58,6 +76,7 @@ function createMockDb(options?: {
 
   return {
     _inserts: inserts,
+    _updates: updates,
     select() {
       return {
         from(table: unknown) {
@@ -69,8 +88,32 @@ function createMockDb(options?: {
       return {
         values(value: unknown) {
           inserts.push(value);
+          const result = {
+            returning() {
+              const row = value as { status?: string };
+              if (row.status === "pending") {
+                return Promise.resolve([{ id: "sync-pending-1" }]);
+              }
+              return Promise.resolve([{ id: "sync-1" }]);
+            },
+          };
           return {
             onConflictDoNothing() {
+              return result;
+            },
+            returning() {
+              return result.returning();
+            },
+          };
+        },
+      };
+    },
+    update() {
+      return {
+        set(value: unknown) {
+          updates.push(value);
+          return {
+            where() {
               return Promise.resolve();
             },
           };
@@ -93,6 +136,48 @@ const basePayload = {
     fields: { project: { id: "10000", key: "ENG" } },
   },
 };
+
+describe("acceptWorklogWebhook", () => {
+  it("creates a pending sync for a new event", async () => {
+    const db = createMockDb({ useHashLookup: true, byHash: null });
+    const result = await acceptWorklogWebhook(
+      basePayload,
+      JSON.stringify(basePayload),
+      db as never,
+    );
+    expect(result.shouldProcess).toBe(true);
+    expect(result.syncId).toBe("sync-pending-1");
+    expect(db._inserts[0]).toEqual(
+      expect.objectContaining({
+        status: "pending",
+        jiraWorklogId: "wl-1",
+        rawPayload: JSON.stringify(basePayload),
+      }),
+    );
+  });
+
+  it("does not reprocess duplicates", async () => {
+    const db = createMockDb({
+      useHashLookup: true,
+      byHash: {
+        id: "existing",
+        jiraWorklogId: "wl-1",
+        status: "synced",
+        internalTimesheetId: "ts-1",
+        eventType: "worklog_created",
+        createdAt: new Date(),
+      },
+    });
+    const result = await acceptWorklogWebhook(
+      basePayload,
+      JSON.stringify(basePayload),
+      db as never,
+    );
+    expect(result.shouldProcess).toBe(false);
+    expect(result.duplicate).toBe(true);
+    expect(result.syncId).toBe("existing");
+  });
+});
 
 describe("processWorklogWebhook", () => {
   let pm: InternalPmClient;
@@ -122,6 +207,29 @@ describe("processWorklogWebhook", () => {
     expect(result.skippedReason).toBe("no_mapping");
     expect(createTimesheet).not.toHaveBeenCalled();
     expect(db._inserts.length).toBe(1);
+  });
+
+  it("updates an existing pending row when syncId is provided", async () => {
+    const db = createMockDb({
+      mapping: {
+        id: "m1",
+        jiraSpaceKey: "ENG",
+        clientId: "client-9",
+        enabled: true,
+      },
+    });
+    const result = await processWorklogWebhook(
+      basePayload,
+      JSON.stringify(basePayload),
+      { db: db as never, pmClient: pm, syncId: "sync-pending-1" },
+    );
+    expect(result.status).toBe("synced");
+    expect(db._updates.at(-1)).toEqual(
+      expect.objectContaining({
+        status: "synced",
+        internalTimesheetId: "ts-1",
+      }),
+    );
   });
 
   it("creates a timesheet when mapped", async () => {
@@ -250,5 +358,74 @@ describe("processWorklogWebhook", () => {
         error: "No Bitmap user found",
       }),
     );
+  });
+});
+
+describe("retryWorklogSync", () => {
+  it("rejects synced rows", async () => {
+    const db = {
+      select() {
+        return {
+          from() {
+            return {
+              where() {
+                return {
+                  limit() {
+                    return Promise.resolve([
+                      {
+                        id: "s1",
+                        status: "synced",
+                        rawPayload: JSON.stringify(basePayload),
+                        eventType: "worklog_created",
+                        jiraWorklogId: "wl-1",
+                      },
+                    ]);
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+      update() {
+        return {
+          set() {
+            return { where() { return Promise.resolve(); } };
+          },
+        };
+      },
+    };
+    const result = await retryWorklogSync("s1", { db: db as never });
+    expect(result.error).toBe("retry_not_allowed");
+  });
+
+  it("rejects missing payload", async () => {
+    const db = {
+      select() {
+        return {
+          from() {
+            return {
+              where() {
+                return {
+                  limit() {
+                    return Promise.resolve([
+                      {
+                        id: "s1",
+                        status: "failed",
+                        rawPayload: null,
+                        eventType: "worklog_created",
+                        jiraWorklogId: "wl-1",
+                      },
+                    ]);
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+    };
+    const result = await retryWorklogSync("s1", { db: db as never });
+    expect(result.error).toBe("missing_raw_payload");
   });
 });

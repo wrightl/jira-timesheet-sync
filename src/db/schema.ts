@@ -10,6 +10,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 export const syncStatusEnum = pgEnum("sync_status", [
+  "pending",
   "synced",
   "skipped",
   "failed",
@@ -25,6 +26,48 @@ export const apiCacheResourceTypeEnum = pgEnum("api_cache_resource_type", [
   "projects",
   "project_budgets",
 ]);
+
+export const userRoleEnum = pgEnum("user_role", ["admin", "user"]);
+
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    email: text("email").notNull(),
+    passwordHash: text("password_hash").notNull(),
+    role: userRoleEnum("role").notNull().default("user"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [uniqueIndex("users_email_uidx").on(table.email)],
+);
+
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    token: text("token").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("sessions_token_uidx").on(table.token),
+    index("sessions_user_id_idx").on(table.userId),
+    index("sessions_expires_at_idx").on(table.expiresAt),
+  ],
+);
 
 export const spaceProjectMappings = pgTable(
   "space_project_mappings",
@@ -71,6 +114,36 @@ export const userMappings = pgTable(
   ],
 );
 
+export const userSpaceMappings = pgTable(
+  "user_space_mappings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    jiraSpaceKey: text("jira_space_key").notNull(),
+    clientId: text("client_id").notNull(),
+    projectId: text("project_id").notNull(),
+    projectBudgetId: text("project_budget_id").notNull(),
+    projectName: text("project_name"),
+    budgetName: text("budget_name"),
+    enabled: boolean("enabled").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("user_space_mappings_user_space_uidx").on(
+      table.userId,
+      table.jiraSpaceKey,
+    ),
+    index("user_space_mappings_user_id_idx").on(table.userId),
+  ],
+);
+
 export const apiCache = pgTable(
   "api_cache",
   {
@@ -114,6 +187,7 @@ export const worklogSyncs = pgTable(
     internalTimesheetId: text("internal_timesheet_id"),
     status: syncStatusEnum("status").notNull(),
     payloadHash: text("payload_hash").notNull(),
+    rawPayload: text("raw_payload"),
     error: text("error"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -133,10 +207,16 @@ export const worklogSyncs = pgTable(
   ],
 );
 
+export type AppUser = typeof users.$inferSelect;
+export type NewAppUser = typeof users.$inferInsert;
+export type Session = typeof sessions.$inferSelect;
+export type NewSession = typeof sessions.$inferInsert;
 export type SpaceProjectMapping = typeof spaceProjectMappings.$inferSelect;
 export type NewSpaceProjectMapping = typeof spaceProjectMappings.$inferInsert;
 export type UserMapping = typeof userMappings.$inferSelect;
 export type NewUserMapping = typeof userMappings.$inferInsert;
+export type UserSpaceMapping = typeof userSpaceMappings.$inferSelect;
+export type NewUserSpaceMapping = typeof userSpaceMappings.$inferInsert;
 export type ApiCacheEntry = typeof apiCache.$inferSelect;
 export type NewApiCacheEntry = typeof apiCache.$inferInsert;
 export type WorklogSync = typeof worklogSyncs.$inferSelect;

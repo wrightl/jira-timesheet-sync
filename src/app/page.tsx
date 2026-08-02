@@ -1,26 +1,37 @@
 import { cookies } from "next/headers";
-import { AppNav } from "@/components/app-nav";
-import { AdminLogin } from "@/components/admin-login";
-import { RecentSyncs } from "@/components/recent-syncs";
+import Link from "next/link";
+import { AppShell } from "@/components/app-shell";
+import { getUserFromCookies } from "@/lib/auth";
 
 export default async function HomePage() {
   const cookieStore = await cookies();
-  const adminKey = cookieStore.get("admin_api_key")?.value;
-  const authed = Boolean(
-    adminKey && process.env.ADMIN_API_KEY && adminKey === process.env.ADMIN_API_KEY,
-  );
+  const user = await getUserFromCookies(cookieStore);
+  const isAdmin = user?.role === "admin";
 
   return (
-    <>
-      <AppNav currentPath="/" />
+    <AppShell
+      currentPath="/"
+      user={user ? { email: user.email, role: user.role } : null}
+    >
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
-        <AdminLogin initiallyAuthed={authed} />
+        {!user ? (
+          <div className="mb-6 rounded-lg border border-border bg-card px-4 py-3 text-sm">
+            <Link href="/login" className="text-accent hover:underline">
+              Sign in
+            </Link>{" "}
+            or{" "}
+            <Link href="/register" className="text-accent hover:underline">
+              register
+            </Link>{" "}
+            to manage your mappings.
+          </div>
+        ) : null}
         <section className="mb-8">
           <h2 className="mb-2 text-xl font-semibold">Dashboard</h2>
           <p className="mb-4 text-sm text-muted">
-            Jira Cloud worklog webhooks sync into the internal PM timesheet API.
-            Spaces without a client mapping are skipped (integration listens to
-            all spaces by default).
+            Jira Cloud worklog webhooks sync into Bitmap timesheets. Spaces
+            without a client mapping are skipped. Users can override project and
+            budget via My mappings.
           </p>
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="rounded-lg border border-border bg-card p-4">
@@ -37,11 +48,24 @@ export default async function HomePage() {
             </div>
           </div>
         </section>
-        <section>
-          <h3 className="mb-3 text-base font-semibold">Recent syncs</h3>
-          <RecentSyncs authed={authed} />
-        </section>
+        {isAdmin ? (
+          <p className="text-sm text-muted">
+            View webhook activity on{" "}
+            <Link href="/syncs" className="text-accent hover:underline">
+              Syncs
+            </Link>
+            .
+          </p>
+        ) : user ? (
+          <p className="text-sm text-muted">
+            Go to{" "}
+            <Link href="/my-mappings" className="text-accent hover:underline">
+              My mappings
+            </Link>{" "}
+            to set your project and budget preferences.
+          </p>
+        ) : null}
       </main>
-    </>
+    </AppShell>
   );
 }

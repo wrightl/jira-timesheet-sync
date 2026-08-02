@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { getDb } from "@/db";
 import { settings } from "@/db/schema";
-import { requireAdminAuth } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/auth";
 import { encryptSecret, maskToken, decryptSecret } from "@/lib/crypto";
 import { settingsUpdateSchema } from "@/lib/validators";
 
@@ -28,8 +28,8 @@ async function getStoredToken(): Promise<string | null> {
 }
 
 export async function GET(request: NextRequest) {
-  const authError = requireAdminAuth(request);
-  if (authError) return authError;
+  const auth = await requireAdmin(request);
+  if (auth.error) return auth.error;
 
   const stored = await getStoredToken();
   const envFallback = Boolean(process.env.INTERNAL_PM_ACCESS_TOKEN);
@@ -47,8 +47,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const authError = requireAdminAuth(request);
-  if (authError) return authError;
+  const auth = await requireAdmin(request);
+  if (auth.error) return auth.error;
 
   const encryptionKey = process.env.SETTINGS_ENCRYPTION_KEY;
   if (!encryptionKey) {

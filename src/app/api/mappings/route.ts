@@ -2,12 +2,12 @@ import { desc, eq } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { getDb } from "@/db";
 import { spaceProjectMappings } from "@/db/schema";
-import { requireAdminAuth } from "@/lib/admin-auth";
-import { mappingCreateSchema } from "@/lib/validators";
+import { requireAdmin, requireAuth } from "@/lib/auth";
+import { mappingCreateSchema, mappingUpdateSchema } from "@/lib/validators";
 
 export async function GET(request: NextRequest) {
-  const authError = requireAdminAuth(request);
-  if (authError) return authError;
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.error;
 
   const db = getDb();
   const rows = await db
@@ -19,8 +19,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const authError = requireAdminAuth(request);
-  if (authError) return authError;
+  const auth = await requireAdmin(request);
+  if (auth.error) return auth.error;
 
   let body: unknown;
   try {
@@ -59,8 +59,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const authError = requireAdminAuth(request);
-  if (authError) return authError;
+  const auth = await requireAdmin(request);
+  if (auth.error) return auth.error;
 
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
@@ -75,7 +75,6 @@ export async function PATCH(request: NextRequest) {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { mappingUpdateSchema } = await import("@/lib/validators");
   const parsed = mappingUpdateSchema.safeParse(body);
   if (!parsed.success) {
     return Response.json(
@@ -102,8 +101,8 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const authError = requireAdminAuth(request);
-  if (authError) return authError;
+  const auth = await requireAdmin(request);
+  if (auth.error) return auth.error;
 
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");

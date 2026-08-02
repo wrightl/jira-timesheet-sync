@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { Db } from "@/db";
-import { userMappings } from "@/db/schema";
+import { userMappings, users, userSpaceMappings } from "@/db/schema";
 import {
   createBitmapApiClient,
   type BitmapApiClient,
@@ -19,6 +19,7 @@ import {
   projectsCacheKey,
   setCachedJson,
 } from "@/services/api-cache";
+import { normalizeEmail } from "@/lib/password";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 const MONTH_NAMES = [
@@ -177,6 +178,88 @@ export async function findBitmapUserByFullName(
   return null;
 }
 
+export async function resolveProjectsForClient(
+  db: Db,
+  api: BitmapApiClient,
+  clientId: string,
+  rangeStart: string,
+  rangeEnd: string,
+): Promise<BitmapProject[]> {
+  const cacheKey = projectsCacheKey(clientId, rangeStart, rangeEnd);
+  const cached =
+    await getCachedJson<PaginatedResponse<BitmapProject>>(db, cacheKey);
+  if (cached?.data) {
+    return cached.data;
+  }
+
+  const response = await api.listProjects({
+    clientId,
+    rangeStart,
+    rangeEnd,
+    page: 1,
+    status: "active",
+  });
+
+  await setCachedJson(db, {
+    cacheKey,
+    resourceType: "projects",
+    requestMeta: { clientId, rangeStart, rangeEnd, page: 1, status: "active" },
+    responseBody: response,
+  });
+
+  return response.data ?? [];
+}
+
+export async function resolveBudgetsForProject(
+  db: Db,
+  api: BitmapApiClient,
+  projectId: string,
+): Promise<BitmapProjectBudget[]> {
+  const cacheKey = projectBudgetsCacheKey(projectId);
+  const cached = await getCachedJson<BitmapProjectBudget[]>(db, cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const budgets = await api.listProjectBudgets(projectId);
+
+  await setCachedJson(db, {
+    cacheKey,
+    resourceType: "project_budgets",
+    requestMeta: { projectId },
+    responseBody: budgets,
+  });
+
+  return budgets;
+}
+
+export function findMappedProject(
+  projects: BitmapProject[],
+  projectId: string,
+): BitmapProject | null {
+  return projects.find((p) => p.id === projectId) ?? null;
+}
+
+export function isProjectActiveForTimesheet(project: BitmapProject): boolean {
+  return project.state === "active" && project.started === true;
+}
+
+export function findMappedBudget(
+  budgets: BitmapProjectBudget[],
+  projectBudgetId: string,
+): BitmapProjectBudget | null {
+  return budgets.find((b) => b.id === projectBudgetId) ?? null;
+}
+
+export function isBudgetActiveForTimesheet(
+  budget: BitmapProjectBudget,
+): boolean {
+  return (
+    typeof budget.billable_time_remaining === "number" &&
+    budget.billable_time_remaining > 0
+  );
+}
+
 async function resolveUserMapping(
   db: Db,
   api: BitmapApiClient,
@@ -184,6 +267,7 @@ async function resolveUserMapping(
 ): Promise<{
   bitmapUserId: string;
   jobTitle: string | null;
+  bitmapEmail: string | null;
 }> {
   if (!input.authorDisplayName) {
     throw new Error("Worklog author displayName is required for user mapping");
@@ -205,6 +289,7 @@ async function resolveUserMapping(
     return {
       bitmapUserId: existing.bitmapUserId,
       jobTitle: existing.jobTitle,
+      bitmapEmail: existing.bitmapEmail,
     };
   }
 
@@ -244,62 +329,87 @@ async function resolveUserMapping(
   return {
     bitmapUserId: inserted.bitmapUserId,
     jobTitle: inserted.jobTitle,
+    bitmapEmail: inserted.bitmapEmail,
   };
 }
 
-async function resolveProjects(
+async function resolveUserSpaceOverride(
   db: Db,
   api: BitmapApiClient,
-  clientId: string,
+  input: TimesheetEntryInput,
+  bitmapEmail: string | null,
   rangeStart: string,
   rangeEnd: string,
-): Promise<BitmapProject[]> {
-  const cacheKey = projectsCacheKey(clientId, rangeStart, rangeEnd);
-  const cached =
-    await getCachedJson<PaginatedResponse<BitmapProject>>(db, cacheKey);
-  if (cached?.data) {
-    return cached.data;
+): Promise<{ projectId: string; projectBudgetId: string } | null> {
+  if (!bitmapEmail || !input.jiraSpaceKey) {
+    return null;
   }
 
-  const response = await api.listProjects({
-    clientId,
+  const email = normalizeEmail(bitmapEmail);
+  const appUsers = await db
+    .select()
+    .from(users)
+    .where(sql`lower(${users.email}) = ${email}`)
+    .limit(1);
+
+  const appUser = appUsers[0];
+  if (!appUser) {
+    return null;
+  }
+
+  const mappings = await db
+    .select()
+    .from(userSpaceMappings)
+    .where(
+      and(
+        eq(userSpaceMappings.userId, appUser.id),
+        eq(userSpaceMappings.jiraSpaceKey, input.jiraSpaceKey),
+        eq(userSpaceMappings.enabled, true),
+      ),
+    )
+    .limit(1);
+
+  const mapping = mappings[0];
+  if (!mapping) {
+    return null;
+  }
+
+  const projects = await resolveProjectsForClient(
+    db,
+    api,
+    mapping.clientId,
     rangeStart,
     rangeEnd,
-    page: 1,
-    status: "active",
-  });
-
-  await setCachedJson(db, {
-    cacheKey,
-    resourceType: "projects",
-    requestMeta: { clientId, rangeStart, rangeEnd, page: 1, status: "active" },
-    responseBody: response,
-  });
-
-  return response.data ?? [];
-}
-
-async function resolveBudgets(
-  db: Db,
-  api: BitmapApiClient,
-  projectId: string,
-): Promise<BitmapProjectBudget[]> {
-  const cacheKey = projectBudgetsCacheKey(projectId);
-  const cached = await getCachedJson<BitmapProjectBudget[]>(db, cacheKey);
-  if (cached) {
-    return cached;
+  );
+  const project = findMappedProject(projects, mapping.projectId);
+  if (!project) {
+    throw new Error(
+      `User mapping project ${mapping.projectId} not found for space ${mapping.jiraSpaceKey}`,
+    );
+  }
+  if (!isProjectActiveForTimesheet(project)) {
+    throw new Error(
+      `User mapping project ${mapping.projectId} is not active/started for space ${mapping.jiraSpaceKey}`,
+    );
   }
 
-  const budgets = await api.listProjectBudgets(projectId);
+  const budgets = await resolveBudgetsForProject(db, api, project.id);
+  const budget = findMappedBudget(budgets, mapping.projectBudgetId);
+  if (!budget) {
+    throw new Error(
+      `User mapping budget ${mapping.projectBudgetId} not found on project ${project.id}`,
+    );
+  }
+  if (!isBudgetActiveForTimesheet(budget)) {
+    throw new Error(
+      `User mapping budget ${mapping.projectBudgetId} has no billable time remaining`,
+    );
+  }
 
-  await setCachedJson(db, {
-    cacheKey,
-    resourceType: "project_budgets",
-    requestMeta: { projectId },
-    responseBody: budgets,
-  });
-
-  return budgets;
+  return {
+    projectId: project.id,
+    projectBudgetId: budget.id,
+  };
 }
 
 export async function resolveTimesheetBody(
@@ -316,7 +426,28 @@ export async function resolveTimesheetBody(
 
   const user = await resolveUserMapping(db, api, input);
   const { rangeStart, rangeEnd } = projectDateRangeFromStarted(input.started);
-  const projects = await resolveProjects(
+
+  const override = await resolveUserSpaceOverride(
+    db,
+    api,
+    input,
+    user.bitmapEmail,
+    rangeStart,
+    rangeEnd,
+  );
+
+  if (override) {
+    return buildTimesheetBody({
+      userId: user.bitmapUserId,
+      projectId: override.projectId,
+      projectBudgetId: override.projectBudgetId,
+      started: input.started,
+      timeSpentSeconds: input.timeSpentSeconds,
+      comment: input.comment,
+    });
+  }
+
+  const projects = await resolveProjectsForClient(
     db,
     api,
     input.clientId,
@@ -330,7 +461,7 @@ export async function resolveTimesheetBody(
     );
   }
 
-  const budgets = await resolveBudgets(db, api, project.id);
+  const budgets = await resolveBudgetsForProject(db, api, project.id);
   const budget = selectProjectBudget(budgets, user.jobTitle);
   if (!budget) {
     throw new Error(

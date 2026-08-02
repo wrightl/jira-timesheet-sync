@@ -11,19 +11,33 @@ import {
 import { hashPayload } from "@/lib/webhook-auth";
 import { createResolvingPmClient } from "@/services/bitmap-resolver";
 
+export type SyncStatus = "pending" | "synced" | "skipped" | "failed";
+
 export interface SyncResult {
-  status: "synced" | "skipped" | "failed";
+  status: SyncStatus;
   eventType?: WorklogEventType;
   jiraWorklogId?: string;
   internalTimesheetId?: string | null;
   error?: string;
   skippedReason?: string;
+  syncId?: string;
 }
 
 export interface WorklogSyncDeps {
   db: Db;
   pmClient?: InternalPmClient;
   getAccessToken?: () => Promise<string | null>;
+  /** When set, finalize by updating this row instead of inserting. */
+  syncId?: string;
+}
+
+export interface AcceptResult {
+  syncId: string | null;
+  shouldProcess: boolean;
+  duplicate: boolean;
+  eventType?: WorklogEventType;
+  jiraWorklogId?: string;
+  reason?: string;
 }
 
 async function resolveAccessToken(db: Db): Promise<string | null> {
@@ -74,20 +88,57 @@ async function findMapping(db: Db, event: ParsedWorklogEvent) {
   return rows[0] ?? null;
 }
 
-async function recordSync(
+async function findByPayloadHash(
   db: Db,
+  jiraWorklogId: string,
+  eventType: WorklogEventType,
+  payloadHash: string,
+) {
+  const rows = await db
+    .select()
+    .from(worklogSyncs)
+    .where(
+      and(
+        eq(worklogSyncs.jiraWorklogId, jiraWorklogId),
+        eq(worklogSyncs.eventType, eventType),
+        eq(worklogSyncs.payloadHash, payloadHash),
+      ),
+    )
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+async function finalizeSync(
+  db: Db,
+  syncId: string | undefined,
   data: {
     jiraWorklogId: string;
     jiraIssueKey: string | null;
     jiraSpaceId: string | null;
     eventType: WorklogEventType;
     internalTimesheetId: string | null;
-    status: "synced" | "skipped" | "failed";
+    status: SyncStatus;
     payloadHash: string;
+    rawPayload?: string | null;
     error?: string | null;
   },
-) {
-  await db
+): Promise<string | undefined> {
+  if (syncId) {
+    await db
+      .update(worklogSyncs)
+      .set({
+        jiraIssueKey: data.jiraIssueKey,
+        jiraSpaceId: data.jiraSpaceId,
+        internalTimesheetId: data.internalTimesheetId,
+        status: data.status,
+        error: data.error ?? null,
+        updatedAt: new Date(),
+      })
+      .where(eq(worklogSyncs.id, syncId));
+    return syncId;
+  }
+
+  const [row] = await db
     .insert(worklogSyncs)
     .values({
       jiraWorklogId: data.jiraWorklogId,
@@ -97,9 +148,93 @@ async function recordSync(
       internalTimesheetId: data.internalTimesheetId,
       status: data.status,
       payloadHash: data.payloadHash,
+      rawPayload: data.rawPayload ?? null,
       error: data.error ?? null,
     })
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning({ id: worklogSyncs.id });
+
+  return row?.id;
+}
+
+/**
+ * Persist a pending sync row and decide whether background processing should run.
+ */
+export async function acceptWorklogWebhook(
+  payload: unknown,
+  rawBody: string,
+  db: Db,
+): Promise<AcceptResult> {
+  const payloadHash = hashPayload(rawBody);
+  const event = parseWorklogWebhookPayload(payload);
+
+  if (!event) {
+    return {
+      syncId: null,
+      shouldProcess: false,
+      duplicate: false,
+      reason: "unsupported_or_invalid_event",
+    };
+  }
+
+  const existing = await findByPayloadHash(
+    db,
+    event.worklogId,
+    event.eventType,
+    payloadHash,
+  );
+
+  if (existing) {
+    return {
+      syncId: existing.id,
+      shouldProcess: false,
+      duplicate: true,
+      eventType: event.eventType,
+      jiraWorklogId: event.worklogId,
+      reason: `already_${existing.status}`,
+    };
+  }
+
+  const [row] = await db
+    .insert(worklogSyncs)
+    .values({
+      jiraWorklogId: event.worklogId,
+      jiraIssueKey: event.issueKey,
+      jiraSpaceId: event.spaceId,
+      eventType: event.eventType,
+      internalTimesheetId: null,
+      status: "pending",
+      payloadHash,
+      rawPayload: rawBody,
+      error: null,
+    })
+    .onConflictDoNothing()
+    .returning({ id: worklogSyncs.id });
+
+  if (!row) {
+    const raced = await findByPayloadHash(
+      db,
+      event.worklogId,
+      event.eventType,
+      payloadHash,
+    );
+    return {
+      syncId: raced?.id ?? null,
+      shouldProcess: false,
+      duplicate: true,
+      eventType: event.eventType,
+      jiraWorklogId: event.worklogId,
+      reason: "duplicate_race",
+    };
+  }
+
+  return {
+    syncId: row.id,
+    shouldProcess: true,
+    duplicate: false,
+    eventType: event.eventType,
+    jiraWorklogId: event.worklogId,
+  };
 }
 
 export async function processWorklogWebhook(
@@ -107,7 +242,7 @@ export async function processWorklogWebhook(
   rawBody: string,
   deps: WorklogSyncDeps,
 ): Promise<SyncResult> {
-  const { db } = deps;
+  const { db, syncId } = deps;
   const payloadHash = hashPayload(rawBody);
   const event = parseWorklogWebhookPayload(payload);
 
@@ -118,7 +253,7 @@ export async function processWorklogWebhook(
   try {
     const mapping = await findMapping(db, event);
     if (!mapping || !mapping.enabled) {
-      await recordSync(db, {
+      const id = await finalizeSync(db, syncId, {
         jiraWorklogId: event.worklogId,
         jiraIssueKey: event.issueKey,
         jiraSpaceId: event.spaceId,
@@ -126,6 +261,7 @@ export async function processWorklogWebhook(
         internalTimesheetId: null,
         status: "skipped",
         payloadHash,
+        rawPayload: rawBody,
         error: mapping ? "mapping_disabled" : "no_mapping",
       });
       return {
@@ -133,6 +269,7 @@ export async function processWorklogWebhook(
         eventType: event.eventType,
         jiraWorklogId: event.worklogId,
         skippedReason: mapping ? "mapping_disabled" : "no_mapping",
+        syncId: id,
       };
     }
 
@@ -149,6 +286,7 @@ export async function processWorklogWebhook(
 
     const input: TimesheetEntryInput = {
       clientId: mapping.clientId,
+      jiraSpaceKey: event.spaceKey,
       jiraWorklogId: event.worklogId,
       jiraIssueKey: event.issueKey,
       authorAccountId: event.authorAccountId,
@@ -178,7 +316,7 @@ export async function processWorklogWebhook(
         await pm.deleteTimesheet(existingId);
         internalTimesheetId = existingId;
       } else {
-        await recordSync(db, {
+        const id = await finalizeSync(db, syncId, {
           jiraWorklogId: event.worklogId,
           jiraIssueKey: event.issueKey,
           jiraSpaceId: event.spaceId,
@@ -186,6 +324,7 @@ export async function processWorklogWebhook(
           internalTimesheetId: null,
           status: "skipped",
           payloadHash,
+          rawPayload: rawBody,
           error: "no_prior_timesheet",
         });
         return {
@@ -193,11 +332,12 @@ export async function processWorklogWebhook(
           eventType: event.eventType,
           jiraWorklogId: event.worklogId,
           skippedReason: "no_prior_timesheet",
+          syncId: id,
         };
       }
     }
 
-    await recordSync(db, {
+    const id = await finalizeSync(db, syncId, {
       jiraWorklogId: event.worklogId,
       jiraIssueKey: event.issueKey,
       jiraSpaceId: event.spaceId,
@@ -205,6 +345,7 @@ export async function processWorklogWebhook(
       internalTimesheetId,
       status: "synced",
       payloadHash,
+      rawPayload: rawBody,
     });
 
     return {
@@ -212,11 +353,12 @@ export async function processWorklogWebhook(
       eventType: event.eventType,
       jiraWorklogId: event.worklogId,
       internalTimesheetId,
+      syncId: id,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown_error";
     try {
-      await recordSync(db, {
+      const id = await finalizeSync(db, syncId, {
         jiraWorklogId: event.worklogId,
         jiraIssueKey: event.issueKey,
         jiraSpaceId: event.spaceId,
@@ -224,16 +366,86 @@ export async function processWorklogWebhook(
         internalTimesheetId: null,
         status: "failed",
         payloadHash,
+        rawPayload: rawBody,
         error: message,
       });
+      return {
+        status: "failed",
+        eventType: event.eventType,
+        jiraWorklogId: event.worklogId,
+        error: message,
+        syncId: id,
+      };
     } catch (recordErr) {
       console.error("[worklog-sync] Failed to record failure", recordErr);
+      return {
+        status: "failed",
+        eventType: event.eventType,
+        jiraWorklogId: event.worklogId,
+        error: message,
+        syncId,
+      };
     }
+  }
+}
+
+export async function retryWorklogSync(
+  syncId: string,
+  deps: Omit<WorklogSyncDeps, "syncId">,
+): Promise<SyncResult> {
+  const { db } = deps;
+  const rows = await db
+    .select()
+    .from(worklogSyncs)
+    .where(eq(worklogSyncs.id, syncId))
+    .limit(1);
+  const row = rows[0];
+  if (!row) {
+    return { status: "failed", error: "sync_not_found", syncId };
+  }
+  if (!row.rawPayload) {
     return {
       status: "failed",
-      eventType: event.eventType,
-      jiraWorklogId: event.worklogId,
-      error: message,
+      error: "missing_raw_payload",
+      syncId,
+      eventType: row.eventType,
+      jiraWorklogId: row.jiraWorklogId,
     };
   }
+  if (row.status !== "failed" && row.status !== "skipped") {
+    return {
+      status: "failed",
+      error: "retry_not_allowed",
+      syncId,
+      eventType: row.eventType,
+      jiraWorklogId: row.jiraWorklogId,
+    };
+  }
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(row.rawPayload);
+  } catch {
+    return {
+      status: "failed",
+      error: "invalid_stored_payload",
+      syncId,
+      eventType: row.eventType,
+      jiraWorklogId: row.jiraWorklogId,
+    };
+  }
+
+  await db
+    .update(worklogSyncs)
+    .set({
+      status: "pending",
+      error: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(worklogSyncs.id, syncId));
+
+  return processWorklogWebhook(payload, row.rawPayload, {
+    ...deps,
+    syncId,
+  });
 }

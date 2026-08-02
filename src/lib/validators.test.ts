@@ -5,6 +5,8 @@ import {
   settingsUpdateSchema,
   userMappingCreateSchema,
   userMappingUpdateSchema,
+  adminUserCreateSchema,
+  adminUserUpdateSchema,
 } from "@/lib/validators";
 
 describe("mappingCreateSchema", () => {
@@ -69,5 +71,36 @@ describe("settingsUpdateSchema", () => {
     expect(
       settingsUpdateSchema.parse({ internalPmAccessToken: "tok_abc" }),
     ).toEqual({ internalPmAccessToken: "tok_abc" });
+  });
+});
+
+describe("adminUserCreateSchema", () => {
+  it("defaults role to user", () => {
+    const result = adminUserCreateSchema.parse({
+      email: "a@b.com",
+      password: "longenough",
+    });
+    expect(result.role).toBe("user");
+  });
+
+  it("rejects short passwords", () => {
+    expect(
+      adminUserCreateSchema.safeParse({
+        email: "a@b.com",
+        password: "short",
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("adminUserUpdateSchema", () => {
+  it("requires role or password", () => {
+    expect(adminUserUpdateSchema.safeParse({}).success).toBe(false);
+    expect(adminUserUpdateSchema.parse({ role: "admin" })).toEqual({
+      role: "admin",
+    });
+    expect(
+      adminUserUpdateSchema.parse({ password: "longenough" }),
+    ).toEqual({ password: "longenough" });
   });
 });

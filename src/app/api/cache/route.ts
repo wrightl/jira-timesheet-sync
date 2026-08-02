@@ -2,11 +2,11 @@ import { desc, eq } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { getDb } from "@/db";
 import { apiCache } from "@/db/schema";
-import { requireAdminAuth } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
-  const authError = requireAdminAuth(request);
-  if (authError) return authError;
+  const auth = await requireAdmin(request);
+  if (auth.error) return auth.error;
 
   const { searchParams } = new URL(request.url);
   const includeBody = searchParams.get("includeBody") === "1";
@@ -56,8 +56,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const authError = requireAdminAuth(request);
-  if (authError) return authError;
+  const auth = await requireAdmin(request);
+  if (auth.error) return auth.error;
 
   const { searchParams } = new URL(request.url);
   const all = searchParams.get("all") === "1";

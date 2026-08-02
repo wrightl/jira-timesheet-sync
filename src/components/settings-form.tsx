@@ -131,8 +131,14 @@ export function SettingsForm({ authed }: { authed: boolean }) {
             — encrypts tokens stored via this UI
           </li>
           <li>
+            <code className="font-mono text-xs text-foreground">ADMIN_EMAIL</code>{" "}
+            /{" "}
+            <code className="font-mono text-xs text-foreground">ADMIN_PASSWORD</code>{" "}
+            — seed admin via <code className="font-mono text-xs">npm run db:seed</code>
+          </li>
+          <li>
             <code className="font-mono text-xs text-foreground">ADMIN_API_KEY</code>{" "}
-            — protects admin APIs and this UI
+            — optional Bearer fallback for admin API tooling
           </li>
         </ul>
       </div>

@@ -2,15 +2,15 @@ import { desc, eq } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { getDb } from "@/db";
 import { userMappings } from "@/db/schema";
-import { requireAdminAuth } from "@/lib/admin-auth";
+import { requireAdmin } from "@/lib/auth";
 import {
   userMappingCreateSchema,
   userMappingUpdateSchema,
 } from "@/lib/validators";
 
 export async function GET(request: NextRequest) {
-  const authError = requireAdminAuth(request);
-  if (authError) return authError;
+  const auth = await requireAdmin(request);
+  if (auth.error) return auth.error;
 
   const db = getDb();
   const rows = await db
@@ -22,8 +22,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const authError = requireAdminAuth(request);
-  if (authError) return authError;
+  const auth = await requireAdmin(request);
+  if (auth.error) return auth.error;
 
   let body: unknown;
   try {
@@ -68,8 +68,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const authError = requireAdminAuth(request);
-  if (authError) return authError;
+  const auth = await requireAdmin(request);
+  if (auth.error) return auth.error;
 
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
@@ -110,8 +110,8 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const authError = requireAdminAuth(request);
-  if (authError) return authError;
+  const auth = await requireAdmin(request);
+  if (auth.error) return auth.error;
 
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");

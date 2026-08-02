@@ -19,5 +19,19 @@
     "when": 1754070000000,
     "tag": "0002_user_mappings_api_cache",
     "breakpoints": true
+  },
+  {
+    "idx": 3,
+    "version": "7",
+    "when": 1754080000000,
+    "tag": "0003_users_sessions_space_mappings",
+    "breakpoints": true
+  },
+  {
+    "idx": 4,
+    "version": "7",
+    "when": 1754090000000,
+    "tag": "0004_sync_pending_raw_payload",
+    "breakpoints": true
   }
 ]

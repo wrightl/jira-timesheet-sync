@@ -1,26 +1,13 @@
 "use server";
 
-import { cookies } from "next/headers";
-
-export async function setAdminSession(apiKey: string): Promise<{ ok: boolean; error?: string }> {
-  const expected = process.env.ADMIN_API_KEY;
-  if (!expected || apiKey !== expected) {
-    return { ok: false, error: "Invalid admin API key" };
-  }
-
-  const cookieStore = await cookies();
-  cookieStore.set("admin_api_key", apiKey, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 7,
-  });
-
-  return { ok: true };
+/** @deprecated Use /api/auth/login instead. Kept for any leftover imports. */
+export async function setAdminSession(): Promise<{ ok: boolean; error?: string }> {
+  return {
+    ok: false,
+    error: "Admin API key login is deprecated. Sign in with email and password.",
+  };
 }
 
 export async function clearAdminSession(): Promise<void> {
-  const cookieStore = await cookies();
-  cookieStore.delete("admin_api_key");
+  // no-op; sessions cleared via /api/auth/logout
 }

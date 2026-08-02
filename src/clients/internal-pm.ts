@@ -1,5 +1,6 @@
 export interface TimesheetEntryInput {
   clientId: string;
+  jiraSpaceKey: string | null;
   jiraWorklogId: string;
   jiraIssueKey: string | null;
   authorAccountId: string | null;

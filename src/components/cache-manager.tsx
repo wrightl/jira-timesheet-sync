@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { formatDateTimeUtc } from "@/lib/format-date";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import {
   Table,
   TableBody,
@@ -96,14 +97,7 @@ export function CacheManager({ authed }: { authed: boolean }) {
           fetch.
         </p>
         <div className="flex gap-2">
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={pending}
-            onClick={() => load()}
-          >
-            Refresh
-          </Button>
+          <RefreshButton pending={pending} onClick={() => load()} />
           <Button
             type="button"
             variant="danger"

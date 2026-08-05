@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { AppShell } from "@/components/app-shell";
 import { RecentSyncs } from "@/components/recent-syncs";
 import { PageHeader } from "@/components/ui/page-header";
@@ -16,7 +17,13 @@ export default async function SyncsPage() {
           title="Syncs"
           description="Recent Jira worklog webhook events and their Bitmap sync status. Retry failed or skipped events when a stored payload is available."
         />
-        <RecentSyncs authed />
+        <Suspense
+          fallback={
+            <p className="text-sm text-muted">Loading syncs…</p>
+          }
+        >
+          <RecentSyncs authed />
+        </Suspense>
       </main>
     </AppShell>
   );

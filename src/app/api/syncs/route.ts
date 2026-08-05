@@ -1,7 +1,15 @@
 import { NextRequest } from "next/server";
 import type { WorklogSync } from "@/db/schema";
 import { requireAuth } from "@/lib/auth";
-import { parseLimitParam, requireUuidParam } from "@/lib/api";
+import {
+  parseLimitParam,
+  parseOffsetParam,
+  requireUuidParam,
+} from "@/lib/api";
+import {
+  parseSyncListFilters,
+  syncListRangeSince,
+} from "@/lib/sync-list-filters";
 import { createWorklogSyncService } from "@/services/worklog-sync";
 
 function toClientSync(row: WorklogSync) {
@@ -30,14 +38,30 @@ export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth.error) return auth.error;
 
-  const limit = parseLimitParam(new URL(request.url).searchParams);
+  const filters = parseSyncListFilters(
+    new URL(request.url).searchParams,
+    parseLimitParam,
+    parseOffsetParam,
+  );
   const service = createWorklogSyncService();
-  const rows =
-    auth.user.role === "admin"
-      ? await service.list(limit)
-      : await service.list(limit, auth.user.id);
+  const result = await service.list({
+    limit: filters.limit,
+    offset: filters.offset,
+    appUserId: auth.user.role === "admin" ? undefined : auth.user.id,
+    status: filters.status,
+    eventType: filters.eventType,
+    issueKey: filters.issueKey,
+    since: syncListRangeSince(filters.range),
+    sort: filters.sort,
+    dir: filters.dir,
+  });
 
-  return Response.json({ syncs: rows.map(toClientSync) });
+  return Response.json({
+    syncs: result.rows.map(toClientSync),
+    total: result.total,
+    limit: filters.limit,
+    offset: filters.offset,
+  });
 }
 
 export async function POST(request: NextRequest) {

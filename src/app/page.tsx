@@ -42,7 +42,7 @@ export default async function HomePage({
     } catch (err) {
       console.error("[dashboard] Failed to load stats", err);
       statsError =
-        "Could not load dashboard metrics. Check the database connection and try Refresh.";
+        "Could not load dashboard metrics. Check the database connection and try refreshing.";
       stats = emptyDashboardStats(range, isAdmin ? "all" : "user");
     }
   }

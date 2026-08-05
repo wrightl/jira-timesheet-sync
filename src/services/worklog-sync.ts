@@ -18,6 +18,10 @@ import {
   type ParsedWorklogEvent,
   type WorklogEventType,
 } from "@/lib/worklog-parser";
+import type {
+  SyncListSort,
+  SyncListSortDir,
+} from "@/lib/sync-list-filters";
 import { hashPayload } from "@/lib/webhook-auth";
 import { getEnv } from "@/lib/env";
 import { log } from "@/lib/log";
@@ -503,8 +507,20 @@ export class WorklogSyncService {
     return this.process(payload, claimed.rawPayload, syncId);
   }
 
-  async list(limit: number, appUserId?: string) {
-    return this.deps.syncs.listRecent(limit, appUserId);
+  async list(
+    opts: {
+      limit: number;
+      offset: number;
+      appUserId?: string;
+      status?: SyncStatus;
+      eventType?: WorklogEventType;
+      issueKey?: string;
+      since?: Date;
+      sort?: SyncListSort;
+      dir?: SyncListSortDir;
+    },
+  ) {
+    return this.deps.syncs.list(opts);
   }
 
   async findById(id: string) {

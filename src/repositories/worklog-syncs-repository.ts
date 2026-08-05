@@ -1,9 +1,11 @@
 import {
   and,
+  asc,
   count,
   desc,
   eq,
   gte,
+  ilike,
   inArray,
   lt,
   sql,
@@ -17,8 +19,24 @@ import {
 } from "@/db/schema";
 import type { WorklogEventType } from "@/lib/worklog-parser";
 import type { DashboardScope } from "@/lib/dashboard-shared";
+import type {
+  SyncListSort,
+  SyncListSortDir,
+} from "@/lib/sync-list-filters";
 
 export type SyncStatus = WorklogSync["status"];
+
+export type ListSyncsOptions = {
+  limit: number;
+  offset: number;
+  appUserId?: string;
+  status?: SyncStatus;
+  eventType?: WorklogEventType;
+  issueKey?: string;
+  since?: Date;
+  sort?: SyncListSort;
+  dir?: SyncListSortDir;
+};
 
 export type FinalizeSyncData = {
   jiraWorklogId: string;
@@ -40,16 +58,65 @@ const PENDING_STALE_MS = 15 * 60 * 1000;
 export class WorklogSyncsRepository {
   constructor(private readonly db: Db) {}
 
+  private listWhere(opts: ListSyncsOptions): SQL | undefined {
+    const parts: SQL[] = [];
+    if (opts.appUserId) {
+      parts.push(eq(worklogSyncs.appUserId, opts.appUserId));
+    }
+    if (opts.status) {
+      parts.push(eq(worklogSyncs.status, opts.status));
+    }
+    if (opts.eventType) {
+      parts.push(eq(worklogSyncs.eventType, opts.eventType));
+    }
+    if (opts.issueKey) {
+      parts.push(ilike(worklogSyncs.jiraIssueKey, `%${opts.issueKey}%`));
+    }
+    if (opts.since) {
+      parts.push(gte(worklogSyncs.createdAt, opts.since));
+    }
+    if (parts.length === 0) return undefined;
+    if (parts.length === 1) return parts[0];
+    return and(...parts);
+  }
+
+  async list(
+    opts: ListSyncsOptions,
+  ): Promise<{ rows: WorklogSync[]; total: number }> {
+    const where = this.listWhere(opts);
+    const sort = opts.sort ?? "createdAt";
+    const dir = opts.dir ?? "desc";
+    const order = dir === "asc" ? asc : desc;
+    const primary =
+      sort === "eventType"
+        ? order(worklogSyncs.eventType)
+        : sort === "issueKey"
+          ? order(worklogSyncs.jiraIssueKey)
+          : sort === "status"
+            ? order(worklogSyncs.status)
+            : order(worklogSyncs.createdAt);
+    // Stable tie-breaker so pages don't shuffle when values collide.
+    const secondary =
+      sort === "createdAt"
+        ? order(worklogSyncs.id)
+        : desc(worklogSyncs.createdAt);
+
+    const [rows, totalRows] = await Promise.all([
+      this.db
+        .select()
+        .from(worklogSyncs)
+        .where(where)
+        .orderBy(primary, secondary)
+        .limit(opts.limit)
+        .offset(opts.offset),
+      this.db.select({ value: count() }).from(worklogSyncs).where(where),
+    ]);
+    return { rows, total: totalRows[0]?.value ?? 0 };
+  }
+
   async listRecent(limit: number, appUserId?: string): Promise<WorklogSync[]> {
-    const where = appUserId
-      ? eq(worklogSyncs.appUserId, appUserId)
-      : undefined;
-    return this.db
-      .select()
-      .from(worklogSyncs)
-      .where(where)
-      .orderBy(desc(worklogSyncs.createdAt))
-      .limit(limit);
+    const { rows } = await this.list({ limit, offset: 0, appUserId });
+    return rows;
   }
 
   async findById(id: string): Promise<WorklogSync | null> {

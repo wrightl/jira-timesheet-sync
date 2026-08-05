@@ -10,7 +10,9 @@ export function Input({
     <input
       type={type}
       className={cn(
-        "h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted",
+        "h-10 w-full rounded-md border border-border bg-card px-3 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted",
+        "hover:bg-background",
+        "disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-card",
         className,
       )}
       {...props}

@@ -67,4 +67,15 @@ export function parseLimitParam(
   return Math.min(Math.floor(n), max);
 }
 
+export function parseOffsetParam(
+  searchParams: URLSearchParams,
+  defaultOffset = 0,
+): number {
+  const raw = searchParams.get("offset");
+  if (!raw) return defaultOffset;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return defaultOffset;
+  return Math.floor(n);
+}
+
 export const uuidParamSchema = uuidSchema;

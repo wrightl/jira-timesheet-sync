@@ -11,8 +11,8 @@ import {
 import { formatDateTimeUtc } from "@/lib/format-date";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { Select } from "@/components/ui/select";
 import {
   Table,
@@ -110,19 +110,15 @@ export function AdminDashboard({
             ))}
           </Select>
         </label>
-        <Button
-          type="button"
-          variant="secondary"
-          disabled={pending}
+        <RefreshButton
+          pending={pending}
           onClick={() => {
             setActionError(null);
             startTransition(() => {
               router.refresh();
             });
           }}
-        >
-          {pending ? "Refreshing…" : "Refresh"}
-        </Button>
+        />
       </div>
 
       {actionError ? <Alert variant="error">{actionError}</Alert> : null}

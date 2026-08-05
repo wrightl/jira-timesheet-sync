@@ -1,6 +1,8 @@
 import { getDb, type Db } from "@/db";
 import type { ApiCacheEntry } from "@/db/schema";
 import { ApiCacheRepository } from "@/repositories/api-cache-repository";
+import type { ApiCacheStore } from "@/repositories/api-cache-store";
+import { VercelRuntimeApiCacheStore } from "@/repositories/vercel-runtime-api-cache-store";
 
 export const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -33,8 +35,15 @@ export type CacheListEntry = {
   responseBody?: unknown;
 };
 
+/** Vercel sets `VERCEL=1` on all hosted deployments (and `vercel dev`). */
+export function isVercelHosted(
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  return env.VERCEL === "1";
+}
+
 export class ApiCacheService {
-  constructor(private readonly cache: ApiCacheRepository) {}
+  constructor(private readonly cache: ApiCacheStore) {}
 
   async getCachedJson<T>(cacheKey: string): Promise<T | null> {
     const row = await this.cache.getValidByKey(cacheKey);
@@ -115,8 +124,21 @@ export class ApiCacheService {
   }
 }
 
-export function createApiCacheService(db: Db = getDb()) {
-  return new ApiCacheService(new ApiCacheRepository(db));
+export function createApiCacheStore(
+  db?: Db,
+  env: Record<string, string | undefined> = process.env,
+): ApiCacheStore {
+  if (isVercelHosted(env)) {
+    return new VercelRuntimeApiCacheStore();
+  }
+  return new ApiCacheRepository(db ?? getDb());
+}
+
+export function createApiCacheService(
+  db?: Db,
+  env: Record<string, string | undefined> = process.env,
+) {
+  return new ApiCacheService(createApiCacheStore(db, env));
 }
 
 /** @deprecated Prefer ApiCacheService methods via createApiCacheService. */

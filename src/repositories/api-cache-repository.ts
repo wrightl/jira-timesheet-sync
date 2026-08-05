@@ -5,8 +5,9 @@ import {
   type ApiCacheEntry,
   type NewApiCacheEntry,
 } from "@/db/schema";
+import type { ApiCacheStore } from "@/repositories/api-cache-store";
 
-export class ApiCacheRepository {
+export class ApiCacheRepository implements ApiCacheStore {
   constructor(private readonly db: Db) {}
 
   async getValidByKey(cacheKey: string): Promise<ApiCacheEntry | null> {

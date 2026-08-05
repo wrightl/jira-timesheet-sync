@@ -146,12 +146,24 @@ const basePayload = {
 
 describe("formatTimesheetComment", () => {
   it("formats the issue key alone when there is no comment", () => {
-    expect(formatTimesheetComment("ENG-42", null)).toBe("* ENG-42:");
+    expect(formatTimesheetComment("ENG-42", null)).toBe("<p>ENG-42:</p>");
   });
 
   it("appends the comment when present", () => {
     expect(formatTimesheetComment("ENG-42", "Fixed bug")).toBe(
-      "* ENG-42:\n- Fixed bug",
+      "<p>ENG-42:</p><ul><li>Fixed bug</li></ul>",
+    );
+  });
+
+  it("splits line feeds and carriage returns into list items", () => {
+    expect(formatTimesheetComment("ENG-42", "Line one\nLine two\r\nLine three\r")).toBe(
+      "<p>ENG-42:</p><ul><li>Line one</li><li>Line two</li><li>Line three</li></ul>",
+    );
+  });
+
+  it("escapes HTML in the issue key and comment", () => {
+    expect(formatTimesheetComment("A<B>", 'say "hi" & <bye>')).toBe(
+      '<p>A&lt;B&gt;:</p><ul><li>say &quot;hi&quot; &amp; &lt;bye&gt;</li></ul>',
     );
   });
 });
@@ -275,7 +287,7 @@ describe("processWorklogWebhook", () => {
         clientId: "client-9",
         jiraWorklogId: "wl-1",
         timeSpentSeconds: 1800,
-        comment: "* ENG-1:",
+        comment: "<p>ENG-1:</p>",
       }),
     );
   });
@@ -299,7 +311,7 @@ describe("processWorklogWebhook", () => {
     });
     expect(createTimesheet).toHaveBeenCalledWith(
       expect.objectContaining({
-        comment: "* ENG-1:\n- Pairing session",
+        comment: "<p>ENG-1:</p><ul><li>Pairing session</li></ul>",
       }),
     );
   });

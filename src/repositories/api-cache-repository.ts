@@ -1,4 +1,4 @@
-import { and, desc, eq, gt } from "drizzle-orm";
+import { and, desc, eq, gt, lte } from "drizzle-orm";
 import type { Db } from "@/db";
 import {
   apiCache,
@@ -11,6 +11,7 @@ export class ApiCacheRepository {
 
   async getValidByKey(cacheKey: string): Promise<ApiCacheEntry | null> {
     const now = new Date();
+    await this.deleteExpired(now);
     const rows = await this.db
       .select()
       .from(apiCache)
@@ -20,7 +21,17 @@ export class ApiCacheRepository {
   }
 
   async list(): Promise<ApiCacheEntry[]> {
+    await this.deleteExpired();
     return this.db.select().from(apiCache).orderBy(desc(apiCache.fetchedAt));
+  }
+
+  /** Remove rows whose expires_at is at or before `now` (defaults to current time). */
+  async deleteExpired(now: Date = new Date()): Promise<number> {
+    const deleted = await this.db
+      .delete(apiCache)
+      .where(lte(apiCache.expiresAt, now))
+      .returning({ id: apiCache.id });
+    return deleted.length;
   }
 
   async upsert(

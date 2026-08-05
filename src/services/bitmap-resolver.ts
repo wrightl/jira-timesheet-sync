@@ -6,6 +6,7 @@ import {
   type BitmapProject,
   type BitmapProjectBudget,
   type BitmapTimesheetEntryBody,
+  type BitmapTimesheetEntryUpdateBody,
   type BitmapUser,
   type InternalPmClient,
   type PaginatedResponse,
@@ -151,6 +152,22 @@ export function buildTimesheetBody(params: {
       notes: params.comment ?? "",
       billable: "true",
       nonbillable_reason: "",
+    },
+  };
+}
+
+/** Slim update payload matching Bitmap's PUT /timesheet_entries/:id body. */
+export function buildTimesheetUpdateBody(
+  body: BitmapTimesheetEntryBody,
+): BitmapTimesheetEntryUpdateBody {
+  const { project_id, project_budget_id, hours, notes } = body.timesheet_entry;
+  return {
+    timesheet_entry: {
+      project_id,
+      project_budget_id,
+      hours,
+      notes,
+      billable: true,
     },
   };
 }
@@ -564,8 +581,11 @@ export class BitmapResolverService {
         timesheetId: string,
         input: TimesheetEntryInput,
       ): Promise<TimesheetEntryResult> => {
-        const body = await this.resolveTimesheetBody(api, input);
-        return api.updateTimesheetEntry(timesheetId, body);
+        const full = await this.resolveTimesheetBody(api, input);
+        return api.updateTimesheetEntry(
+          timesheetId,
+          buildTimesheetUpdateBody(full),
+        );
       },
       deleteTimesheet: async (timesheetId: string): Promise<void> => {
         await api.deleteTimesheetEntry(timesheetId);

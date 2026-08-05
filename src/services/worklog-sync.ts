@@ -23,16 +23,37 @@ import { log } from "@/lib/log";
 
 export type SyncStatus = "pending" | "synced" | "skipped" | "failed";
 
-/** Format notes sent to Bitmap: issue key, plus worklog comment when present. */
+/** Format notes sent to Bitmap as HTML: issue key, plus worklog comment when present. */
 export function formatTimesheetComment(
   issueKey: string | null,
   comment: string | null,
 ): string {
-  const header = `* ${issueKey ?? ""}:`;
-  if (comment) {
-    return `${header}\n- ${comment}`;
+  const header = `<p>${escapeHtml(issueKey ?? "")}:</p>`;
+  if (!comment) {
+    return header;
   }
-  return header;
+
+  const items = comment
+    .split(/\r\n|\r|\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => `<li>${escapeHtml(line)}</li>`)
+    .join("");
+
+  if (!items) {
+    return header;
+  }
+
+  return `${header}<ul>${items}</ul>`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 export interface SyncResult {

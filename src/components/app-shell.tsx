@@ -368,7 +368,7 @@ export function AppShell({
             <div className="flex min-h-0 flex-1">
                 {signedIn ? (
                     <aside
-                        className={`shrink-0 border-r border-border bg-card transition-[width] duration-200 ease-in-out ${
+                        className={`shrink-0 overflow-hidden border-r border-border bg-card transition-[width] duration-200 ease-in-out ${
                             collapsed ? 'w-[3.75rem]' : 'w-56'
                         }`}
                         aria-label="Main navigation"
@@ -390,18 +390,16 @@ export function AppShell({
                                             active
                                                 ? 'bg-accent-muted font-medium text-accent'
                                                 : 'text-muted hover:bg-background hover:text-foreground'
-                                        } ${collapsed ? 'justify-center px-0' : ''}`}
+                                        }`}
                                     >
                                         <Icon
                                             className={`h-4 w-4 shrink-0 ${
                                                 active ? 'text-accent' : ''
                                             }`}
                                         />
-                                        {!collapsed ? (
-                                            <span className="truncate">
-                                                {link.label}
-                                            </span>
-                                        ) : null}
+                                        <span className="truncate">
+                                            {link.label}
+                                        </span>
                                     </Link>
                                 );
                             })}

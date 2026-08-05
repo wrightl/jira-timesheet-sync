@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   budgetCategoryFromJobTitle,
   buildTimesheetBody,
+  buildTimesheetUpdateBody,
   findMappedBudget,
   findMappedProject,
   formatBitmapDateRangeBound,
@@ -180,6 +181,29 @@ describe("buildTimesheetBody", () => {
         notes: "Fixed bug",
         billable: "true",
         nonbillable_reason: "",
+      },
+    });
+  });
+});
+
+describe("buildTimesheetUpdateBody", () => {
+  it("builds a slim PUT payload with boolean billable", () => {
+    const createBody = buildTimesheetBody({
+      userId: "u1",
+      projectId: "p1",
+      projectBudgetId: "b1",
+      started: "2026-08-01T10:00:00.000+0000",
+      timeSpentSeconds: 360,
+      comment: "<p>EPCBC-312:</p><ul><li>testing</li></ul>",
+    });
+
+    expect(buildTimesheetUpdateBody(createBody)).toEqual({
+      timesheet_entry: {
+        hours: 0.1,
+        notes: "<p>EPCBC-312:</p><ul><li>testing</li></ul>",
+        project_id: "p1",
+        project_budget_id: "b1",
+        billable: true,
       },
     });
   });

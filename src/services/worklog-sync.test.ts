@@ -4,6 +4,7 @@ import { spaceProjectMappings, worklogSyncs } from "@/db/schema";
 import {
   acceptWorklogWebhook,
   formatTimesheetComment,
+  priorStartedFromRawPayload,
   processWorklogWebhook,
   retryWorklogSync,
 } from "@/services/worklog-sync";
@@ -331,6 +332,7 @@ describe("processWorklogWebhook", () => {
           status: "synced",
           internalTimesheetId: "ts-existing",
           eventType: "worklog_created",
+          rawPayload: JSON.stringify(basePayload),
           createdAt: new Date(),
         },
       ],
@@ -345,6 +347,99 @@ describe("processWorklogWebhook", () => {
       "ts-existing",
       expect.objectContaining({ jiraWorklogId: "wl-1" }),
     );
+    expect(deleteTimesheet).not.toHaveBeenCalled();
+    expect(createTimesheet).not.toHaveBeenCalled();
+  });
+
+  it("deletes and recreates when worklog date changes", async () => {
+    createTimesheet = vi.fn(async () => ({ timesheetId: "ts-new" }));
+    pm = {
+      createTimesheet: createTimesheet as InternalPmClient["createTimesheet"],
+      updateTimesheet: updateTimesheet as InternalPmClient["updateTimesheet"],
+      deleteTimesheet: deleteTimesheet as InternalPmClient["deleteTimesheet"],
+    };
+
+    const priorPayload = {
+      ...basePayload,
+      worklog: {
+        ...basePayload.worklog,
+        started: "2026-08-01T10:00:00.000+0000",
+      },
+    };
+    const payload = {
+      ...basePayload,
+      webhookEvent: "worklog_updated",
+      worklog: {
+        ...basePayload.worklog,
+        started: "2026-08-03T14:00:00.000+0000",
+      },
+    };
+    const db = createMockDb({
+      mapping: {
+        id: "m1",
+        jiraSpaceKey: "ENG",
+        clientId: "client-9",
+        enabled: true,
+      },
+      priorSyncs: [
+        {
+          jiraWorklogId: "wl-1",
+          status: "synced",
+          internalTimesheetId: "ts-existing",
+          eventType: "worklog_created",
+          rawPayload: JSON.stringify(priorPayload),
+          createdAt: new Date(),
+        },
+      ],
+    });
+    const result = await processWorklogWebhook(
+      payload,
+      JSON.stringify(payload),
+      { db: db as never, pmClient: pm },
+    );
+    expect(result.status).toBe("synced");
+    expect(result.internalTimesheetId).toBe("ts-new");
+    expect(deleteTimesheet).toHaveBeenCalledWith("ts-existing");
+    expect(createTimesheet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jiraWorklogId: "wl-1",
+        started: "2026-08-03T14:00:00.000+0000",
+      }),
+    );
+    expect(updateTimesheet).not.toHaveBeenCalled();
+  });
+
+  it("updates in place when prior date cannot be determined", async () => {
+    const payload = { ...basePayload, webhookEvent: "worklog_updated" };
+    const db = createMockDb({
+      mapping: {
+        id: "m1",
+        jiraSpaceKey: "ENG",
+        clientId: "client-9",
+        enabled: true,
+      },
+      priorSyncs: [
+        {
+          jiraWorklogId: "wl-1",
+          status: "synced",
+          internalTimesheetId: "ts-existing",
+          eventType: "worklog_created",
+          rawPayload: null,
+          createdAt: new Date(),
+        },
+      ],
+    });
+    const result = await processWorklogWebhook(
+      payload,
+      JSON.stringify(payload),
+      { db: db as never, pmClient: pm },
+    );
+    expect(result.status).toBe("synced");
+    expect(updateTimesheet).toHaveBeenCalledWith(
+      "ts-existing",
+      expect.objectContaining({ jiraWorklogId: "wl-1" }),
+    );
+    expect(deleteTimesheet).not.toHaveBeenCalled();
   });
 
   it("deletes using prior timesheet id", async () => {

@@ -80,9 +80,9 @@ export class WorklogSyncsRepository {
     return rows[0] ?? null;
   }
 
-  async findLatestSyncedTimesheetId(
+  async findLatestSyncedTimesheet(
     jiraWorklogId: string,
-  ): Promise<string | null> {
+  ): Promise<{ timesheetId: string; rawPayload: string | null } | null> {
     const rows = await this.db
       .select()
       .from(worklogSyncs)
@@ -94,7 +94,19 @@ export class WorklogSyncsRepository {
       )
       .orderBy(desc(worklogSyncs.createdAt))
       .limit(1);
-    return rows[0]?.internalTimesheetId ?? null;
+    const row = rows[0];
+    if (!row?.internalTimesheetId) return null;
+    return {
+      timesheetId: row.internalTimesheetId,
+      rawPayload: row.rawPayload ?? null,
+    };
+  }
+
+  async findLatestSyncedTimesheetId(
+    jiraWorklogId: string,
+  ): Promise<string | null> {
+    const prior = await this.findLatestSyncedTimesheet(jiraWorklogId);
+    return prior?.timesheetId ?? null;
   }
 
   async insertPending(

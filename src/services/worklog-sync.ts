@@ -5,6 +5,7 @@ import { WorklogSyncsRepository } from "@/repositories/worklog-syncs-repository"
 import { SpaceProjectMappingsRepository } from "@/repositories/space-project-mappings-repository";
 import {
   createBitmapResolverService,
+  formatTimesheetDate,
   type BitmapResolverService,
 } from "@/services/bitmap-resolver";
 import { createSettingsService, type SettingsService } from "@/services/settings-service";
@@ -45,6 +46,35 @@ export function formatTimesheetComment(
   }
 
   return `${header}<ul>${items}</ul>`;
+}
+
+/** Extract worklog.started from a previously stored webhook rawPayload. */
+export function priorStartedFromRawPayload(
+  rawPayload: string | null | undefined,
+): string | null {
+  if (!rawPayload) return null;
+  try {
+    const parsed = JSON.parse(rawPayload) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+    const worklog = (parsed as Record<string, unknown>).worklog;
+    if (!worklog || typeof worklog !== "object") return null;
+    const started = (worklog as Record<string, unknown>).started;
+    return typeof started === "string" && started.length > 0 ? started : null;
+  } catch {
+    return null;
+  }
+}
+
+function timesheetDateChanged(
+  priorStarted: string | null,
+  nextStarted: string | null,
+): boolean {
+  if (!priorStarted || !nextStarted) return false;
+  try {
+    return formatTimesheetDate(priorStarted) !== formatTimesheetDate(nextStarted);
+  } catch {
+    return false;
+  }
 }
 
 function escapeHtml(value: string): string {
@@ -272,12 +302,19 @@ export class WorklogSyncService {
         const result = await pm.createTimesheet(input);
         internalTimesheetId = result.timesheetId;
       } else if (event.eventType === "worklog_updated") {
-        const existingId = await this.deps.syncs.findLatestSyncedTimesheetId(
+        const prior = await this.deps.syncs.findLatestSyncedTimesheet(
           event.worklogId,
         );
-        if (existingId) {
-          const result = await pm.updateTimesheet(existingId, input);
-          internalTimesheetId = result.timesheetId;
+        if (prior) {
+          const priorStarted = priorStartedFromRawPayload(prior.rawPayload);
+          if (timesheetDateChanged(priorStarted, event.started)) {
+            await pm.deleteTimesheet(prior.timesheetId);
+            const result = await pm.createTimesheet(input);
+            internalTimesheetId = result.timesheetId;
+          } else {
+            const result = await pm.updateTimesheet(prior.timesheetId, input);
+            internalTimesheetId = result.timesheetId;
+          }
         } else {
           const result = await pm.createTimesheet(input);
           internalTimesheetId = result.timesheetId;

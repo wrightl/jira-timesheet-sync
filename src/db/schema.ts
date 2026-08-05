@@ -189,6 +189,11 @@ export const worklogSyncs = pgTable(
     payloadHash: text("payload_hash").notNull(),
     rawPayload: text("raw_payload"),
     error: text("error"),
+    authorAccountId: text("author_account_id"),
+    authorDisplayName: text("author_display_name"),
+    appUserId: uuid("app_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -204,6 +209,18 @@ export const worklogSyncs = pgTable(
     ),
     index("worklog_syncs_jira_worklog_id_idx").on(table.jiraWorklogId),
     index("worklog_syncs_created_at_idx").on(table.createdAt),
+    index("worklog_syncs_status_created_at_idx").on(
+      table.status,
+      table.createdAt,
+    ),
+    index("worklog_syncs_app_user_id_created_at_idx").on(
+      table.appUserId,
+      table.createdAt,
+    ),
+    index("worklog_syncs_author_account_id_created_at_idx").on(
+      table.authorAccountId,
+      table.createdAt,
+    ),
   ],
 );
 

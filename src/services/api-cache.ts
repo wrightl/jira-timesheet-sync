@@ -1,6 +1,6 @@
-import { and, eq, gt } from "drizzle-orm";
-import type { Db } from "@/db";
-import { apiCache } from "@/db/schema";
+import { getDb, type Db } from "@/db";
+import type { ApiCacheEntry } from "@/db/schema";
+import { ApiCacheRepository } from "@/repositories/api-cache-repository";
 
 export const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -18,27 +18,116 @@ export function projectBudgetsCacheKey(projectId: string): string {
   return `project_budgets:${projectId}`;
 }
 
+export type CacheListEntry = {
+  id: string;
+  cacheKey: string;
+  resourceType: ApiCacheEntry["resourceType"];
+  requestMeta: unknown;
+  fetchedAt: Date;
+  expiresAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+  bodyPreview: string;
+  bodyLength: number;
+  expired: boolean;
+  responseBody?: unknown;
+};
+
+export class ApiCacheService {
+  constructor(private readonly cache: ApiCacheRepository) {}
+
+  async getCachedJson<T>(cacheKey: string): Promise<T | null> {
+    const row = await this.cache.getValidByKey(cacheKey);
+    if (!row) return null;
+    try {
+      return JSON.parse(row.responseBody) as T;
+    } catch {
+      return null;
+    }
+  }
+
+  async setCachedJson(data: {
+    cacheKey: string;
+    resourceType: ApiCacheResourceType;
+    requestMeta: Record<string, unknown>;
+    responseBody: unknown;
+  }): Promise<void> {
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + CACHE_TTL_MS);
+    await this.cache.upsert({
+      cacheKey: data.cacheKey,
+      resourceType: data.resourceType,
+      requestMeta: JSON.stringify(data.requestMeta),
+      responseBody: JSON.stringify(data.responseBody),
+      fetchedAt: now,
+      expiresAt,
+      updatedAt: now,
+    });
+  }
+
+  async list(includeBody: boolean): Promise<CacheListEntry[]> {
+    const rows = await this.cache.list();
+    return rows.map((row) => {
+      let requestMeta: unknown = row.requestMeta;
+      try {
+        requestMeta = JSON.parse(row.requestMeta);
+      } catch {
+        // keep raw
+      }
+
+      const base: CacheListEntry = {
+        id: row.id,
+        cacheKey: row.cacheKey,
+        resourceType: row.resourceType,
+        requestMeta,
+        fetchedAt: row.fetchedAt,
+        expiresAt: row.expiresAt,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        bodyPreview: row.responseBody.slice(0, 500),
+        bodyLength: row.responseBody.length,
+        expired: row.expiresAt.getTime() <= Date.now(),
+      };
+
+      if (!includeBody) return base;
+
+      let responseBody: unknown = row.responseBody;
+      try {
+        responseBody = JSON.parse(row.responseBody);
+      } catch {
+        // keep raw
+      }
+      return { ...base, responseBody };
+    });
+  }
+
+  async deleteById(
+    id: string,
+  ): Promise<{ ok: true; invalidated: string } | { error: "not_found" }> {
+    const row = await this.cache.deleteById(id);
+    if (!row) return { error: "not_found" };
+    return { ok: true, invalidated: row.cacheKey };
+  }
+
+  async deleteAll(): Promise<{ ok: true; invalidated: "all" }> {
+    await this.cache.deleteAll();
+    return { ok: true, invalidated: "all" };
+  }
+}
+
+export function createApiCacheService(db: Db = getDb()) {
+  return new ApiCacheService(new ApiCacheRepository(db));
+}
+
+/** @deprecated Prefer ApiCacheService methods via createApiCacheService. */
 export async function getCachedJson<T>(
   db: Db,
   cacheKey: string,
 ): Promise<T | null> {
-  const now = new Date();
-  const rows = await db
-    .select()
-    .from(apiCache)
-    .where(and(eq(apiCache.cacheKey, cacheKey), gt(apiCache.expiresAt, now)))
-    .limit(1);
-
-  const row = rows[0];
-  if (!row) return null;
-
-  try {
-    return JSON.parse(row.responseBody) as T;
-  } catch {
-    return null;
-  }
+  return createApiCacheService(db).getCachedJson<T>(cacheKey);
 }
 
+/** @deprecated Prefer ApiCacheService methods via createApiCacheService. */
 export async function setCachedJson(
   db: Db,
   data: {
@@ -48,31 +137,5 @@ export async function setCachedJson(
     responseBody: unknown;
   },
 ): Promise<void> {
-  const now = new Date();
-  const expiresAt = new Date(now.getTime() + CACHE_TTL_MS);
-  const responseBody = JSON.stringify(data.responseBody);
-  const requestMeta = JSON.stringify(data.requestMeta);
-
-  await db
-    .insert(apiCache)
-    .values({
-      cacheKey: data.cacheKey,
-      resourceType: data.resourceType,
-      requestMeta,
-      responseBody,
-      fetchedAt: now,
-      expiresAt,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: apiCache.cacheKey,
-      set: {
-        resourceType: data.resourceType,
-        requestMeta,
-        responseBody,
-        fetchedAt: now,
-        expiresAt,
-        updatedAt: now,
-      },
-    });
+  return createApiCacheService(db).setCachedJson(data);
 }

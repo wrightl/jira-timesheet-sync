@@ -1,6 +1,18 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { formatDateTimeUtc } from "@/lib/format-date";
+import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from "@/components/ui/table";
 
 type SyncRow = {
   id: string;
@@ -15,11 +27,13 @@ type SyncRow = {
   canRetry?: boolean;
 };
 
-function statusClass(status: string) {
-  if (status === "synced") return "bg-ok/10 text-ok";
-  if (status === "skipped") return "bg-warning/10 text-warning";
-  if (status === "pending") return "bg-accent/10 text-accent";
-  return "bg-danger/10 text-danger";
+function statusVariant(
+  status: string,
+): "ok" | "warning" | "accent" | "danger" {
+  if (status === "synced") return "ok";
+  if (status === "skipped") return "warning";
+  if (status === "pending") return "accent";
+  return "danger";
 }
 
 export function RecentSyncs({ authed }: { authed: boolean }) {
@@ -45,7 +59,6 @@ export function RecentSyncs({ authed }: { authed: boolean }) {
   useEffect(() => {
     if (!authed) return;
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authed]);
 
   useEffect(() => {
@@ -72,100 +85,92 @@ export function RecentSyncs({ authed }: { authed: boolean }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-end">
-        <button
+        <Button
           type="button"
+          variant="secondary"
           disabled={pending}
-          className="rounded-md border border-border px-3 py-2 text-sm hover:bg-background disabled:opacity-60"
           onClick={() => {
             setActionError(null);
             load();
           }}
         >
           {pending ? "Refreshing…" : "Refresh"}
-        </button>
+        </Button>
       </div>
-      {actionError ? (
-        <p className="text-sm text-danger">{actionError}</p>
-      ) : null}
-      {error ? <p className="text-sm text-danger">{error}</p> : null}
-      <div className="overflow-x-auto rounded-lg border border-border bg-card">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-border bg-background text-muted">
-            <tr>
-              <th className="px-4 py-3 font-medium">When</th>
-              <th className="px-4 py-3 font-medium">Event</th>
-              <th className="px-4 py-3 font-medium">Worklog</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium" />
-            </tr>
-          </thead>
-          <tbody>
-            {pending && syncs.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-muted">
-                  Loading…
-                </td>
-              </tr>
-            ) : syncs.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-muted">
-                  No sync events yet.
-                </td>
-              </tr>
-            ) : (
-              syncs.map((s) => (
-                <tr key={s.id} className="border-b border-border last:border-0">
-                  <td className="px-4 py-3 text-xs text-muted whitespace-nowrap">
-                    {new Date(s.createdAt).toLocaleString()}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs">{s.eventType}</td>
-                  <td className="px-4 py-3 font-mono text-xs">
-                    {s.jiraIssueKey ?? "—"} / {s.jiraWorklogId}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`rounded-full px-2.5 py-0.5 text-xs ${statusClass(s.status)}`}
+      {actionError ? <Alert variant="error">{actionError}</Alert> : null}
+      {error ? <Alert variant="error">{error}</Alert> : null}
+      <Table>
+        <TableHead>
+          <tr>
+            <TableHeaderCell>When</TableHeaderCell>
+            <TableHeaderCell>Event</TableHeaderCell>
+            <TableHeaderCell>Worklog</TableHeaderCell>
+            <TableHeaderCell>Status</TableHeaderCell>
+            <TableHeaderCell />
+          </tr>
+        </TableHead>
+        <TableBody>
+          {pending && syncs.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={5} className="py-6 text-center text-muted">
+                Loading…
+              </TableCell>
+            </TableRow>
+          ) : syncs.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={5} className="py-6 text-center text-muted">
+                No sync events yet.
+              </TableCell>
+            </TableRow>
+          ) : (
+            syncs.map((s) => (
+              <TableRow key={s.id}>
+                <TableCell className="whitespace-nowrap text-xs text-muted">
+                  {formatDateTimeUtc(s.createdAt)}
+                </TableCell>
+                <TableCell className="font-mono text-xs">{s.eventType}</TableCell>
+                <TableCell className="font-mono text-xs">
+                  {s.jiraIssueKey ?? "—"} / {s.jiraWorklogId}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={statusVariant(s.status)}>{s.status}</Badge>
+                  {s.error ? (
+                    <span className="ml-2 text-xs text-muted">{s.error}</span>
+                  ) : null}
+                </TableCell>
+                <TableCell className="text-right">
+                  {s.canRetry ? (
+                    <button
+                      type="button"
+                      disabled={retryingId === s.id}
+                      className="text-sm text-accent hover:underline disabled:opacity-60"
+                      onClick={() => {
+                        setActionError(null);
+                        setRetryingId(s.id);
+                        startTransition(async () => {
+                          const res = await fetch(
+                            `/api/syncs?action=retry&id=${s.id}`,
+                            { method: "POST" },
+                          );
+                          const data = await res.json().catch(() => ({}));
+                          setRetryingId(null);
+                          if (!res.ok) {
+                            setActionError(data.error ?? "Retry failed");
+                            return;
+                          }
+                          load();
+                        });
+                      }}
                     >
-                      {s.status}
-                    </span>
-                    {s.error ? (
-                      <span className="ml-2 text-xs text-muted">{s.error}</span>
-                    ) : null}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {s.canRetry ? (
-                      <button
-                        type="button"
-                        disabled={retryingId === s.id}
-                        className="text-accent hover:underline disabled:opacity-60"
-                        onClick={() => {
-                          setActionError(null);
-                          setRetryingId(s.id);
-                          startTransition(async () => {
-                            const res = await fetch(
-                              `/api/syncs?action=retry&id=${s.id}`,
-                              { method: "POST" },
-                            );
-                            const data = await res.json().catch(() => ({}));
-                            setRetryingId(null);
-                            if (!res.ok) {
-                              setActionError(data.error ?? "Retry failed");
-                              return;
-                            }
-                            load();
-                          });
-                        }}
-                      >
-                        {retryingId === s.id ? "Retrying…" : "Retry"}
-                      </button>
-                    ) : null}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                      {retryingId === s.id ? "Retrying…" : "Retry"}
+                    </button>
+                  ) : null}
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
     </div>
   );
 }

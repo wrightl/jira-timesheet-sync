@@ -33,5 +33,19 @@
     "when": 1754090000000,
     "tag": "0004_sync_pending_raw_payload",
     "breakpoints": true
+  },
+  {
+    "idx": 5,
+    "version": "7",
+    "when": 1754100000000,
+    "tag": "0005_worklog_syncs_status_created_at_idx",
+    "breakpoints": true
+  },
+  {
+    "idx": 6,
+    "version": "7",
+    "when": 1754110000000,
+    "tag": "0006_worklog_syncs_author_app_user",
+    "breakpoints": true
   }
 ]

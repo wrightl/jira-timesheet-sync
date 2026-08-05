@@ -1,6 +1,20 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardTitle } from "@/components/ui/card";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from "@/components/ui/table";
 
 type Mapping = {
   id: string;
@@ -37,7 +51,6 @@ export function MappingsManager({ authed }: { authed: boolean }) {
 
   useEffect(() => {
     if (authed) load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authed]);
 
   if (!authed) {
@@ -48,135 +61,133 @@ export function MappingsManager({ authed }: { authed: boolean }) {
 
   return (
     <div className="space-y-6">
-      <form
-        className="rounded-lg border border-border bg-card p-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          startTransition(async () => {
-            setError(null);
-            const res = await fetch("/api/mappings", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(form),
+      <Card>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            startTransition(async () => {
+              setError(null);
+              const res = await fetch("/api/mappings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(form),
+              });
+              if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                setError(data.error ?? "Create failed");
+                return;
+              }
+              setForm(emptyForm);
+              load();
             });
-            if (!res.ok) {
-              const data = await res.json().catch(() => ({}));
-              setError(data.error ?? "Create failed");
-              return;
-            }
-            setForm(emptyForm);
-            load();
-          });
-        }}
-      >
-        <h2 className="mb-3 text-base font-semibold">Add mapping</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="text-sm">
-            <span className="mb-1 block text-muted">Jira space key</span>
-            <input
-              className="w-full rounded-md border border-border bg-background px-3 py-2"
-              value={form.jiraSpaceKey}
-              onChange={(e) => setForm({ ...form, jiraSpaceKey: e.target.value })}
-              placeholder="ENG"
-              required
-            />
-          </label>
-          <label className="text-sm">
-            <span className="mb-1 block text-muted">Client ID</span>
-            <input
-              className="w-full rounded-md border border-border bg-background px-3 py-2"
-              value={form.clientId}
-              onChange={(e) => setForm({ ...form, clientId: e.target.value })}
-              required
-            />
-          </label>
-        </div>
-        <div className="mt-3 flex items-center justify-between">
-          <label className="flex items-center gap-2 text-sm text-muted">
-            <input
-              type="checkbox"
-              checked={form.enabled}
-              onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
-            />
-            Enabled
-          </label>
-          <button
-            type="submit"
-            disabled={pending}
-            className="rounded-md bg-accent px-4 py-2 text-sm text-white hover:bg-accent-hover disabled:opacity-60"
-          >
-            {pending ? "Saving…" : "Add mapping"}
-          </button>
-        </div>
-        {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
-      </form>
+          }}
+        >
+          <CardTitle className="mb-3">Add mapping</CardTitle>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Jira space key" htmlFor="mapping-space">
+              <Input
+                id="mapping-space"
+                value={form.jiraSpaceKey}
+                onChange={(e) =>
+                  setForm({ ...form, jiraSpaceKey: e.target.value })
+                }
+                placeholder="ENG"
+                required
+              />
+            </Field>
+            <Field label="Client ID" htmlFor="mapping-client">
+              <Input
+                id="mapping-client"
+                value={form.clientId}
+                onChange={(e) => setForm({ ...form, clientId: e.target.value })}
+                required
+              />
+            </Field>
+          </div>
+          <div className="mt-1 flex items-center justify-between">
+            <label className="flex items-center gap-2 text-sm text-muted">
+              <input
+                type="checkbox"
+                checked={form.enabled}
+                onChange={(e) =>
+                  setForm({ ...form, enabled: e.target.checked })
+                }
+              />
+              Enabled
+            </label>
+            <Button type="submit" disabled={pending}>
+              {pending ? "Saving…" : "Add mapping"}
+            </Button>
+          </div>
+          {error ? (
+            <Alert variant="error" className="mt-3">
+              {error}
+            </Alert>
+          ) : null}
+        </form>
+      </Card>
 
-      <div className="overflow-hidden rounded-lg border border-border bg-card">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-border bg-background text-muted">
-            <tr>
-              <th className="px-4 py-3 font-medium">Space key</th>
-              <th className="px-4 py-3 font-medium">Client ID</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium" />
-            </tr>
-          </thead>
-          <tbody>
-            {mappings.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-muted">
-                  No mappings yet. Worklogs from unmapped spaces are skipped.
-                </td>
-              </tr>
-            ) : (
-              mappings.map((m) => (
-                <tr key={m.id} className="border-b border-border last:border-0">
-                  <td className="px-4 py-3 font-medium">{m.jiraSpaceKey}</td>
-                  <td className="px-4 py-3 font-mono text-xs">{m.clientId}</td>
-                  <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      className={`rounded-full px-2.5 py-0.5 text-xs ${
-                        m.enabled
-                          ? "bg-ok/10 text-ok"
-                          : "bg-warning/10 text-warning"
-                      }`}
-                      onClick={() =>
-                        startTransition(async () => {
-                          await fetch(`/api/mappings?id=${m.id}`, {
-                            method: "PATCH",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ enabled: !m.enabled }),
-                          });
-                          load();
-                        })
-                      }
-                    >
+      <Table>
+        <TableHead>
+          <tr>
+            <TableHeaderCell>Space key</TableHeaderCell>
+            <TableHeaderCell>Client ID</TableHeaderCell>
+            <TableHeaderCell>Status</TableHeaderCell>
+            <TableHeaderCell />
+          </tr>
+        </TableHead>
+        <TableBody>
+          {mappings.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={4} className="py-6 text-center text-muted">
+                No mappings yet. Worklogs from unmapped spaces are skipped.
+              </TableCell>
+            </TableRow>
+          ) : (
+            mappings.map((m) => (
+              <TableRow key={m.id}>
+                <TableCell className="font-medium">{m.jiraSpaceKey}</TableCell>
+                <TableCell className="font-mono text-xs">{m.clientId}</TableCell>
+                <TableCell>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      startTransition(async () => {
+                        await fetch(`/api/mappings?id=${m.id}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ enabled: !m.enabled }),
+                        });
+                        load();
+                      })
+                    }
+                  >
+                    <Badge variant={m.enabled ? "ok" : "warning"}>
                       {m.enabled ? "Enabled" : "Disabled"}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      className="text-danger hover:underline"
-                      onClick={() =>
-                        startTransition(async () => {
-                          await fetch(`/api/mappings?id=${m.id}`, {
-                            method: "DELETE",
-                          });
-                          load();
-                        })
-                      }
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                    </Badge>
+                  </button>
+                </TableCell>
+                <TableCell className="text-right">
+                  <button
+                    type="button"
+                    className="text-sm text-danger hover:underline"
+                    onClick={() =>
+                      startTransition(async () => {
+                        await fetch(`/api/mappings?id=${m.id}`, {
+                          method: "DELETE",
+                        });
+                        load();
+                      })
+                    }
+                  >
+                    Delete
+                  </button>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
     </div>
   );
 }

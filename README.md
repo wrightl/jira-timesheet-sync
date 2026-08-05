@@ -38,9 +38,9 @@ Open [http://localhost:3000](http://localhost:3000), sign in with the seeded adm
 | `user` | Own space→project/budget mappings (`/my-mappings`); read global spaces to pick from |
 
 - Login username is the **email address**
-- Self-register creates role `user`
+- Self-register creates role `user` when `ALLOW_PUBLIC_REGISTER=true`; otherwise only admins create accounts via **Users**
 - Seed admin: `npm run db:seed` using `ADMIN_EMAIL` / `ADMIN_PASSWORD`
-- `ADMIN_API_KEY` remains an optional Bearer fallback for admin API tooling only
+- Admin APIs use session cookies from login (no API key)
 
 ## User-specific mappings
 
@@ -63,10 +63,13 @@ If a mapped project/budget is inactive, the sync **fails** (no silent fallback).
 | `INTERNAL_PM_ACCESS_TOKEN` | Optional env fallback for the Bitmap API bearer token |
 | `INTERNAL_PM_BASE_URL` | Bitmap API base URL (default `https://bitmap.app`) |
 | `SETTINGS_ENCRYPTION_KEY` | Encrypts tokens saved via the UI |
+| `ALLOW_PUBLIC_REGISTER` | Set `true` to allow `POST /api/auth/register` (default off) |
+| `LOG_LEVEL` | `debug` \| `info` \| `warn` \| `error` (default: `debug` locally, `info` in production) |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Seeded admin credentials (`npm run db:seed`) |
-| `ADMIN_API_KEY` | Optional Bearer fallback for admin APIs |
 | `NGROK_AUTHTOKEN` | ngrok auth token for local webhook tunneling |
 | `NGROK_DOMAIN` | Optional reserved ngrok domain |
+
+Bitmap token resolution: encrypted token in Settings (DB) first; if unset, `INTERNAL_PM_ACCESS_TOKEN` is used as bootstrap. Once a token is saved in Settings, the DB value is the source of truth.
 
 `.env.local` is gitignored. Commit only `.env.example`.
 
@@ -106,14 +109,30 @@ On each create/update sync:
 
 `POST /api/webhooks/jira` authenticates, stores a `pending` sync row (including the raw payload), and returns **202** immediately. Bitmap processing continues via Next.js [`after()`](https://nextjs.org/docs/app/api-reference/functions/after). The dashboard shows `pending` / `synced` / `skipped` / `failed` and polls while any row is pending.
 
-Admins can **Retry** failed or skipped events from the dashboard (`POST /api/syncs?action=retry&id=`). Retry requires a stored raw payload (events accepted after this feature).
+Admins and owning users can **Retry** failed or skipped events (`POST /api/syncs?action=retry&id=`). Retry uses a compare-and-set claim on `failed`/`skipped` rows. Retry requires a stored raw payload (events accepted after this feature). Stuck `pending` rows older than 15 minutes are reclaimed on the next webhook accept.
+
+## Debugging sync / missing mappings
+
+Structured logs go to stdout (local terminal and [Vercel Runtime Logs](https://vercel.com/docs/runtime-logs)). Production emits one JSON object per line; development prints compact readable lines.
+
+Watch for these messages when a worklog does not sync:
+
+| Log message / `reason` | Meaning |
+|------------------------|---------|
+| `no_mapping` / `missing_space_key` | No enabled space → client mapping (or payload lacked a space key) |
+| `mapping_disabled` | Space mapping exists but is disabled |
+| `no_bitmap_user_match` / `user_mapping_disabled` | Author could not be resolved to a Bitmap user |
+| `no_active_project` / `no_suitable_budget` | Client default path failed to pick project/budget |
+| `user_space_*` | User-specific project/budget override is invalid or inactive |
+
+Local tip: leave `LOG_LEVEL` unset (or set `debug`) while using `npm run dev` / `npm run tunnel` so resolver breadcrumbs like `client_default_path` appear. On Vercel, filter Runtime Logs by `worklog-sync`, `bitmap-resolver`, or `webhook/jira`.
 
 ## API
 
 | Method | Path | Auth |
 |--------|------|------|
 | `POST` | `/api/webhooks/jira` | Header `X-Webhook-Token` (returns 202; processes via `after()`) |
-| `POST` | `/api/auth/register` | Public |
+| `POST` | `/api/auth/register` | Public when `ALLOW_PUBLIC_REGISTER=true` |
 | `POST` | `/api/auth/login` | Public |
 | `POST` | `/api/auth/logout` | Session |
 | `GET` | `/api/auth/me` | Session |
@@ -125,9 +144,25 @@ Admins can **Retry** failed or skipped events from the dashboard (`POST /api/syn
 | `GET/POST/PATCH/DELETE` | `/api/users` | Admin (app account maintenance) |
 | `GET/DELETE` | `/api/cache` | Admin |
 | `GET/PUT` | `/api/settings` | Admin |
-| `GET` | `/api/syncs` | Admin |
-| `POST` | `/api/syncs?action=retry&id=` | Admin (retry failed/skipped) |
+| `GET` | `/api/syncs` | Session (admins see all; users see own) |
+| `POST` | `/api/syncs?action=retry&id=` | Session (admin or owner) |
 | `GET` | `/api/health` | None |
+
+## Architecture
+
+```
+API routes / pages / scripts
+  → services (domain orchestration)
+    → repositories (Drizzle only)
+      → Neon Postgres
+  → clients/bitmap-http (Bitmap HTTP transport)
+  → lib (validators, crypto, auth HTTP helpers, env, pure helpers)
+```
+
+- **Repositories** (`src/repositories/`): sole place that imports `drizzle-orm` / schema tables.
+- **Services** (`src/services/`): business logic; injectable via factories for tests.
+- **Lib** (`src/lib/`): pure helpers, Zod validators, cookie auth wrappers, typed env.
+- Neon HTTP has no multi-statement transactions; use single-statement CAS (`WHERE` claims) for concurrency-sensitive updates.
 
 ## Scripts
 
@@ -141,8 +176,8 @@ npm run db:generate
 npm run db:migrate
 npm run db:push
 npm run db:seed
+npm run db:backfill-authors
 ```
-
 ## Docker / Kubernetes
 
 See `k8s/` manifests. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in the secret, then run migrations and `npm run db:seed` (or an init job) before first login.

@@ -1,11 +1,10 @@
-import { desc, eq } from "drizzle-orm";
-import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/db";
-import { worklogSyncs } from "@/db/schema";
-import { requireAdmin } from "@/lib/auth";
-import { retryWorklogSync } from "@/services/worklog-sync";
+import { NextRequest } from "next/server";
+import type { WorklogSync } from "@/db/schema";
+import { requireAuth } from "@/lib/auth";
+import { parseLimitParam, requireUuidParam } from "@/lib/api";
+import { createWorklogSyncService } from "@/services/worklog-sync";
 
-function toClientSync(row: typeof worklogSyncs.$inferSelect) {
+function toClientSync(row: WorklogSync) {
   return {
     id: row.id,
     jiraWorklogId: row.jiraWorklogId,
@@ -16,6 +15,9 @@ function toClientSync(row: typeof worklogSyncs.$inferSelect) {
     internalTimesheetId: row.internalTimesheetId,
     error: row.error,
     payloadHash: row.payloadHash,
+    authorAccountId: row.authorAccountId,
+    authorDisplayName: row.authorDisplayName,
+    appUserId: row.appUserId,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     canRetry:
@@ -25,76 +27,78 @@ function toClientSync(row: typeof worklogSyncs.$inferSelect) {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await requireAdmin(request);
+  const auth = await requireAuth(request);
   if (auth.error) return auth.error;
 
-  const limitParam = new URL(request.url).searchParams.get("limit");
-  const limit = Math.min(Number(limitParam) || 20, 100);
+  const limit = parseLimitParam(new URL(request.url).searchParams);
+  const service = createWorklogSyncService();
+  const rows =
+    auth.user.role === "admin"
+      ? await service.list(limit)
+      : await service.list(limit, auth.user.id);
 
-  const db = getDb();
-  const rows = await db
-    .select()
-    .from(worklogSyncs)
-    .orderBy(desc(worklogSyncs.createdAt))
-    .limit(limit);
-
-  return NextResponse.json({ syncs: rows.map(toClientSync) });
+  return Response.json({ syncs: rows.map(toClientSync) });
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAdmin(request);
+  const auth = await requireAuth(request);
   if (auth.error) return auth.error;
 
   const { searchParams } = new URL(request.url);
   const action = searchParams.get("action");
-  const id = searchParams.get("id");
 
   if (action !== "retry") {
-    return NextResponse.json(
+    return Response.json(
       { error: "Unsupported action. Use action=retry" },
       { status: 400 },
     );
   }
-  if (!id) {
-    return NextResponse.json(
-      { error: "id query param is required" },
-      { status: 400 },
+
+  const idParam = requireUuidParam(searchParams);
+  if ("error" in idParam) return idParam.error;
+
+  const service = createWorklogSyncService();
+  const existing = await service.findById(idParam.value);
+
+  if (!existing) {
+    return Response.json({ error: "Sync not found" }, { status: 404 });
+  }
+
+  const isOwner = existing.appUserId === auth.user.id;
+  if (auth.user.role !== "admin" && !isOwner) {
+    return Response.json(
+      { error: "You can only retry your own syncs" },
+      { status: 403 },
     );
   }
 
-  const db = getDb();
-  const result = await retryWorklogSync(id, { db });
+  const result = await service.retry(idParam.value);
+  const row = await service.findById(idParam.value);
 
-  const rows = await db
-    .select()
-    .from(worklogSyncs)
-    .where(eq(worklogSyncs.id, id))
-    .limit(1);
-
-  if (result.error === "sync_not_found" || !rows[0]) {
-    return NextResponse.json({ error: "Sync not found" }, { status: 404 });
+  if (result.error === "sync_not_found" || !row) {
+    return Response.json({ error: "Sync not found" }, { status: 404 });
   }
   if (result.error === "missing_raw_payload") {
-    return NextResponse.json(
+    return Response.json(
       { error: "Cannot retry: stored payload is missing" },
       { status: 400 },
     );
   }
   if (result.error === "retry_not_allowed") {
-    return NextResponse.json(
+    return Response.json(
       { error: "Only failed or skipped syncs can be retried" },
       { status: 400 },
     );
   }
   if (result.error === "invalid_stored_payload") {
-    return NextResponse.json(
+    return Response.json(
       { error: "Cannot retry: stored payload is invalid JSON" },
       { status: 400 },
     );
   }
 
-  return NextResponse.json({
+  return Response.json({
     result,
-    sync: toClientSync(rows[0]),
+    sync: toClientSync(row),
   });
 }

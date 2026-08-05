@@ -1,6 +1,17 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { formatDateTimeUtc } from "@/lib/format-date";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from "@/components/ui/table";
 
 type CacheEntry = {
   id: string;
@@ -17,7 +28,7 @@ type CacheEntry = {
 
 function formatTs(value: string) {
   try {
-    return new Date(value).toLocaleString();
+    return formatDateTimeUtc(value);
   } catch {
     return value;
   }
@@ -46,7 +57,6 @@ export function CacheManager({ authed }: { authed: boolean }) {
 
   useEffect(() => {
     if (authed) load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authed]);
 
   const loadBody = (id: string) => {
@@ -72,7 +82,9 @@ export function CacheManager({ authed }: { authed: boolean }) {
 
   if (!authed) {
     return (
-      <p className="text-sm text-muted">Sign in to view cached Bitmap responses.</p>
+      <p className="text-sm text-muted">
+        Sign in to view cached Bitmap responses.
+      </p>
     );
   }
 
@@ -84,18 +96,18 @@ export function CacheManager({ authed }: { authed: boolean }) {
           fetch.
         </p>
         <div className="flex gap-2">
-          <button
+          <Button
             type="button"
+            variant="secondary"
             disabled={pending}
-            className="rounded-md border border-border px-3 py-2 text-sm hover:bg-background disabled:opacity-60"
             onClick={() => load()}
           >
             Refresh
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="danger"
             disabled={pending || entries.length === 0}
-            className="rounded-md bg-danger px-3 py-2 text-sm text-white hover:opacity-90 disabled:opacity-60"
             onClick={() =>
               startTransition(async () => {
                 await fetch("/api/cache?all=1", { method: "DELETE" });
@@ -106,92 +118,90 @@ export function CacheManager({ authed }: { authed: boolean }) {
             }
           >
             Invalidate all
-          </button>
+          </Button>
         </div>
       </div>
 
-      {error ? <p className="text-sm text-danger">{error}</p> : null}
+      {error ? <Alert variant="error">{error}</Alert> : null}
 
-      <div className="overflow-x-auto rounded-lg border border-border bg-card">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-border bg-background text-muted">
-            <tr>
-              <th className="px-4 py-3 font-medium">Key</th>
-              <th className="px-4 py-3 font-medium">Type</th>
-              <th className="px-4 py-3 font-medium">Fetched</th>
-              <th className="px-4 py-3 font-medium">Expires</th>
-              <th className="px-4 py-3 font-medium">Size</th>
-              <th className="px-4 py-3 font-medium" />
-            </tr>
-          </thead>
-          <tbody>
-            {entries.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-muted">
-                  No cached responses yet.
-                </td>
-              </tr>
-            ) : (
-              entries.map((entry) => (
-                <tr key={entry.id} className="border-b border-border last:border-0">
-                  <td className="max-w-[14rem] truncate px-4 py-3 font-mono text-xs">
-                    {entry.cacheKey}
-                  </td>
-                  <td className="px-4 py-3">{entry.resourceType}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    {formatTs(entry.fetchedAt)}
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <span
-                      className={
-                        entry.expired ? "text-warning" : "text-foreground"
+      <Table>
+        <TableHead>
+          <tr>
+            <TableHeaderCell>Key</TableHeaderCell>
+            <TableHeaderCell>Type</TableHeaderCell>
+            <TableHeaderCell>Fetched</TableHeaderCell>
+            <TableHeaderCell>Expires</TableHeaderCell>
+            <TableHeaderCell>Size</TableHeaderCell>
+            <TableHeaderCell />
+          </tr>
+        </TableHead>
+        <TableBody>
+          {entries.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={6} className="py-6 text-center text-muted">
+                No cached responses yet.
+              </TableCell>
+            </TableRow>
+          ) : (
+            entries.map((entry) => (
+              <TableRow key={entry.id}>
+                <TableCell className="max-w-[14rem] truncate font-mono text-xs">
+                  {entry.cacheKey}
+                </TableCell>
+                <TableCell>{entry.resourceType}</TableCell>
+                <TableCell className="whitespace-nowrap">
+                  {formatTs(entry.fetchedAt)}
+                </TableCell>
+                <TableCell className="whitespace-nowrap">
+                  <span
+                    className={
+                      entry.expired ? "text-warning" : "text-foreground"
+                    }
+                  >
+                    {formatTs(entry.expiresAt)}
+                    {entry.expired ? " (expired)" : ""}
+                  </span>
+                </TableCell>
+                <TableCell>{entry.bodyLength} B</TableCell>
+                <TableCell className="whitespace-nowrap text-right">
+                  <button
+                    type="button"
+                    className="mr-3 text-sm text-accent hover:underline"
+                    onClick={() => {
+                      if (expandedId === entry.id) {
+                        setExpandedId(null);
+                        setExpandedBody(null);
+                      } else {
+                        loadBody(entry.id);
                       }
-                    >
-                      {formatTs(entry.expiresAt)}
-                      {entry.expired ? " (expired)" : ""}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">{entry.bodyLength} B</td>
-                  <td className="px-4 py-3 text-right whitespace-nowrap">
-                    <button
-                      type="button"
-                      className="mr-3 text-accent hover:underline"
-                      onClick={() => {
+                    }}
+                  >
+                    {expandedId === entry.id ? "Hide" : "View"}
+                  </button>
+                  <button
+                    type="button"
+                    className="text-sm text-danger hover:underline"
+                    onClick={() =>
+                      startTransition(async () => {
+                        await fetch(`/api/cache?id=${entry.id}`, {
+                          method: "DELETE",
+                        });
                         if (expandedId === entry.id) {
                           setExpandedId(null);
                           setExpandedBody(null);
-                        } else {
-                          loadBody(entry.id);
                         }
-                      }}
-                    >
-                      {expandedId === entry.id ? "Hide" : "View"}
-                    </button>
-                    <button
-                      type="button"
-                      className="text-danger hover:underline"
-                      onClick={() =>
-                        startTransition(async () => {
-                          await fetch(`/api/cache?id=${entry.id}`, {
-                            method: "DELETE",
-                          });
-                          if (expandedId === entry.id) {
-                            setExpandedId(null);
-                            setExpandedBody(null);
-                          }
-                          load();
-                        })
-                      }
-                    >
-                      Invalidate
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                        load();
+                      })
+                    }
+                  >
+                    Invalidate
+                  </button>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
 
       {expandedId && expandedBody ? (
         <pre className="max-h-[28rem] overflow-auto rounded-lg border border-border bg-background p-4 text-xs">

@@ -7,10 +7,12 @@
   --border: #d8dee6;
   --accent: #0b6e4f;
   --accent-hover: #095c42;
+  --accent-muted: #e6f2ed;
   --muted: #5b6b7c;
   --danger: #b42318;
   --warning: #b54708;
   --ok: #027a48;
+  --ring: color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 @theme inline {
@@ -20,10 +22,14 @@
   --color-border: var(--border);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
+  --color-accent-muted: var(--accent-muted);
   --color-muted: var(--muted);
   --color-danger: var(--danger);
   --color-warning: var(--warning);
   --color-ok: var(--ok);
+  --color-ring: var(--ring);
+  --radius-md: 8px;
+  --radius-lg: 12px;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -32,6 +38,7 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.4;
 }
 
 a {
@@ -44,4 +51,9 @@ button,
 select,
 textarea {
   font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }

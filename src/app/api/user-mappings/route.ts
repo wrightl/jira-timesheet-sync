@@ -1,62 +1,31 @@
-import { desc, eq } from "drizzle-orm";
 import { NextRequest } from "next/server";
-import { getDb } from "@/db";
-import { userMappings } from "@/db/schema";
 import { requireAdmin } from "@/lib/auth";
+import { parseJsonBody, requireUuidParam } from "@/lib/api";
 import {
   userMappingCreateSchema,
   userMappingUpdateSchema,
 } from "@/lib/validators";
+import { createUserMappingService } from "@/services/user-mapping-service";
+import { log } from "@/lib/log";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAdmin(request);
   if (auth.error) return auth.error;
 
-  const db = getDb();
-  const rows = await db
-    .select()
-    .from(userMappings)
-    .orderBy(desc(userMappings.updatedAt));
-
-  return Response.json({ mappings: rows });
+  const mappings = await createUserMappingService().list();
+  return Response.json({ mappings });
 }
 
 export async function POST(request: NextRequest) {
   const auth = await requireAdmin(request);
   if (auth.error) return auth.error;
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json({ error: "Invalid JSON" }, { status: 400 });
-  }
+  const parsed = await parseJsonBody(request, userMappingCreateSchema);
+  if ("error" in parsed) return parsed.error;
 
-  const parsed = userMappingCreateSchema.safeParse(body);
-  if (!parsed.success) {
-    return Response.json(
-      { error: "Validation failed", details: parsed.error.flatten() },
-      { status: 400 },
-    );
-  }
-
-  const db = getDb();
-  try {
-    const [row] = await db
-      .insert(userMappings)
-      .values({
-        jiraDisplayName: parsed.data.jiraDisplayName,
-        jiraAccountId: parsed.data.jiraAccountId ?? null,
-        bitmapUserId: parsed.data.bitmapUserId,
-        bitmapEmail: parsed.data.bitmapEmail ?? null,
-        jobTitle: parsed.data.jobTitle ?? null,
-        enabled: parsed.data.enabled,
-      })
-      .returning();
-
-    return Response.json({ mapping: row }, { status: 201 });
-  } catch (err) {
-    console.error("[user-mappings] create failed", err);
+  const result = await createUserMappingService().create(parsed.data);
+  if ("error" in result) {
+    log.error("user-mappings", new Error("create conflict"));
     return Response.json(
       {
         error:
@@ -65,67 +34,40 @@ export async function POST(request: NextRequest) {
       { status: 409 },
     );
   }
+
+  return Response.json({ mapping: result.mapping }, { status: 201 });
 }
 
 export async function PATCH(request: NextRequest) {
   const auth = await requireAdmin(request);
   if (auth.error) return auth.error;
 
-  const { searchParams } = new URL(request.url);
-  const id = searchParams.get("id");
-  if (!id) {
-    return Response.json({ error: "id query param is required" }, { status: 400 });
-  }
+  const idParam = requireUuidParam(new URL(request.url).searchParams);
+  if ("error" in idParam) return idParam.error;
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json({ error: "Invalid JSON" }, { status: 400 });
-  }
+  const parsed = await parseJsonBody(request, userMappingUpdateSchema);
+  if ("error" in parsed) return parsed.error;
 
-  const parsed = userMappingUpdateSchema.safeParse(body);
-  if (!parsed.success) {
-    return Response.json(
-      { error: "Validation failed", details: parsed.error.flatten() },
-      { status: 400 },
-    );
-  }
-
-  const db = getDb();
-  const [row] = await db
-    .update(userMappings)
-    .set({
-      ...parsed.data,
-      updatedAt: new Date(),
-    })
-    .where(eq(userMappings.id, id))
-    .returning();
-
-  if (!row) {
+  const result = await createUserMappingService().update(
+    idParam.value,
+    parsed.data,
+  );
+  if ("error" in result) {
     return Response.json({ error: "User mapping not found" }, { status: 404 });
   }
 
-  return Response.json({ mapping: row });
+  return Response.json({ mapping: result.mapping });
 }
 
 export async function DELETE(request: NextRequest) {
   const auth = await requireAdmin(request);
   if (auth.error) return auth.error;
 
-  const { searchParams } = new URL(request.url);
-  const id = searchParams.get("id");
-  if (!id) {
-    return Response.json({ error: "id query param is required" }, { status: 400 });
-  }
+  const idParam = requireUuidParam(new URL(request.url).searchParams);
+  if ("error" in idParam) return idParam.error;
 
-  const db = getDb();
-  const [row] = await db
-    .delete(userMappings)
-    .where(eq(userMappings.id, id))
-    .returning();
-
-  if (!row) {
+  const result = await createUserMappingService().delete(idParam.value);
+  if ("error" in result) {
     return Response.json({ error: "User mapping not found" }, { status: 404 });
   }
 

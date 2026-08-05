@@ -13,9 +13,15 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Jira Timesheet Sync",
+  title: {
+    default: "Timesheet Sync",
+    template: "%s · Timesheet Sync",
+  },
   description:
     "Sync Jira Cloud worklogs to the internal project management timesheet system",
+  icons: {
+    icon: "/logo.svg",
+  },
 };
 
 export default function RootLayout({
@@ -28,7 +34,7 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="flex h-full flex-col overflow-hidden">{children}</body>
     </html>
   );
 }

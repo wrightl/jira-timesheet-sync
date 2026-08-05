@@ -13,7 +13,7 @@ export default async function RegisterPage() {
 
   return (
     <AppShell currentPath="/register">
-      <main className="mx-auto w-full max-w-md flex-1 px-4 py-12">
+      <main className="mx-auto flex w-full max-w-md flex-1 items-start justify-center px-6 py-12">
         <RegisterForm />
       </main>
     </AppShell>

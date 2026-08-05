@@ -15,15 +15,18 @@
         "db:migrate": "drizzle-kit migrate",
         "db:push": "drizzle-kit push",
         "db:studio": "drizzle-kit studio",
-        "db:seed": "tsx --env-file=.env.local scripts/seed-admin.ts"
+        "db:seed": "tsx --env-file=.env.local scripts/seed-admin.ts",
+        "db:backfill-authors": "tsx --env-file=.env.local scripts/backfill-sync-authors.ts"
     },
     "dependencies": {
         "@neondatabase/serverless": "^1.1.0",
         "bcrypt": "^6.0.0",
+        "clsx": "^2.1.1",
         "drizzle-orm": "^0.45.2",
         "next": "16.2.12",
         "react": "19.2.4",
         "react-dom": "19.2.4",
+        "tailwind-merge": "^3.6.0",
         "zod": "^4.4.3"
     },
     "devDependencies": {

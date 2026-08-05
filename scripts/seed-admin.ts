@@ -1,10 +1,11 @@
-import "dotenv/config";
-import { eq } from "drizzle-orm";
 import { getDb } from "../src/db";
-import { users } from "../src/db/schema";
+import { UsersRepository } from "../src/repositories/users-repository";
 import { hashPassword, normalizeEmail } from "../src/lib/password";
+import { loadScriptEnv } from "./lib/bootstrap";
 
 async function seed() {
+  loadScriptEnv();
+
   const emailRaw = process.env.ADMIN_EMAIL;
   const password = process.env.ADMIN_PASSWORD;
 
@@ -22,26 +23,18 @@ async function seed() {
 
   const email = normalizeEmail(emailRaw);
   const passwordHash = await hashPassword(password);
-  const db = getDb();
+  const users = new UsersRepository(getDb());
 
-  const existing = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, email))
-    .limit(1);
+  const existing = await users.findByEmail(email);
 
-  if (existing[0]) {
-    await db
-      .update(users)
-      .set({
-        passwordHash,
-        role: "admin",
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, existing[0].id));
+  if (existing) {
+    await users.update(existing.id, {
+      passwordHash,
+      role: "admin",
+    });
     console.log(`Updated admin user: ${email}`);
   } else {
-    await db.insert(users).values({
+    await users.createFull({
       email,
       passwordHash,
       role: "admin",

@@ -1,6 +1,20 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardTitle } from "@/components/ui/card";
+import { Field } from "@/components/ui/field";
+import { Select } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+} from "@/components/ui/table";
 
 type SpaceMapping = {
   id: string;
@@ -74,21 +88,15 @@ export function MyMappingsManager({ authed }: { authed: boolean }) {
 
   useEffect(() => {
     if (authed) load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authed]);
 
   useEffect(() => {
-    if (!selectedSpace) {
-      setProjects([]);
-      setBudgets([]);
-      setProjectId("");
-      setProjectBudgetId("");
-      return;
-    }
+    if (!selectedSpace) return;
+    const clientId = selectedSpace.clientId;
     startTransition(async () => {
       setError(null);
       const res = await fetch(
-        `/api/bitmap/projects?clientId=${encodeURIComponent(selectedSpace.clientId)}`,
+        `/api/bitmap/projects?clientId=${encodeURIComponent(clientId)}`,
       );
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -101,18 +109,11 @@ export function MyMappingsManager({ authed }: { authed: boolean }) {
       setProjects(
         list.filter((p) => p.state === "active" && p.started === true),
       );
-      setProjectId("");
-      setProjectBudgetId("");
-      setBudgets([]);
     });
-  }, [selectedSpace?.clientId, selectedSpace]);
+  }, [selectedSpace]);
 
   useEffect(() => {
-    if (!projectId) {
-      setBudgets([]);
-      setProjectBudgetId("");
-      return;
-    }
+    if (!projectId) return;
     startTransition(async () => {
       setError(null);
       const res = await fetch(
@@ -126,7 +127,6 @@ export function MyMappingsManager({ authed }: { authed: boolean }) {
       }
       const data = await res.json();
       setBudgets(data.budgets ?? []);
-      setProjectBudgetId("");
     });
   }, [projectId]);
 
@@ -140,183 +140,207 @@ export function MyMappingsManager({ authed }: { authed: boolean }) {
 
   return (
     <div className="space-y-6">
-      <form
-        className="rounded-lg border border-border bg-card p-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!selectedSpace || !selectedProject || !selectedBudget) return;
-          startTransition(async () => {
-            setError(null);
-            const res = await fetch("/api/user-space-mappings", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                jiraSpaceKey: selectedSpace.jiraSpaceKey,
-                clientId: selectedSpace.clientId,
-                projectId: selectedProject.id,
-                projectBudgetId: selectedBudget.id,
-                projectName: selectedProject.name ?? null,
-                budgetName: selectedBudget.name,
-                enabled: true,
-              }),
+      <Card>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!selectedSpace || !selectedProject || !selectedBudget) return;
+            startTransition(async () => {
+              setError(null);
+              const res = await fetch("/api/user-space-mappings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  jiraSpaceKey: selectedSpace.jiraSpaceKey,
+                  clientId: selectedSpace.clientId,
+                  projectId: selectedProject.id,
+                  projectBudgetId: selectedBudget.id,
+                  projectName: selectedProject.name ?? null,
+                  budgetName: selectedBudget.name,
+                  enabled: true,
+                }),
+              });
+              if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                setError(data.error ?? "Create failed");
+                return;
+              }
+              setSpaceKey("");
+              setProjectId("");
+              setProjectBudgetId("");
+              setProjects([]);
+              setBudgets([]);
+              load();
             });
-            if (!res.ok) {
-              const data = await res.json().catch(() => ({}));
-              setError(data.error ?? "Create failed");
-              return;
-            }
-            setSpaceKey("");
-            setProjectId("");
-            setProjectBudgetId("");
-            load();
-          });
-        }}
-      >
-        <h3 className="mb-3 text-base font-semibold">Add user-specific mapping</h3>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="text-sm sm:col-span-2">
-            <span className="mb-1 block text-muted">Jira space</span>
-            <select
-              className="w-full rounded-md border border-border bg-background px-3 py-2"
-              value={spaceKey}
-              onChange={(e) => setSpaceKey(e.target.value)}
-              required
+          }}
+        >
+          <CardTitle className="mb-3">Add user-specific mapping</CardTitle>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field
+              label="Jira space"
+              htmlFor="my-space"
+              className="mb-3 sm:col-span-2"
             >
-              <option value="">Select a space…</option>
-              {spaceMappings.map((s) => (
-                <option key={s.id} value={s.jiraSpaceKey}>
-                  {s.jiraSpaceKey} ({s.clientId})
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm sm:col-span-2">
-            <span className="mb-1 block text-muted">Project</span>
-            <select
-              className="w-full rounded-md border border-border bg-background px-3 py-2"
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              required
-              disabled={!selectedSpace || projects.length === 0}
+              <Select
+                id="my-space"
+                value={spaceKey}
+                onChange={(e) => {
+                  setSpaceKey(e.target.value);
+                  setProjects([]);
+                  setBudgets([]);
+                  setProjectId("");
+                  setProjectBudgetId("");
+                }}
+                required
+              >
+                <option value="">Select a space…</option>
+                {spaceMappings.map((s) => (
+                  <option key={s.id} value={s.jiraSpaceKey}>
+                    {s.jiraSpaceKey} ({s.clientId})
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field
+              label="Project"
+              htmlFor="my-project"
+              className="mb-3 sm:col-span-2"
             >
-              <option value="">Select a project…</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name ?? p.id}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm sm:col-span-2">
-            <span className="mb-1 block text-muted">Project budget</span>
-            <select
-              className="w-full rounded-md border border-border bg-background px-3 py-2"
-              value={projectBudgetId}
-              onChange={(e) => setProjectBudgetId(e.target.value)}
-              required
-              disabled={!projectId || budgets.length === 0}
+              <Select
+                id="my-project"
+                value={projectId}
+                onChange={(e) => {
+                  setProjectId(e.target.value);
+                  setBudgets([]);
+                  setProjectBudgetId("");
+                }}
+                required
+                disabled={!selectedSpace || projects.length === 0}
+              >
+                <option value="">Select a project…</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name ?? p.id}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field
+              label="Project budget"
+              htmlFor="my-budget"
+              className="mb-3 sm:col-span-2"
             >
-              <option value="">Select a budget…</option>
-              {budgets.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                  {typeof b.billable_time_remaining === "number"
-                    ? ` (${b.billable_time_remaining} remaining)`
-                    : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <div className="mt-3 flex justify-end">
-          <button
-            type="submit"
-            disabled={pending || !selectedSpace || !projectId || !projectBudgetId}
-            className="rounded-md bg-accent px-4 py-2 text-sm text-white hover:bg-accent-hover disabled:opacity-60"
-          >
-            {pending ? "Saving…" : "Save mapping"}
-          </button>
-        </div>
-        {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
-      </form>
+              <Select
+                id="my-budget"
+                value={projectBudgetId}
+                onChange={(e) => setProjectBudgetId(e.target.value)}
+                required
+                disabled={!projectId || budgets.length === 0}
+              >
+                <option value="">Select a budget…</option>
+                {budgets.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                    {typeof b.billable_time_remaining === "number"
+                      ? ` (${b.billable_time_remaining} remaining)`
+                      : ""}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+          <div className="mt-1 flex justify-end">
+            <Button
+              type="submit"
+              disabled={
+                pending || !selectedSpace || !projectId || !projectBudgetId
+              }
+            >
+              {pending ? "Saving…" : "Save mapping"}
+            </Button>
+          </div>
+          {error ? (
+            <Alert variant="error" className="mt-3">
+              {error}
+            </Alert>
+          ) : null}
+        </form>
+      </Card>
 
-      <div className="overflow-x-auto rounded-lg border border-border bg-card">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-border bg-background text-muted">
-            <tr>
-              <th className="px-4 py-3 font-medium">Space</th>
-              <th className="px-4 py-3 font-medium">Project</th>
-              <th className="px-4 py-3 font-medium">Budget</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium" />
-            </tr>
-          </thead>
-          <tbody>
-            {mappings.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-muted">
-                  No user-specific mappings yet. Without one, sync auto-picks
-                  project and budget.
-                </td>
-              </tr>
-            ) : (
-              mappings.map((m) => (
-                <tr key={m.id} className="border-b border-border last:border-0">
-                  <td className="px-4 py-3 font-medium">{m.jiraSpaceKey}</td>
-                  <td className="px-4 py-3">
-                    <div>{m.projectName ?? "—"}</div>
-                    <div className="font-mono text-xs text-muted">{m.projectId}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div>{m.budgetName ?? "—"}</div>
-                    <div className="font-mono text-xs text-muted">
-                      {m.projectBudgetId}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      className={`rounded-full px-2.5 py-0.5 text-xs ${
-                        m.enabled
-                          ? "bg-ok/10 text-ok"
-                          : "bg-warning/10 text-warning"
-                      }`}
-                      onClick={() =>
-                        startTransition(async () => {
-                          await fetch(`/api/user-space-mappings?id=${m.id}`, {
-                            method: "PATCH",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ enabled: !m.enabled }),
-                          });
-                          load();
-                        })
-                      }
-                    >
+      <Table>
+        <TableHead>
+          <tr>
+            <TableHeaderCell>Space</TableHeaderCell>
+            <TableHeaderCell>Project</TableHeaderCell>
+            <TableHeaderCell>Budget</TableHeaderCell>
+            <TableHeaderCell>Status</TableHeaderCell>
+            <TableHeaderCell />
+          </tr>
+        </TableHead>
+        <TableBody>
+          {mappings.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={5} className="py-6 text-center text-muted">
+                No user-specific mappings yet. Without one, sync auto-picks
+                project and budget.
+              </TableCell>
+            </TableRow>
+          ) : (
+            mappings.map((m) => (
+              <TableRow key={m.id}>
+                <TableCell className="font-medium">{m.jiraSpaceKey}</TableCell>
+                <TableCell>
+                  <div>{m.projectName ?? "—"}</div>
+                  <div className="font-mono text-xs text-muted">
+                    {m.projectId}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div>{m.budgetName ?? "—"}</div>
+                  <div className="font-mono text-xs text-muted">
+                    {m.projectBudgetId}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      startTransition(async () => {
+                        await fetch(`/api/user-space-mappings?id=${m.id}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ enabled: !m.enabled }),
+                        });
+                        load();
+                      })
+                    }
+                  >
+                    <Badge variant={m.enabled ? "ok" : "warning"}>
                       {m.enabled ? "Enabled" : "Disabled"}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      className="text-danger hover:underline"
-                      onClick={() =>
-                        startTransition(async () => {
-                          await fetch(`/api/user-space-mappings?id=${m.id}`, {
-                            method: "DELETE",
-                          });
-                          load();
-                        })
-                      }
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                    </Badge>
+                  </button>
+                </TableCell>
+                <TableCell className="text-right">
+                  <button
+                    type="button"
+                    className="text-sm text-danger hover:underline"
+                    onClick={() =>
+                      startTransition(async () => {
+                        await fetch(`/api/user-space-mappings?id=${m.id}`, {
+                          method: "DELETE",
+                        });
+                        load();
+                      })
+                    }
+                  >
+                    Delete
+                  </button>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
     </div>
   );
 }

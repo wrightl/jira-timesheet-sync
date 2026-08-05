@@ -1,51 +1,31 @@
-import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/db";
-import { users } from "@/db/schema";
-import { createSession, sessionCookieOptions } from "@/lib/auth";
-import {
-  normalizeEmail,
-  SESSION_COOKIE,
-  verifyPassword,
-} from "@/lib/password";
+import { sessionCookieOptions } from "@/lib/auth";
+import { parseJsonBody } from "@/lib/api";
+import { SESSION_COOKIE } from "@/lib/password";
 import { loginSchema } from "@/lib/validators";
+import { createAuthService } from "@/services/auth-service";
 
 export async function POST(request: NextRequest) {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
+  const parsed = await parseJsonBody(request, loginSchema);
+  if ("error" in parsed) return parsed.error;
 
-  const parsed = loginSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Validation failed", details: parsed.error.flatten() },
-      { status: 400 },
-    );
-  }
+  const result = await createAuthService().login(
+    parsed.data.email,
+    parsed.data.password,
+  );
 
-  const email = normalizeEmail(parsed.data.email);
-  const db = getDb();
-  const rows = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, email))
-    .limit(1);
-  const user = rows[0];
-
-  if (!user || !(await verifyPassword(parsed.data.password, user.passwordHash))) {
+  if ("error" in result) {
     return NextResponse.json(
       { error: "Invalid email or password" },
       { status: 401 },
     );
   }
 
-  const { token, expiresAt } = await createSession(db, user.id);
-  const response = NextResponse.json({
-    user: { id: user.id, email: user.email, role: user.role },
-  });
-  response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions(expiresAt));
+  const response = NextResponse.json({ user: result.user });
+  response.cookies.set(
+    SESSION_COOKIE,
+    result.token,
+    sessionCookieOptions(result.expiresAt),
+  );
   return response;
 }

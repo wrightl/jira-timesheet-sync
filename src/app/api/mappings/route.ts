@@ -1,122 +1,67 @@
-import { desc, eq } from "drizzle-orm";
 import { NextRequest } from "next/server";
-import { getDb } from "@/db";
-import { spaceProjectMappings } from "@/db/schema";
 import { requireAdmin, requireAuth } from "@/lib/auth";
+import { parseJsonBody, requireUuidParam } from "@/lib/api";
 import { mappingCreateSchema, mappingUpdateSchema } from "@/lib/validators";
+import { createSpaceMappingService } from "@/services/space-mapping-service";
+import { log } from "@/lib/log";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
   if (auth.error) return auth.error;
 
-  const db = getDb();
-  const rows = await db
-    .select()
-    .from(spaceProjectMappings)
-    .orderBy(desc(spaceProjectMappings.updatedAt));
-
-  return Response.json({ mappings: rows });
+  const mappings = await createSpaceMappingService().list();
+  return Response.json({ mappings });
 }
 
 export async function POST(request: NextRequest) {
   const auth = await requireAdmin(request);
   if (auth.error) return auth.error;
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json({ error: "Invalid JSON" }, { status: 400 });
-  }
+  const parsed = await parseJsonBody(request, mappingCreateSchema);
+  if ("error" in parsed) return parsed.error;
 
-  const parsed = mappingCreateSchema.safeParse(body);
-  if (!parsed.success) {
-    return Response.json(
-      { error: "Validation failed", details: parsed.error.flatten() },
-      { status: 400 },
-    );
-  }
-
-  const db = getDb();
-  try {
-    const [row] = await db
-      .insert(spaceProjectMappings)
-      .values({
-        jiraSpaceKey: parsed.data.jiraSpaceKey,
-        clientId: parsed.data.clientId,
-        enabled: parsed.data.enabled,
-      })
-      .returning();
-
-    return Response.json({ mapping: row }, { status: 201 });
-  } catch (err) {
-    console.error("[mappings] create failed", err);
+  const result = await createSpaceMappingService().create(parsed.data);
+  if ("error" in result) {
+    log.error("mappings", new Error("create conflict"));
     return Response.json(
       { error: "Failed to create mapping (possibly duplicate space key)" },
       { status: 409 },
     );
   }
+
+  return Response.json({ mapping: result.mapping }, { status: 201 });
 }
 
 export async function PATCH(request: NextRequest) {
   const auth = await requireAdmin(request);
   if (auth.error) return auth.error;
 
-  const { searchParams } = new URL(request.url);
-  const id = searchParams.get("id");
-  if (!id) {
-    return Response.json({ error: "id query param is required" }, { status: 400 });
-  }
+  const idParam = requireUuidParam(new URL(request.url).searchParams);
+  if ("error" in idParam) return idParam.error;
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json({ error: "Invalid JSON" }, { status: 400 });
-  }
+  const parsed = await parseJsonBody(request, mappingUpdateSchema);
+  if ("error" in parsed) return parsed.error;
 
-  const parsed = mappingUpdateSchema.safeParse(body);
-  if (!parsed.success) {
-    return Response.json(
-      { error: "Validation failed", details: parsed.error.flatten() },
-      { status: 400 },
-    );
-  }
-
-  const db = getDb();
-  const [row] = await db
-    .update(spaceProjectMappings)
-    .set({
-      ...parsed.data,
-      updatedAt: new Date(),
-    })
-    .where(eq(spaceProjectMappings.id, id))
-    .returning();
-
-  if (!row) {
+  const result = await createSpaceMappingService().update(
+    idParam.value,
+    parsed.data,
+  );
+  if ("error" in result) {
     return Response.json({ error: "Mapping not found" }, { status: 404 });
   }
 
-  return Response.json({ mapping: row });
+  return Response.json({ mapping: result.mapping });
 }
 
 export async function DELETE(request: NextRequest) {
   const auth = await requireAdmin(request);
   if (auth.error) return auth.error;
 
-  const { searchParams } = new URL(request.url);
-  const id = searchParams.get("id");
-  if (!id) {
-    return Response.json({ error: "id query param is required" }, { status: 400 });
-  }
+  const idParam = requireUuidParam(new URL(request.url).searchParams);
+  if ("error" in idParam) return idParam.error;
 
-  const db = getDb();
-  const [row] = await db
-    .delete(spaceProjectMappings)
-    .where(eq(spaceProjectMappings.id, id))
-    .returning();
-
-  if (!row) {
+  const result = await createSpaceMappingService().delete(idParam.value);
+  if ("error" in result) {
     return Response.json({ error: "Mapping not found" }, { status: 404 });
   }
 

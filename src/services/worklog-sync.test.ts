@@ -3,6 +3,7 @@ import type { InternalPmClient } from "@/clients/internal-pm";
 import { spaceProjectMappings, worklogSyncs } from "@/db/schema";
 import {
   acceptWorklogWebhook,
+  formatTimesheetComment,
   processWorklogWebhook,
   retryWorklogSync,
 } from "@/services/worklog-sync";
@@ -114,7 +115,13 @@ function createMockDb(options?: {
           updates.push(value);
           return {
             where() {
-              return Promise.resolve();
+              const promise = Promise.resolve([]) as unknown as Promise<
+                unknown[]
+              > & {
+                returning: () => Promise<unknown[]>;
+              };
+              promise.returning = () => Promise.resolve([]);
+              return promise;
             },
           };
         },
@@ -137,6 +144,18 @@ const basePayload = {
   },
 };
 
+describe("formatTimesheetComment", () => {
+  it("formats the issue key alone when there is no comment", () => {
+    expect(formatTimesheetComment("ENG-42", null)).toBe("* ENG-42:");
+  });
+
+  it("appends the comment when present", () => {
+    expect(formatTimesheetComment("ENG-42", "Fixed bug")).toBe(
+      "* ENG-42:\n- Fixed bug",
+    );
+  });
+});
+
 describe("acceptWorklogWebhook", () => {
   it("creates a pending sync for a new event", async () => {
     const db = createMockDb({ useHashLookup: true, byHash: null });
@@ -152,6 +171,9 @@ describe("acceptWorklogWebhook", () => {
         status: "pending",
         jiraWorklogId: "wl-1",
         rawPayload: JSON.stringify(basePayload),
+        authorAccountId: "a1",
+        authorDisplayName: "Ada",
+        appUserId: null,
       }),
     );
   });
@@ -253,6 +275,31 @@ describe("processWorklogWebhook", () => {
         clientId: "client-9",
         jiraWorklogId: "wl-1",
         timeSpentSeconds: 1800,
+        comment: "* ENG-1:",
+      }),
+    );
+  });
+
+  it("includes the worklog comment in timesheet notes when present", async () => {
+    const payload = {
+      ...basePayload,
+      worklog: { ...basePayload.worklog, comment: "Pairing session" },
+    };
+    const db = createMockDb({
+      mapping: {
+        id: "m1",
+        jiraSpaceKey: "ENG",
+        clientId: "client-9",
+        enabled: true,
+      },
+    });
+    await processWorklogWebhook(payload, JSON.stringify(payload), {
+      db: db as never,
+      pmClient: pm,
+    });
+    expect(createTimesheet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        comment: "* ENG-1:\n- Pairing session",
       }),
     );
   });
@@ -390,7 +437,18 @@ describe("retryWorklogSync", () => {
       update() {
         return {
           set() {
-            return { where() { return Promise.resolve(); } };
+            return {
+              where() {
+                const promise = Promise.resolve([]) as unknown as Promise<
+                  unknown[]
+                > & {
+                  returning: () => Promise<unknown[]>;
+                };
+                // CAS claim fails for synced rows
+                promise.returning = () => Promise.resolve([]);
+                return promise;
+              },
+            };
           },
         };
       },
@@ -400,6 +458,20 @@ describe("retryWorklogSync", () => {
   });
 
   it("rejects missing payload", async () => {
+    const claimed = {
+      id: "s1",
+      status: "pending",
+      rawPayload: null,
+      eventType: "worklog_created" as const,
+      jiraWorklogId: "wl-1",
+      jiraIssueKey: null,
+      jiraSpaceId: null,
+      internalTimesheetId: null,
+      payloadHash: "hash",
+      authorAccountId: null,
+      authorDisplayName: null,
+      appUserId: null,
+    };
     const db = {
       select() {
         return {
@@ -408,15 +480,39 @@ describe("retryWorklogSync", () => {
               where() {
                 return {
                   limit() {
-                    return Promise.resolve([
-                      {
-                        id: "s1",
-                        status: "failed",
-                        rawPayload: null,
-                        eventType: "worklog_created",
-                        jiraWorklogId: "wl-1",
-                      },
-                    ]);
+                    return Promise.resolve([claimed]);
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+      update() {
+        return {
+          set() {
+            return {
+              where() {
+                const promise = Promise.resolve([
+                  claimed,
+                ]) as unknown as Promise<unknown[]> & {
+                  returning: () => Promise<unknown[]>;
+                };
+                promise.returning = () => Promise.resolve([claimed]);
+                return promise;
+              },
+            };
+          },
+        };
+      },
+      insert() {
+        return {
+          values() {
+            return {
+              onConflictDoNothing() {
+                return {
+                  returning() {
+                    return Promise.resolve([]);
                   },
                 };
               },

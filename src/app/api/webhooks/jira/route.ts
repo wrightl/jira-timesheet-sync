@@ -1,16 +1,14 @@
 import { after } from "next/server";
-import { getDb } from "@/db";
 import { verifyWebhookToken } from "@/lib/webhook-auth";
-import {
-  acceptWorklogWebhook,
-  processWorklogWebhook,
-} from "@/services/worklog-sync";
+import { getEnv } from "@/lib/env";
+import { log } from "@/lib/log";
+import { createWorklogSyncService } from "@/services/worklog-sync";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
-  const secret = process.env.JIRA_WEBHOOK_SECRET;
+  const secret = getEnv().JIRA_WEBHOOK_SECRET;
   if (!secret) {
     return Response.json(
       { error: "JIRA_WEBHOOK_SECRET is not configured" },
@@ -33,19 +31,25 @@ export async function POST(request: Request) {
   }
 
   try {
-    const db = getDb();
-    const accepted = await acceptWorklogWebhook(payload, rawBody, db);
+    const service = createWorklogSyncService();
+    const accepted = await service.accept(payload, rawBody);
+
+    log.info("webhook/jira", "accepted", {
+      syncId: accepted.syncId,
+      duplicate: accepted.duplicate,
+      shouldProcess: accepted.shouldProcess,
+      reason: accepted.reason ?? null,
+      eventType: accepted.eventType ?? null,
+      jiraWorklogId: accepted.jiraWorklogId ?? null,
+    });
 
     if (accepted.shouldProcess && accepted.syncId) {
       const syncId = accepted.syncId;
       after(async () => {
         try {
-          await processWorklogWebhook(payload, rawBody, {
-            db: getDb(),
-            syncId,
-          });
+          await createWorklogSyncService().process(payload, rawBody, syncId);
         } catch (err) {
-          console.error("[webhook/jira] Background processing error", err);
+          log.error("webhook/jira", err, { phase: "background", syncId });
         }
       });
     }
@@ -62,7 +66,7 @@ export async function POST(request: Request) {
       { status: 202 },
     );
   } catch (err) {
-    console.error("[webhook/jira] Accept error", err);
+    log.error("webhook/jira", err, { phase: "accept" });
     return Response.json(
       {
         ok: false,

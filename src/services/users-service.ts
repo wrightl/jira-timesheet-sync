@@ -31,6 +31,7 @@ export class UsersService {
         email,
         passwordHash,
         role: input.role,
+        mustSetPassword: false,
       });
       return { user };
     } catch {
@@ -74,11 +75,13 @@ export class UsersService {
     const updates: {
       role?: "admin" | "user";
       passwordHash?: string;
+      mustSetPassword?: boolean;
     } = {};
 
     if (input.role) updates.role = input.role;
     if (input.password) {
       updates.passwordHash = await hashPassword(input.password);
+      updates.mustSetPassword = false;
     }
 
     const user = await this.users.update(id, updates);

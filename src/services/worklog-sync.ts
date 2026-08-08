@@ -10,6 +10,10 @@ import {
 } from "@/services/bitmap-resolver";
 import { createSettingsService, type SettingsService } from "@/services/settings-service";
 import {
+  createSpaceMappingDiscoveryService,
+  type SpaceMappingDiscoveryService,
+} from "@/services/space-mapping-discovery";
+import {
   createSyncAttributionService,
   type SyncAttributionService,
 } from "@/lib/sync-attribution";
@@ -115,6 +119,7 @@ export interface WorklogSyncServiceDeps {
   attribution: SyncAttributionService;
   settings: SettingsService;
   resolver: BitmapResolverService;
+  spaceMappingDiscovery?: SpaceMappingDiscoveryService;
   pmClient?: InternalPmClient;
   getAccessToken?: () => Promise<string | null>;
 }
@@ -124,7 +129,15 @@ export class WorklogSyncService {
 
   private async findMapping(event: ParsedWorklogEvent) {
     if (!event.spaceKey) return null;
-    return this.deps.spaceMappings.findBySpaceKey(event.spaceKey);
+    const existing = await this.deps.spaceMappings.findBySpaceKey(
+      event.spaceKey,
+    );
+    if (existing) return existing;
+
+    if (!this.deps.spaceMappingDiscovery) return null;
+    return this.deps.spaceMappingDiscovery.ensureMappingForSpaceKey(
+      event.spaceKey,
+    );
   }
 
   async accept(
@@ -162,7 +175,7 @@ export class WorklogSyncService {
       };
     }
 
-    const appUserId = await this.deps.attribution.resolveAppUserIdForAuthor(
+    const appUserId = await this.deps.attribution.ensureAppUserIdForAuthor(
       event.authorDisplayName,
     );
 
@@ -218,14 +231,14 @@ export class WorklogSyncService {
       return { status: "skipped", skippedReason: "unsupported_or_invalid_event" };
     }
 
-    const appUserId = await this.deps.attribution.resolveAppUserIdForAuthor(
+    let appUserId = await this.deps.attribution.ensureAppUserIdForAuthor(
       event.authorDisplayName,
     );
-    const identity = {
+    const identity = () => ({
       authorAccountId: event.authorAccountId,
       authorDisplayName: event.authorDisplayName,
       appUserId,
-    };
+    });
 
     log.info("worklog-sync", "process_start", {
       syncId: syncId ?? null,
@@ -256,6 +269,9 @@ export class WorklogSyncService {
           authorDisplayName: event.authorDisplayName,
           syncId: syncId ?? null,
         });
+        appUserId = await this.deps.attribution.ensureAppUserIdForAuthor(
+          event.authorDisplayName,
+        );
         const id = await this.deps.syncs.finalize(syncId, {
           jiraWorklogId: event.worklogId,
           jiraIssueKey: event.issueKey,
@@ -266,7 +282,7 @@ export class WorklogSyncService {
           payloadHash,
           rawPayload: rawBody,
           error: mapping ? "mapping_disabled" : "no_mapping",
-          ...identity,
+          ...identity(),
         });
         return {
           status: "skipped",
@@ -340,6 +356,9 @@ export class WorklogSyncService {
             authorDisplayName: event.authorDisplayName,
             syncId: syncId ?? null,
           });
+          appUserId = await this.deps.attribution.ensureAppUserIdForAuthor(
+            event.authorDisplayName,
+          );
           const id = await this.deps.syncs.finalize(syncId, {
             jiraWorklogId: event.worklogId,
             jiraIssueKey: event.issueKey,
@@ -350,7 +369,7 @@ export class WorklogSyncService {
             payloadHash,
             rawPayload: rawBody,
             error: "no_prior_timesheet",
-            ...identity,
+            ...identity(),
           });
           return {
             status: "skipped",
@@ -362,6 +381,11 @@ export class WorklogSyncService {
         }
       }
 
+      // Re-attribute after resolver may have created mapping + provisioned user.
+      appUserId = await this.deps.attribution.ensureAppUserIdForAuthor(
+        event.authorDisplayName,
+      );
+
       const id = await this.deps.syncs.finalize(syncId, {
         jiraWorklogId: event.worklogId,
         jiraIssueKey: event.issueKey,
@@ -371,7 +395,7 @@ export class WorklogSyncService {
         status: "synced",
         payloadHash,
         rawPayload: rawBody,
-        ...identity,
+        ...identity(),
       });
 
       log.info("worklog-sync", "synced", {
@@ -382,6 +406,7 @@ export class WorklogSyncService {
         spaceKey: event.spaceKey,
         internalTimesheetId,
         authorDisplayName: event.authorDisplayName,
+        appUserId,
       });
 
       return {
@@ -393,6 +418,9 @@ export class WorklogSyncService {
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : "unknown_error";
+      appUserId = await this.deps.attribution.ensureAppUserIdForAuthor(
+        event.authorDisplayName,
+      );
       log.error("worklog-sync", err, {
         phase: "process",
         syncId: syncId ?? null,
@@ -415,7 +443,7 @@ export class WorklogSyncService {
           payloadHash,
           rawPayload: rawBody,
           error: message,
-          ...identity,
+          ...identity(),
         });
         return {
           status: "failed",
@@ -539,6 +567,9 @@ export function createWorklogSyncService(
     overrides?.attribution ?? createSyncAttributionService(db);
   const settings = overrides?.settings ?? createSettingsService(db);
   const resolver = overrides?.resolver ?? createBitmapResolverService(db);
+  const spaceMappingDiscovery =
+    overrides?.spaceMappingDiscovery ??
+    createSpaceMappingDiscoveryService(db);
 
   return new WorklogSyncService({
     syncs,
@@ -546,6 +577,7 @@ export function createWorklogSyncService(
     attribution,
     settings,
     resolver,
+    spaceMappingDiscovery,
     pmClient: overrides?.pmClient,
     getAccessToken: overrides?.getAccessToken,
   });
@@ -569,11 +601,13 @@ export async function processWorklogWebhook(
     pmClient?: InternalPmClient;
     getAccessToken?: () => Promise<string | null>;
     syncId?: string;
+    spaceMappingDiscovery?: SpaceMappingDiscoveryService;
   },
 ): Promise<SyncResult> {
   return createWorklogSyncService(deps.db, {
     pmClient: deps.pmClient,
     getAccessToken: deps.getAccessToken,
+    spaceMappingDiscovery: deps.spaceMappingDiscovery,
   }).process(payload, rawBody, deps.syncId);
 }
 

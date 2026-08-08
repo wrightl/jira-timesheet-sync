@@ -52,6 +52,32 @@ export class SpaceProjectMappingsRepository {
     return row;
   }
 
+  /**
+   * Insert only when no row exists for jiraSpaceKey.
+   * On conflict, returns the existing row without modifying it.
+   */
+  async createIfAbsent(
+    values: Omit<NewSpaceProjectMapping, "id" | "createdAt" | "updatedAt">,
+  ): Promise<{ mapping: SpaceProjectMapping; created: boolean }> {
+    const [inserted] = await this.db
+      .insert(spaceProjectMappings)
+      .values(values)
+      .onConflictDoNothing({ target: spaceProjectMappings.jiraSpaceKey })
+      .returning();
+
+    if (inserted) {
+      return { mapping: inserted, created: true };
+    }
+
+    const existing = await this.findBySpaceKey(values.jiraSpaceKey);
+    if (!existing) {
+      throw new Error(
+        `space mapping conflict for ${values.jiraSpaceKey} but row not found`,
+      );
+    }
+    return { mapping: existing, created: false };
+  }
+
   async update(
     id: string,
     values: Partial<

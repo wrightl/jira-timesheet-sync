@@ -71,7 +71,9 @@ export class UsersRepository {
 
   async update(
     id: string,
-    values: Partial<Pick<AppUser, "role" | "passwordHash" | "email">> & {
+    values: Partial<
+      Pick<AppUser, "role" | "passwordHash" | "email" | "mustSetPassword">
+    > & {
       updatedAt?: Date;
     },
   ): Promise<PublicUser | null> {

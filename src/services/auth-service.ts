@@ -52,11 +52,31 @@ export class AuthService {
     const email = normalizeEmail(emailRaw);
     const passwordHash = await hashPassword(password);
 
+    const existing = await this.users.findByEmail(email);
+    if (existing) {
+      if (!existing.mustSetPassword) {
+        return { error: "conflict" };
+      }
+
+      const user = await this.users.update(existing.id, {
+        passwordHash,
+        mustSetPassword: false,
+      });
+      if (!user) return { error: "conflict" };
+
+      const session = await this.createSession(user.id);
+      return {
+        user: { id: user.id, email: user.email, role: user.role },
+        ...session,
+      };
+    }
+
     try {
       const user = await this.users.createFull({
         email,
         passwordHash,
         role: "user",
+        mustSetPassword: false,
       });
       const session = await this.createSession(user.id);
       return {

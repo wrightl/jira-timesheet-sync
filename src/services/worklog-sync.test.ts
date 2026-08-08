@@ -1,13 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { InternalPmClient } from "@/clients/internal-pm";
 import { spaceProjectMappings, worklogSyncs } from "@/db/schema";
+import type { SyncAttributionService } from "@/lib/sync-attribution";
 import {
   acceptWorklogWebhook,
+  createWorklogSyncService,
   formatTimesheetComment,
   priorStartedFromRawPayload,
   processWorklogWebhook,
   retryWorklogSync,
 } from "@/services/worklog-sync";
+import type { BitmapResolverService } from "@/services/bitmap-resolver";
+import type { SettingsService } from "@/services/settings-service";
+import { SpaceProjectMappingsRepository } from "@/repositories/space-project-mappings-repository";
+import { WorklogSyncsRepository } from "@/repositories/worklog-syncs-repository";
 
 type Mapping = {
   id: string;
@@ -236,12 +242,51 @@ describe("processWorklogWebhook", () => {
     const result = await processWorklogWebhook(
       basePayload,
       JSON.stringify(basePayload),
-      { db: db as never, pmClient: pm },
+      {
+        db: db as never,
+        pmClient: pm,
+        spaceMappingDiscovery: {
+          ensureMappingForSpaceKey: async () => null,
+        } as never,
+      },
     );
     expect(result.status).toBe("skipped");
     expect(result.skippedReason).toBe("no_mapping");
     expect(createTimesheet).not.toHaveBeenCalled();
     expect(db._inserts.length).toBe(1);
+  });
+
+  it("auto-creates a space mapping from Bitmap jira_budget_jql when missing", async () => {
+    const db = createMockDb({ mapping: null });
+    const ensured = {
+      id: "auto-m1",
+      jiraSpaceKey: "ENG",
+      clientId: "client-from-jql",
+      enabled: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const result = await processWorklogWebhook(
+      basePayload,
+      JSON.stringify(basePayload),
+      {
+        db: db as never,
+        pmClient: pm,
+        spaceMappingDiscovery: {
+          ensureMappingForSpaceKey: async (key: string) => {
+            expect(key).toBe("ENG");
+            return ensured;
+          },
+        } as never,
+      },
+    );
+    expect(result.status).toBe("synced");
+    expect(createTimesheet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientId: "client-from-jql",
+        jiraWorklogId: "wl-1",
+      }),
+    );
   });
 
   it("updates an existing pending row when syncId is provided", async () => {
@@ -289,6 +334,53 @@ describe("processWorklogWebhook", () => {
         jiraWorklogId: "wl-1",
         timeSpentSeconds: 1800,
         comment: "<p>ENG-1:</p>",
+      }),
+    );
+  });
+
+  it("re-attributes appUserId after sync when author is provisioned", async () => {
+    const db = createMockDb({
+      mapping: {
+        id: "m1",
+        jiraSpaceKey: "ENG",
+        clientId: "client-9",
+        enabled: true,
+      },
+    });
+    const ensure = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce("provisioned-user");
+    const attribution = {
+      ensureAppUserIdForAuthor: ensure,
+      resolveAppUserIdForAuthor: vi.fn(),
+      ensureAppUserIdForEmail: vi.fn(),
+      isAppUserLinkedViaEmail: vi.fn(),
+    } as unknown as SyncAttributionService;
+
+    const service = createWorklogSyncService(db as never, {
+      attribution,
+      pmClient: pm,
+      settings: {
+        getAccessToken: async () => "token",
+      } as unknown as SettingsService,
+      resolver: {
+        createResolvingPmClient: () => pm,
+      } as unknown as BitmapResolverService,
+      syncs: new WorklogSyncsRepository(db as never),
+      spaceMappings: new SpaceProjectMappingsRepository(db as never),
+    });
+
+    const result = await service.process(
+      basePayload,
+      JSON.stringify(basePayload),
+    );
+    expect(result.status).toBe("synced");
+    expect(ensure).toHaveBeenCalledTimes(2);
+    expect(db._inserts.at(-1) ?? db._updates.at(-1)).toEqual(
+      expect.objectContaining({
+        status: "synced",
+        appUserId: "provisioned-user",
       }),
     );
   });

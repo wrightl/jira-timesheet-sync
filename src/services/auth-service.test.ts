@@ -26,6 +26,7 @@ describe("AuthService", () => {
         email: "ada@example.com",
         passwordHash,
         role: "user" as const,
+        mustSetPassword: false,
         createdAt: new Date(),
         updatedAt: new Date(),
       }),
@@ -52,5 +53,69 @@ describe("AuthService", () => {
     );
     const result = await service.register("a@example.com", "password123");
     expect(result).toEqual({ error: "disabled" });
+  });
+
+  it("claims a provisioned user on register", async () => {
+    process.env.ALLOW_PUBLIC_REGISTER = "true";
+    resetEnvCache();
+
+    const passwordHash = await hashPassword("old-random");
+    const users = {
+      findByEmail: async () => ({
+        id: "u1",
+        email: "ada@example.com",
+        passwordHash,
+        role: "user" as const,
+        mustSetPassword: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+      update: async () => ({
+        id: "u1",
+        email: "ada@example.com",
+        role: "user" as const,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+      createFull: async () => {
+        throw new Error("should not create");
+      },
+    } as unknown as UsersRepository;
+    const sessions = {
+      create: async () => undefined,
+    } as unknown as SessionsRepository;
+
+    const service = new AuthService(users, sessions);
+    const result = await service.register("ada@example.com", "password123");
+    expect("user" in result).toBe(true);
+    if ("user" in result) {
+      expect(result.user.id).toBe("u1");
+      expect(result.token).toBeTruthy();
+    }
+  });
+
+  it("rejects register when email already has a password", async () => {
+    process.env.ALLOW_PUBLIC_REGISTER = "true";
+    resetEnvCache();
+
+    const passwordHash = await hashPassword("password123");
+    const users = {
+      findByEmail: async () => ({
+        id: "u1",
+        email: "ada@example.com",
+        passwordHash,
+        role: "user" as const,
+        mustSetPassword: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+      createFull: async () => {
+        throw new Error("should not create");
+      },
+    } as unknown as UsersRepository;
+
+    const service = new AuthService(users, {} as SessionsRepository);
+    const result = await service.register("ada@example.com", "password123");
+    expect(result).toEqual({ error: "conflict" });
   });
 });

@@ -31,6 +31,7 @@ async function seed() {
     await users.update(existing.id, {
       passwordHash,
       role: "admin",
+      mustSetPassword: false,
     });
     console.log(`Updated admin user: ${email}`);
   } else {

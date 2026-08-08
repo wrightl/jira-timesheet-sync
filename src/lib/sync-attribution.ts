@@ -1,10 +1,13 @@
+import { randomBytes } from "crypto";
 import { getDb, type Db } from "@/db";
 import { UserMappingsRepository } from "@/repositories/user-mappings-repository";
 import { UsersRepository } from "@/repositories/users-repository";
 import { normalizeEmail } from "@/lib/email";
+import { hashPassword } from "@/lib/password";
+import { log } from "@/lib/log";
 
 /**
- * Resolve the app user for a Jira worklog author via the email bridge:
+ * Resolve / provision the app user for a Jira worklog author via the email bridge:
  * jiraDisplayName → user_mappings.bitmapEmail → users.email.
  */
 export class SyncAttributionService {
@@ -23,6 +26,53 @@ export class SyncAttributionService {
     if (!bitmapEmail) return null;
 
     return this.users.findIdByEmailLower(normalizeEmail(bitmapEmail));
+  }
+
+  /**
+   * Find or create an app user for the given Bitmap email.
+   * Provisioned accounts use a random password and mustSetPassword=true
+   * so they can be claimed via public register later.
+   */
+  async ensureAppUserIdForEmail(
+    emailRaw: string | null | undefined,
+  ): Promise<string | null> {
+    if (!emailRaw) return null;
+
+    const email = normalizeEmail(emailRaw);
+    if (!email) return null;
+
+    const existingId = await this.users.findIdByEmailLower(email);
+    if (existingId) return existingId;
+
+    const passwordHash = await hashPassword(randomBytes(32).toString("hex"));
+    try {
+      const user = await this.users.createFull({
+        email,
+        passwordHash,
+        role: "user",
+        mustSetPassword: true,
+      });
+      log.info("sync-attribution", "app_user_provisioned", {
+        email,
+        userId: user.id,
+      });
+      return user.id;
+    } catch {
+      // Unique race: another request inserted the same email.
+      return this.users.findIdByEmailLower(email);
+    }
+  }
+
+  async ensureAppUserIdForAuthor(
+    authorDisplayName: string | null | undefined,
+  ): Promise<string | null> {
+    if (!authorDisplayName) return null;
+
+    const bitmapEmail =
+      await this.userMappings.findBitmapEmailByDisplayName(authorDisplayName);
+    if (!bitmapEmail) return null;
+
+    return this.ensureAppUserIdForEmail(bitmapEmail);
   }
 
   /** True when the given app login email is linked via a user mapping bitmapEmail. */

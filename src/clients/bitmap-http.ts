@@ -21,11 +21,24 @@ export interface BitmapUser {
     job_title?: string | null;
 }
 
+export interface BitmapProjectClient {
+    id: string;
+    name?: string | null;
+    client_key?: string | null;
+}
+
 export interface BitmapProject {
     id: string;
     state?: string | null;
     started?: boolean | null;
     name?: string | null;
+    jira_budget_jql?: string | null;
+    client?: BitmapProjectClient | null;
+}
+
+export interface ListProjectsForDiscoveryParams {
+    status?: string;
+    page?: number;
 }
 
 export interface BitmapProjectBudget {
@@ -78,6 +91,9 @@ export interface BitmapApiClient {
     listUsers(page?: number): Promise<PaginatedResponse<BitmapUser>>;
     listProjects(
         params: ListProjectsParams,
+    ): Promise<PaginatedResponse<BitmapProject>>;
+    listProjectsForDiscovery(
+        params?: ListProjectsForDiscoveryParams,
     ): Promise<PaginatedResponse<BitmapProject>>;
     listProjectBudgets(projectId: string): Promise<BitmapProjectBudget[]>;
     createTimesheetEntry(
@@ -229,6 +245,21 @@ export class BitmapHttpClient implements BitmapApiClient {
                     start_date_range_start: params.rangeStart,
                     start_date_range_end: params.rangeEnd,
                     status: params.status ?? 'active',
+                },
+            },
+        );
+    }
+
+    async listProjectsForDiscovery(
+        params?: ListProjectsForDiscoveryParams,
+    ): Promise<PaginatedResponse<BitmapProject>> {
+        return this.request<PaginatedResponse<BitmapProject>>(
+            'GET',
+            '/api/v1/projects.json',
+            {
+                query: {
+                    page: params?.page ?? 1,
+                    status: params?.status ?? 'active',
                 },
             },
         );

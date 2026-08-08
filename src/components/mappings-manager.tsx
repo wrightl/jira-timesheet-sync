@@ -33,6 +33,7 @@ export function MappingsManager({ authed }: { authed: boolean }) {
   const [mappings, setMappings] = useState<Mapping[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState<string | null>(null);
+  const [discoverMsg, setDiscoverMsg] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const load = () => {
@@ -62,11 +63,63 @@ export function MappingsManager({ authed }: { authed: boolean }) {
   return (
     <div className="space-y-6">
       <Card>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <CardTitle className="mb-1">Discover from Bitmap</CardTitle>
+            <p className="text-sm text-muted">
+              Scan active Bitmap projects&apos;{" "}
+              <code className="text-xs">jira_budget_jql</code> and create missing
+              space → client mappings.
+            </p>
+          </div>
+          <Button
+            type="button"
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                setError(null);
+                setDiscoverMsg(null);
+                const res = await fetch("/api/mappings/discover", {
+                  method: "POST",
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                  setError(data.error ?? "Discover failed");
+                  return;
+                }
+                const conflictNote =
+                  Array.isArray(data.conflicts) && data.conflicts.length > 0
+                    ? `, ${data.conflicts.length} conflict(s) skipped`
+                    : "";
+                setDiscoverMsg(
+                  `Created ${data.createdCount ?? 0}, skipped existing ${data.skippedExisting ?? 0}${conflictNote}.`,
+                );
+                load();
+              })
+            }
+          >
+            {pending ? "Working…" : "Discover from Bitmap"}
+          </Button>
+        </div>
+        {discoverMsg ? (
+          <Alert variant="success" className="mb-0">
+            {discoverMsg}
+          </Alert>
+        ) : null}
+        {error ? (
+          <Alert variant="error" className="mt-3">
+            {error}
+          </Alert>
+        ) : null}
+      </Card>
+
+      <Card>
         <form
           onSubmit={(e) => {
             e.preventDefault();
             startTransition(async () => {
               setError(null);
+              setDiscoverMsg(null);
               const res = await fetch("/api/mappings", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -119,7 +172,7 @@ export function MappingsManager({ authed }: { authed: boolean }) {
               {pending ? "Saving…" : "Add mapping"}
             </Button>
           </div>
-          {error ? (
+          {error && !discoverMsg ? (
             <Alert variant="error" className="mt-3">
               {error}
             </Alert>

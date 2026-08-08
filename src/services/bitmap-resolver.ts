@@ -22,6 +22,7 @@ import {
   projectBudgetsCacheKey,
   projectsCacheKey,
 } from "@/services/api-cache";
+import { SyncAttributionService } from "@/lib/sync-attribution";
 import { normalizeEmail } from "@/lib/email";
 import { getEnv } from "@/lib/env";
 import { log } from "@/lib/log";
@@ -227,12 +228,16 @@ export function isBudgetActiveForTimesheet(
 }
 
 export class BitmapResolverService {
+  private readonly attribution: SyncAttributionService;
+
   constructor(
     private readonly userMappings: UserMappingsRepository,
     private readonly users: UsersRepository,
     private readonly userSpaceMappings: UserSpaceMappingsRepository,
     private readonly cache: ApiCacheService,
-  ) {}
+  ) {
+    this.attribution = new SyncAttributionService(userMappings, users);
+  }
 
   async resolveProjectsForClient(
     api: BitmapApiClient,
@@ -330,6 +335,7 @@ export class BitmapResolverService {
           `User mapping for "${input.authorDisplayName}" is disabled`,
         );
       }
+      await this.attribution.ensureAppUserIdForEmail(existing.bitmapEmail);
       return {
         bitmapUserId: existing.bitmapUserId,
         jobTitle: existing.jobTitle,
@@ -368,6 +374,8 @@ export class BitmapResolverService {
       jiraWorklogId: input.jiraWorklogId,
       jiraSpaceKey: input.jiraSpaceKey,
     });
+
+    await this.attribution.ensureAppUserIdForEmail(inserted.bitmapEmail);
 
     return {
       bitmapUserId: inserted.bitmapUserId,

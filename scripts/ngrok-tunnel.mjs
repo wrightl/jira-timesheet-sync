@@ -35,7 +35,7 @@ const publicUrl = listener.url();
 console.log(`ngrok ingress: ${publicUrl}`);
 console.log(`Jira webhook URL: ${publicUrl}/api/webhooks/jira`);
 console.log(
-  "Auth header: X-Webhook-Token: <JIRA_WEBHOOK_SECRET>",
+  "Auth: set Jira webhook Secret = JIRA_WEBHOOK_SECRET (X-Hub-Signature), or send X-Webhook-Token",
 );
 console.log("Leave this process running while testing webhooks. Ctrl+C to stop.");
 

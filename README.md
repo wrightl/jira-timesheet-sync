@@ -4,7 +4,7 @@ Next.js integration that receives **Jira Cloud worklog** webhooks (`created` / `
 
 ## Features
 
-- Public webhook endpoint secured with a shared secret header (`X-Webhook-Token`)
+- Public webhook endpoint secured with Jira HMAC (`X-Hub-Signature`) or shared secret header (`X-Webhook-Token`)
 - Async webhook processing via Next.js `after()` (returns 202, syncs in background)
 - Admin dashboard retry for failed/skipped sync events
 - Email/password login with seeded admin and self-registration
@@ -59,7 +59,7 @@ If a mapped project/budget is inactive, the sync **fails** (no silent fallback).
 |----------|---------|
 | `DATABASE_URL` | Neon pooled connection string |
 | `DATABASE_URL_UNPOOLED` | Neon direct URL for migrations |
-| `JIRA_WEBHOOK_SECRET` | Shared secret sent as the `X-Webhook-Token` request header |
+| `JIRA_WEBHOOK_SECRET` | Shared secret for webhook auth (Jira HMAC secret and/or `X-Webhook-Token`) |
 | `INTERNAL_PM_ACCESS_TOKEN` | Optional env fallback for the Bitmap API bearer token |
 | `INTERNAL_PM_BASE_URL` | Bitmap API base URL (default `https://bitmap.app`) |
 | `SETTINGS_ENCRYPTION_KEY` | Encrypts tokens saved via the UI |
@@ -86,13 +86,13 @@ npm run dev:tunnel
 
    Or run `npm run dev` in one terminal and `npm run tunnel` in another after the app is up.
 3. Copy the printed **Jira webhook URL** (`https://…/api/webhooks/jira`) into Jira.
-4. Requests must include header `X-Webhook-Token: <JIRA_WEBHOOK_SECRET>` (same value as in `.env.local`).
+4. Set the Jira webhook **Secret** to the same value as `JIRA_WEBHOOK_SECRET` (native webhooks send `X-Hub-Signature`). For Automation-style deliveries, send header `X-Webhook-Token: <JIRA_WEBHOOK_SECRET>` instead.
 
 ## Jira Cloud webhook setup
 
-1. In Jira: **Settings → System → WebHooks → Create** (or deliver via a path that can set headers).
+1. In Jira: **Settings → System → WebHooks → Create**.
 2. URL: `https://<your-public-host>/api/webhooks/jira`
-3. Ensure deliveries include `X-Webhook-Token: <JIRA_WEBHOOK_SECRET>`
+3. Set **Secret** to `JIRA_WEBHOOK_SECRET` (Jira signs the body and sends `X-Hub-Signature: sha256=…`). Automation rules may instead send `X-Webhook-Token: <JIRA_WEBHOOK_SECRET>`.
 4. Events: **Worklog created**, **Worklog updated**, **Worklog deleted**
 5. Leave JQL empty so **all spaces** emit events
 
@@ -131,7 +131,7 @@ Local tip: leave `LOG_LEVEL` unset (or set `debug`) while using `npm run dev` / 
 
 | Method | Path | Auth |
 |--------|------|------|
-| `POST` | `/api/webhooks/jira` | Header `X-Webhook-Token` (returns 202; processes via `after()`) |
+| `POST` | `/api/webhooks/jira` | `X-Hub-Signature` or `X-Webhook-Token` (returns 202; processes via `after()`) |
 | `POST` | `/api/auth/register` | Public when `ALLOW_PUBLIC_REGISTER=true` |
 | `POST` | `/api/auth/login` | Public |
 | `POST` | `/api/auth/logout` | Session |

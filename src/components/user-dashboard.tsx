@@ -9,6 +9,7 @@ import {
   type DashboardStats,
 } from "@/lib/dashboard-shared";
 import { formatDateTimeUtc } from "@/lib/format-date";
+import { JiraIssueLink } from "@/components/jira-issue-link";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -69,9 +70,11 @@ function KpiCard({
 export function UserDashboard({
   stats,
   range,
+  jiraBrowseBaseUrl = null,
 }: {
   stats: DashboardStats;
   range: DashboardRange;
+  jiraBrowseBaseUrl?: string | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -374,7 +377,11 @@ export function UserDashboard({
                     {s.eventType}
                   </TableCell>
                   <TableCell className="font-mono text-xs">
-                    {s.jiraIssueKey ?? "—"} / {s.jiraWorklogId}
+                    <JiraIssueLink
+                      issueKey={s.jiraIssueKey}
+                      baseUrl={jiraBrowseBaseUrl}
+                    />{" "}
+                    / {s.jiraWorklogId}
                   </TableCell>
                   <TableCell>
                     <Badge variant={statusVariant(s.status)}>{s.status}</Badge>

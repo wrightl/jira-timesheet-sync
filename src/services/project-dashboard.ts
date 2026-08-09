@@ -56,6 +56,7 @@ export type ProjectDashboardResult = {
   };
   jiraConfigured: boolean;
   jiraError: string | null;
+  jiraBrowseBaseUrl: string | null;
   scopedJql: string | null;
   metrics: {
     budgetBurnPct: DashboardMetric<number | null>;
@@ -234,12 +235,13 @@ export class ProjectDashboardService {
     const jiraClient = await this.settings.createConfiguredJiraClient(
       project.jira_instance_url,
     );
+    const creds = await this.settings.getJiraCredentials(
+      project.jira_instance_url,
+    );
+    const jiraBrowseBaseUrl = creds.baseUrl;
     if (jiraClient) {
       jiraConfigured = true;
       try {
-        const creds = await this.settings.getJiraCredentials(
-          project.jira_instance_url,
-        );
         jiraAgg = await this.jiraMetrics.computeForProject(jiraClient, {
           baseUrl: creds.baseUrl!,
           jiraBudgetJql: project.jira_budget_jql,
@@ -287,6 +289,7 @@ export class ProjectDashboardService {
       },
       jiraConfigured,
       jiraError,
+      jiraBrowseBaseUrl,
       scopedJql,
       metrics,
       burndown,

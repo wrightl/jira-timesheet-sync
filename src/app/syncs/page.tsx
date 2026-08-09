@@ -3,9 +3,17 @@ import { AppShell } from "@/components/app-shell";
 import { RecentSyncs } from "@/components/recent-syncs";
 import { PageHeader } from "@/components/ui/page-header";
 import { requirePageUser } from "@/lib/auth";
+import { createSettingsService } from "@/services/settings-service";
 
 export default async function SyncsPage() {
   const user = await requirePageUser({ role: "admin" });
+  let jiraBrowseBaseUrl: string | null = null;
+  try {
+    const settings = await createSettingsService().getStatus();
+    jiraBrowseBaseUrl = settings.jiraBaseUrl;
+  } catch {
+    jiraBrowseBaseUrl = null;
+  }
 
   return (
     <AppShell
@@ -22,7 +30,7 @@ export default async function SyncsPage() {
             <p className="text-sm text-muted">Loading syncs…</p>
           }
         >
-          <RecentSyncs authed />
+          <RecentSyncs authed jiraBrowseBaseUrl={jiraBrowseBaseUrl} />
         </Suspense>
       </main>
     </AppShell>

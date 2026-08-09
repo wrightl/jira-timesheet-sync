@@ -25,6 +25,7 @@ import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { JiraIssueLink } from "@/components/jira-issue-link";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { Select } from "@/components/ui/select";
 import {
@@ -121,7 +122,13 @@ function hasActiveFilters(query: SyncQuery): boolean {
   );
 }
 
-export function RecentSyncs({ authed }: { authed: boolean }) {
+export function RecentSyncs({
+  authed,
+  jiraBrowseBaseUrl = null,
+}: {
+  authed: boolean;
+  jiraBrowseBaseUrl?: string | null;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -462,7 +469,11 @@ export function RecentSyncs({ authed }: { authed: boolean }) {
                 </TableCell>
                 <TableCell className="font-mono text-xs">{s.eventType}</TableCell>
                 <TableCell className="font-mono text-xs">
-                  {s.jiraIssueKey ?? "—"} / {s.jiraWorklogId}
+                  <JiraIssueLink
+                    issueKey={s.jiraIssueKey}
+                    baseUrl={jiraBrowseBaseUrl}
+                  />{" "}
+                  / {s.jiraWorklogId}
                 </TableCell>
                 <TableCell>
                   <Badge variant={statusVariant(s.status)}>{s.status}</Badge>

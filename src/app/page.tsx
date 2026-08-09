@@ -5,13 +5,13 @@ import { AppShell } from '@/components/app-shell';
 import { UserDashboard } from '@/components/user-dashboard';
 import { Alert } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
-import { PageHeader } from '@/components/ui/page-header';
 import { getUserFromCookies } from '@/lib/auth';
 import {
     emptyDashboardStats,
     getDashboardStats,
     parseDashboardRange,
 } from '@/lib/dashboard-stats';
+import { createSettingsService } from '@/services/settings-service';
 
 export default async function HomePage({
     searchParams,
@@ -26,6 +26,7 @@ export default async function HomePage({
 
     let stats = null;
     let statsError: string | null = null;
+    let jiraBrowseBaseUrl: string | null = null;
 
     if (user) {
         try {
@@ -44,6 +45,12 @@ export default async function HomePage({
             statsError =
                 'Could not load dashboard metrics. Check the database connection and try refreshing.';
             stats = emptyDashboardStats(range, isAdmin ? 'all' : 'user');
+        }
+        try {
+            const settings = await createSettingsService().getStatus();
+            jiraBrowseBaseUrl = settings.jiraBaseUrl;
+        } catch {
+            jiraBrowseBaseUrl = null;
         }
     }
 
@@ -84,7 +91,11 @@ export default async function HomePage({
               title="Dashboard"
               description="Ops overview for Jira → Bitmap worklog sync: volume, failures, skip reasons, and mapping health."
             /> */}
-                        <AdminDashboard stats={stats} range={range} />
+                        <AdminDashboard
+                            stats={stats}
+                            range={range}
+                            jiraBrowseBaseUrl={jiraBrowseBaseUrl}
+                        />
                     </>
                 ) : user && stats ? (
                     <>
@@ -92,7 +103,11 @@ export default async function HomePage({
               title="Dashboard"
               description="Your Jira → Bitmap sync activity: volume, failures, skip reasons, and mapping coverage."
             /> */}
-                        <UserDashboard stats={stats} range={range} />
+                        <UserDashboard
+                            stats={stats}
+                            range={range}
+                            jiraBrowseBaseUrl={jiraBrowseBaseUrl}
+                        />
                     </>
                 ) : (
                     <>

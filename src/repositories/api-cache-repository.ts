@@ -73,6 +73,14 @@ export class ApiCacheRepository implements ApiCacheStore {
     return row ?? null;
   }
 
+  async deleteByKey(cacheKey: string): Promise<ApiCacheEntry | null> {
+    const [row] = await this.db
+      .delete(apiCache)
+      .where(eq(apiCache.cacheKey, cacheKey))
+      .returning();
+    return row ?? null;
+  }
+
   async deleteAll(): Promise<void> {
     await this.db.delete(apiCache);
   }

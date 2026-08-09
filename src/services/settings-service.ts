@@ -1,18 +1,42 @@
 import { getDb, type Db } from "@/db";
 import { SettingsRepository } from "@/repositories/settings-repository";
 import { createBitmapApiClient, type BitmapApiClient } from "@/clients/bitmap-http";
+import {
+  createJiraApiClient,
+  type JiraApiClient,
+} from "@/clients/jira-http";
 import { decryptSecret, encryptSecret, maskToken } from "@/lib/crypto";
 import { getEnv } from "@/lib/env";
 import { log } from "@/lib/log";
 
 export type TokenSource = "database" | "env" | "none";
 
+export type JiraCredentials = {
+  baseUrl: string | null;
+  email: string | null;
+  apiToken: string | null;
+  tokenSource: TokenSource;
+  baseUrlSource: TokenSource | "project";
+  emailSource: TokenSource;
+};
+
 export type SettingsStatus = {
   hasToken: boolean;
   tokenSource: TokenSource;
   maskedToken: string | null;
   internalPmBaseUrl: string | null;
+  hasJiraToken: boolean;
+  jiraTokenSource: TokenSource;
+  maskedJiraToken: string | null;
+  jiraBaseUrl: string | null;
+  jiraEmail: string | null;
 };
+
+function nonEmpty(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
 
 export class SettingsService {
   constructor(private readonly settings: SettingsRepository) {}
@@ -43,9 +67,82 @@ export class SettingsService {
     return Boolean(token);
   }
 
+  async getJiraCredentials(
+    baseUrlOverride?: string | null,
+  ): Promise<JiraCredentials> {
+    const env = getEnv();
+    const encryptionKey = env.SETTINGS_ENCRYPTION_KEY;
+    let row: Awaited<ReturnType<SettingsRepository["getDefault"]>> = null;
+    try {
+      row = await this.settings.getDefault();
+    } catch (err) {
+      log.warn("settings", "Failed to read Jira settings", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    let dbToken: string | null = null;
+    if (row?.jiraApiTokenEncrypted && encryptionKey) {
+      try {
+        dbToken = decryptSecret(row.jiraApiTokenEncrypted, encryptionKey);
+      } catch (err) {
+        log.warn("settings", "Failed to decrypt Jira API token", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    const dbEmail = nonEmpty(row?.jiraEmail);
+    const dbBaseUrl = nonEmpty(row?.jiraBaseUrl);
+    const envEmail = nonEmpty(env.JIRA_EMAIL);
+    const envBaseUrl = nonEmpty(env.JIRA_BASE_URL);
+    const envToken = nonEmpty(env.JIRA_API_TOKEN);
+    const override = nonEmpty(baseUrlOverride);
+
+    const email = dbEmail ?? envEmail;
+    const emailSource: TokenSource = dbEmail
+      ? "database"
+      : envEmail
+        ? "env"
+        : "none";
+
+    const apiToken = dbToken ?? envToken;
+    const tokenSource: TokenSource = dbToken
+      ? "database"
+      : envToken
+        ? "env"
+        : "none";
+
+    let baseUrl: string | null = dbBaseUrl ?? envBaseUrl ?? override;
+    let baseUrlSource: TokenSource | "project" = dbBaseUrl
+      ? "database"
+      : envBaseUrl
+        ? "env"
+        : override
+          ? "project"
+          : "none";
+
+    return {
+      baseUrl,
+      email,
+      apiToken,
+      tokenSource,
+      baseUrlSource,
+      emailSource,
+    };
+  }
+
+  async isJiraConfigured(baseUrlOverride?: string | null): Promise<boolean> {
+    const creds = await this.getJiraCredentials(baseUrlOverride);
+    return Boolean(creds.email && creds.apiToken && creds.baseUrl);
+  }
+
   async getStatus(): Promise<SettingsStatus> {
     const env = getEnv();
     let stored: string | null = null;
+    let jiraStored: string | null = null;
+    let jiraBaseUrl: string | null = null;
+    let jiraEmail: string | null = null;
     const encryptionKey = env.SETTINGS_ENCRYPTION_KEY;
     if (encryptionKey) {
       try {
@@ -54,12 +151,23 @@ export class SettingsService {
         if (encrypted) {
           stored = decryptSecret(encrypted, encryptionKey);
         }
+        if (row?.jiraApiTokenEncrypted) {
+          jiraStored = decryptSecret(row.jiraApiTokenEncrypted, encryptionKey);
+        }
+        jiraBaseUrl = nonEmpty(row?.jiraBaseUrl) ?? nonEmpty(env.JIRA_BASE_URL);
+        jiraEmail = nonEmpty(row?.jiraEmail) ?? nonEmpty(env.JIRA_EMAIL);
       } catch {
         stored = null;
+        jiraStored = null;
       }
+    } else {
+      jiraBaseUrl = nonEmpty(env.JIRA_BASE_URL);
+      jiraEmail = nonEmpty(env.JIRA_EMAIL);
     }
 
     const envFallback = Boolean(env.INTERNAL_PM_ACCESS_TOKEN);
+    const jiraEnvFallback = Boolean(env.JIRA_API_TOKEN);
+
     return {
       hasToken: Boolean(stored) || envFallback,
       tokenSource: stored ? "database" : envFallback ? "env" : "none",
@@ -69,6 +177,19 @@ export class SettingsService {
           ? maskToken(env.INTERNAL_PM_ACCESS_TOKEN!)
           : null,
       internalPmBaseUrl: env.INTERNAL_PM_BASE_URL ?? null,
+      hasJiraToken: Boolean(jiraStored) || jiraEnvFallback,
+      jiraTokenSource: jiraStored
+        ? "database"
+        : jiraEnvFallback
+          ? "env"
+          : "none",
+      maskedJiraToken: jiraStored
+        ? maskToken(jiraStored)
+        : jiraEnvFallback
+          ? maskToken(env.JIRA_API_TOKEN!)
+          : null,
+      jiraBaseUrl,
+      jiraEmail,
     };
   }
 
@@ -82,12 +203,77 @@ export class SettingsService {
     return { maskedToken: maskToken(token) };
   }
 
+  async saveJiraCredentials(input: {
+    baseUrl?: string;
+    email?: string;
+    apiToken?: string;
+  }): Promise<{ maskedJiraToken: string | null }> {
+    const encryptionKey = getEnv().SETTINGS_ENCRYPTION_KEY;
+    if (!encryptionKey) {
+      throw new Error("SETTINGS_ENCRYPTION_KEY is not configured");
+    }
+
+    const existing = await this.settings.getDefault();
+    let encryptedToken: string | null | undefined = undefined;
+    let masked: string | null = null;
+
+    if (input.apiToken !== undefined) {
+      const trimmed = input.apiToken.trim();
+      if (trimmed.length > 0) {
+        encryptedToken = encryptSecret(trimmed, encryptionKey);
+        masked = maskToken(trimmed);
+      } else {
+        encryptedToken = existing?.jiraApiTokenEncrypted ?? null;
+        if (encryptedToken) {
+          try {
+            masked = maskToken(decryptSecret(encryptedToken, encryptionKey));
+          } catch {
+            masked = null;
+          }
+        }
+      }
+    }
+
+    await this.settings.upsertJiraSettings({
+      jiraBaseUrl:
+        input.baseUrl !== undefined ? nonEmpty(input.baseUrl) : undefined,
+      jiraEmail: input.email !== undefined ? nonEmpty(input.email) : undefined,
+      jiraApiTokenEncrypted: encryptedToken,
+    });
+
+    if (masked === null && existing?.jiraApiTokenEncrypted) {
+      try {
+        masked = maskToken(
+          decryptSecret(existing.jiraApiTokenEncrypted, encryptionKey),
+        );
+      } catch {
+        masked = null;
+      }
+    }
+
+    return { maskedJiraToken: masked };
+  }
+
   async createConfiguredBitmapClient(): Promise<BitmapApiClient> {
     const token = (await this.getAccessToken()) ?? "";
     const env = getEnv();
     return createBitmapApiClient({
       accessToken: token,
       baseUrl: env.INTERNAL_PM_BASE_URL,
+    });
+  }
+
+  async createConfiguredJiraClient(
+    baseUrlOverride?: string | null,
+  ): Promise<JiraApiClient | null> {
+    const creds = await this.getJiraCredentials(baseUrlOverride);
+    if (!creds.baseUrl || !creds.email || !creds.apiToken) {
+      return null;
+    }
+    return createJiraApiClient({
+      baseUrl: creds.baseUrl,
+      email: creds.email,
+      apiToken: creds.apiToken,
     });
   }
 }

@@ -20,10 +20,29 @@ export async function PUT(request: NextRequest) {
   if ("error" in parsed) return parsed.error;
 
   try {
-    const result = await createSettingsService().saveAccessToken(
-      parsed.data.internalPmAccessToken,
-    );
-    return Response.json({ ok: true, maskedToken: result.maskedToken });
+    const service = createSettingsService();
+    const data = parsed.data;
+    const result: Record<string, unknown> = { ok: true };
+
+    if (data.internalPmAccessToken) {
+      const saved = await service.saveAccessToken(data.internalPmAccessToken);
+      result.maskedToken = saved.maskedToken;
+    }
+
+    if (
+      data.jiraBaseUrl !== undefined ||
+      data.jiraEmail !== undefined ||
+      data.jiraApiToken !== undefined
+    ) {
+      const saved = await service.saveJiraCredentials({
+        baseUrl: data.jiraBaseUrl,
+        email: data.jiraEmail,
+        apiToken: data.jiraApiToken,
+      });
+      result.maskedJiraToken = saved.maskedJiraToken;
+    }
+
+    return Response.json(result);
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Failed to save settings";

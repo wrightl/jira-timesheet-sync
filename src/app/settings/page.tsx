@@ -14,7 +14,7 @@ export default async function SettingsPage() {
       <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">
         <PageHeader
           title="Settings"
-          description="Configure the access token used when calling the Bitmap timesheet API."
+          description="Configure Bitmap and Jira Cloud API credentials used by sync and the project progress dashboard."
         />
         <SettingsForm authed />
       </main>

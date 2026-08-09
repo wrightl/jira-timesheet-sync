@@ -167,6 +167,13 @@ export class VercelRuntimeApiCacheStore implements ApiCacheStore {
     return null;
   }
 
+  async deleteByKey(cacheKey: string): Promise<ApiCacheEntry | null> {
+    const entry = await this.readEntry(cacheKey);
+    await this.cache.delete(cacheKey);
+    await this.removeFromIndex(cacheKey);
+    return entry;
+  }
+
   async deleteAll(): Promise<void> {
     await this.cache.expireTag(ENTRY_TAG);
     await this.cache.delete(INDEX_KEY);

@@ -79,9 +79,21 @@ export const adminUserUpdateSchema = z
     message: "At least one of role or password is required",
   });
 
-export const settingsUpdateSchema = z.object({
-  internalPmAccessToken: z.string().min(1, "Token is required"),
-});
+export const settingsUpdateSchema = z
+  .object({
+    internalPmAccessToken: z.string().min(1).optional(),
+    jiraBaseUrl: z.string().optional(),
+    jiraEmail: z.string().optional(),
+    jiraApiToken: z.string().optional(),
+  })
+  .refine(
+    (data) =>
+      data.internalPmAccessToken !== undefined ||
+      data.jiraBaseUrl !== undefined ||
+      data.jiraEmail !== undefined ||
+      data.jiraApiToken !== undefined,
+    { message: "At least one settings field is required" },
+  );
 
 export type MappingCreateInput = z.infer<typeof mappingCreateSchema>;
 export type MappingUpdateInput = z.infer<typeof mappingUpdateSchema>;

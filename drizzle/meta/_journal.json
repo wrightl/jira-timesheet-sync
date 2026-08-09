@@ -54,5 +54,12 @@
     "when": 1754120000000,
     "tag": "0007_users_must_set_password",
     "breakpoints": true
+  },
+  {
+    "idx": 8,
+    "version": "7",
+    "when": 1754130000000,
+    "tag": "0008_jira_settings_and_cache",
+    "breakpoints": true
   }
 ]

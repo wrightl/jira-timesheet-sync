@@ -1,12 +1,19 @@
 import { getDb, type Db } from "@/db";
 import type { ApiCacheEntry } from "@/db/schema";
+import type { ProjectListStatus } from "@/lib/project-list-status";
 import { ApiCacheRepository } from "@/repositories/api-cache-repository";
 import type { ApiCacheStore } from "@/repositories/api-cache-store";
 import { VercelRuntimeApiCacheStore } from "@/repositories/vercel-runtime-api-cache-store";
 
-export const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+export type { ProjectListStatus } from "@/lib/project-list-status";
 
-export type ApiCacheResourceType = "projects" | "project_budgets";
+export const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+export const JIRA_SEARCH_CACHE_TTL_MS = 10 * 60 * 1000;
+
+export type ApiCacheResourceType =
+  | "projects"
+  | "project_budgets"
+  | "jira_search";
 
 export function projectsCacheKey(
   clientId: string,
@@ -16,8 +23,32 @@ export function projectsCacheKey(
   return `projects:${clientId}:${rangeStart}:${rangeEnd}`;
 }
 
+export function projectsStatusCacheKey(
+  clientId: string,
+  status: ProjectListStatus,
+): string {
+  return `projects:${clientId}:${status}`;
+}
+
+/** @deprecated Prefer projectsStatusCacheKey(clientId, "active") */
+export function activeProjectsCacheKey(clientId: string): string {
+  return projectsStatusCacheKey(clientId, "active");
+}
+
+export function clientsCacheKey(): string {
+  return "clients:all";
+}
+
 export function projectBudgetsCacheKey(projectId: string): string {
   return `project_budgets:${projectId}`;
+}
+
+export function jiraSearchCacheKey(
+  baseUrl: string,
+  jql: string,
+  fieldsKey: string,
+): string {
+  return `jira_search:${baseUrl}:${jql}:${fieldsKey}`;
 }
 
 export type CacheListEntry = {
@@ -60,9 +91,11 @@ export class ApiCacheService {
     resourceType: ApiCacheResourceType;
     requestMeta: Record<string, unknown>;
     responseBody: unknown;
+    ttlMs?: number;
   }): Promise<void> {
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + CACHE_TTL_MS);
+    const ttl = data.ttlMs ?? CACHE_TTL_MS;
+    const expiresAt = new Date(now.getTime() + ttl);
     await this.cache.upsert({
       cacheKey: data.cacheKey,
       resourceType: data.resourceType,
@@ -118,6 +151,14 @@ export class ApiCacheService {
     return { ok: true, invalidated: row.cacheKey };
   }
 
+  async deleteByKey(
+    cacheKey: string,
+  ): Promise<{ ok: true; invalidated: string } | { error: "not_found" }> {
+    const row = await this.cache.deleteByKey(cacheKey);
+    if (!row) return { error: "not_found" };
+    return { ok: true, invalidated: row.cacheKey };
+  }
+
   async deleteAll(): Promise<{ ok: true; invalidated: "all" }> {
     await this.cache.deleteAll();
     return { ok: true, invalidated: "all" };
@@ -157,6 +198,7 @@ export async function setCachedJson(
     resourceType: ApiCacheResourceType;
     requestMeta: Record<string, unknown>;
     responseBody: unknown;
+    ttlMs?: number;
   },
 ): Promise<void> {
   return createApiCacheService(db).setCachedJson(data);

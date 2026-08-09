@@ -14,5 +14,6 @@ export type ApiCacheStore = {
     },
   ): Promise<void>;
   deleteById(id: string): Promise<ApiCacheEntry | null>;
+  deleteByKey(cacheKey: string): Promise<ApiCacheEntry | null>;
   deleteAll(): Promise<void>;
 };

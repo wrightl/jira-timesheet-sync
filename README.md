@@ -60,6 +60,10 @@ If a mapped project/budget is inactive, the sync **fails** (no silent fallback).
 | `DATABASE_URL` | Neon pooled connection string |
 | `DATABASE_URL_UNPOOLED` | Neon direct URL for migrations |
 | `JIRA_WEBHOOK_SECRET` | Shared secret for webhook auth (Jira HMAC secret and/or `X-Webhook-Token`) |
+| `JIRA_BASE_URL` | Optional bootstrap for Jira Cloud site URL (Settings UI preferred) |
+| `JIRA_EMAIL` | Optional bootstrap for Jira API email |
+| `JIRA_API_TOKEN` | Optional bootstrap for Jira API token |
+| `JIRA_STORY_POINTS_FIELD` | Optional custom field id for story points (e.g. `customfield_10016`) |
 | `INTERNAL_PM_ACCESS_TOKEN` | Optional env fallback for the Bitmap API bearer token |
 | `INTERNAL_PM_BASE_URL` | Bitmap API base URL (default `https://bitmap.app`) |
 | `SETTINGS_ENCRYPTION_KEY` | Encrypts tokens saved via the UI |
@@ -142,11 +146,16 @@ Local tip: leave `LOG_LEVEL` unset (or set `debug`) while using `npm run dev` / 
 | `GET` | `/api/bitmap/budgets` | Session |
 | `GET/POST/PATCH/DELETE` | `/api/user-mappings` | Admin |
 | `GET/POST/PATCH/DELETE` | `/api/users` | Admin (app account maintenance) |
+| `GET` | `/api/projects/:id/dashboard` | Session (Bitmap + optional Jira project metrics) |
 | `GET/DELETE` | `/api/cache` | Admin |
-| `GET/PUT` | `/api/settings` | Admin |
+| `GET/PUT` | `/api/settings` | Admin (Bitmap token + Jira Cloud credentials) |
 | `GET` | `/api/syncs` | Session (admins see all; users see own) |
 | `POST` | `/api/syncs?action=retry&id=` | Session (admin or owner) |
 | `GET` | `/api/health` | None |
+
+## Project progress dashboard
+
+Authenticated users can open **Projects** (`/projects`) to inspect budget burn, estimate fidelity, and quality signals for a mapped Bitmap project. Live Jira Cloud REST API **v3** enrichment (`/rest/api/3/search/jql`) is used when Jira credentials are configured under **Settings** (or via `JIRA_*` env bootstrap).
 
 ## Architecture
 
@@ -156,6 +165,7 @@ API routes / pages / scripts
     → repositories (Drizzle only)
       → Neon Postgres
   → clients/bitmap-http (Bitmap HTTP transport)
+  → clients/jira-http (Jira Cloud REST API v3)
   → lib (validators, crypto, auth HTTP helpers, env, pure helpers)
 ```
 

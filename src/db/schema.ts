@@ -25,6 +25,7 @@ export const syncEventTypeEnum = pgEnum("sync_event_type", [
 export const apiCacheResourceTypeEnum = pgEnum("api_cache_resource_type", [
   "projects",
   "project_budgets",
+  "jira_search",
 ]);
 
 export const userRoleEnum = pgEnum("user_role", ["admin", "user"]);
@@ -172,6 +173,9 @@ export const apiCache = pgTable(
 export const settings = pgTable("settings", {
   id: text("id").primaryKey().default("default"),
   internalPmAccessTokenEncrypted: text("internal_pm_access_token_encrypted"),
+  jiraBaseUrl: text("jira_base_url"),
+  jiraEmail: text("jira_email"),
+  jiraApiTokenEncrypted: text("jira_api_token_encrypted"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

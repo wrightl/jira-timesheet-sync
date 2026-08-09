@@ -21,7 +21,9 @@ import {
     createApiCacheService,
     projectBudgetsCacheKey,
     projectsCacheKey,
+    projectsStatusCacheKey,
 } from '@/services/api-cache';
+import type { ProjectListStatus } from '@/lib/project-list-status';
 import { SyncAttributionService } from '@/lib/sync-attribution';
 import { normalizeEmail } from '@/lib/email';
 import { getEnv } from '@/lib/env';
@@ -279,6 +281,74 @@ export class BitmapResolverService {
         });
 
         return response.data ?? [];
+    }
+
+    /**
+     * Projects for a client filtered by Bitmap status, with no start-date window
+     * (dashboard picker). Pages through results and caches under
+     * projects:{clientId}:{status}.
+     */
+    async listProjectsForClientByStatus(
+        api: BitmapApiClient,
+        clientId: string,
+        status: ProjectListStatus,
+        options?: { forceRefresh?: boolean },
+    ): Promise<BitmapProject[]> {
+        const cacheKey = projectsStatusCacheKey(clientId, status);
+        if (options?.forceRefresh) {
+            await this.cache.deleteByKey(cacheKey);
+        } else {
+            const cached =
+                await this.cache.getCachedJson<BitmapProject[]>(cacheKey);
+            if (cached) {
+                return cached;
+            }
+        }
+
+        const projects: BitmapProject[] = [];
+        let page = 1;
+        let totalPages = 1;
+        const bitmapStatus = status === 'all' ? null : status;
+
+        while (page <= totalPages) {
+            const response = await api.listProjects({
+                clientId,
+                page,
+                status: bitmapStatus,
+            });
+            projects.push(...(response.data ?? []));
+            totalPages = Math.max(1, response.total_pages ?? 1);
+            if (!response.next_page && page >= totalPages) break;
+            page = response.next_page ?? page + 1;
+            if (page > totalPages) break;
+        }
+
+        await this.cache.setCachedJson({
+            cacheKey,
+            resourceType: 'projects',
+            requestMeta: {
+                clientId,
+                status,
+                scope: status,
+            },
+            responseBody: projects,
+        });
+
+        return projects;
+    }
+
+    /** @deprecated Prefer listProjectsForClientByStatus(..., "active") */
+    async listActiveProjectsForClient(
+        api: BitmapApiClient,
+        clientId: string,
+        options?: { forceRefresh?: boolean },
+    ): Promise<BitmapProject[]> {
+        return this.listProjectsForClientByStatus(
+            api,
+            clientId,
+            'active',
+            options,
+        );
     }
 
     async resolveBudgetsForProject(

@@ -4,6 +4,12 @@ import { settings } from "@/db/schema";
 
 export type SettingsRow = typeof settings.$inferSelect;
 
+export type JiraSettingsUpsert = {
+  jiraBaseUrl?: string | null;
+  jiraEmail?: string | null;
+  jiraApiTokenEncrypted?: string | null;
+};
+
 export class SettingsRepository {
   constructor(private readonly db: Db) {}
 
@@ -31,6 +37,30 @@ export class SettingsRepository {
           internalPmAccessTokenEncrypted: encrypted,
           updatedAt: now,
         },
+      });
+  }
+
+  async upsertJiraSettings(data: JiraSettingsUpsert): Promise<void> {
+    const now = new Date();
+    const set: Record<string, unknown> = { updatedAt: now };
+    if (data.jiraBaseUrl !== undefined) set.jiraBaseUrl = data.jiraBaseUrl;
+    if (data.jiraEmail !== undefined) set.jiraEmail = data.jiraEmail;
+    if (data.jiraApiTokenEncrypted !== undefined) {
+      set.jiraApiTokenEncrypted = data.jiraApiTokenEncrypted;
+    }
+
+    await this.db
+      .insert(settings)
+      .values({
+        id: "default",
+        jiraBaseUrl: data.jiraBaseUrl ?? null,
+        jiraEmail: data.jiraEmail ?? null,
+        jiraApiTokenEncrypted: data.jiraApiTokenEncrypted ?? null,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: settings.id,
+        set,
       });
   }
 }

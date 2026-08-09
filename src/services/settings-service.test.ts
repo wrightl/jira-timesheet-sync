@@ -29,6 +29,9 @@ describe("SettingsService.getAccessToken", () => {
       getDefault: async () => ({
         id: "default",
         internalPmAccessTokenEncrypted: encrypted,
+        jiraBaseUrl: null,
+        jiraEmail: null,
+        jiraApiTokenEncrypted: null,
         updatedAt: new Date(),
       }),
     };

@@ -66,6 +66,25 @@ function IconMap(props: IconProps) {
     );
 }
 
+function IconProjects(props: IconProps) {
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden
+            {...props}
+        >
+            <path
+                d="M4 19V5a1 1 0 0 1 1-1h6l2 2h6a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1Z"
+                strokeLinejoin="round"
+            />
+            <path d="M8 11h8M8 15h5" strokeLinecap="round" />
+        </svg>
+    );
+}
+
 function IconSync(props: IconProps) {
     return (
         <svg
@@ -253,6 +272,7 @@ export function AppShell({
 
     const links: NavLink[] = [
         { href: '/', label: 'Dashboard', icon: IconHome },
+        { href: '/projects', label: 'Projects', icon: IconProjects },
         { href: '/my-mappings', label: 'My mappings', icon: IconMap },
         ...(user?.role === 'admin'
             ? [

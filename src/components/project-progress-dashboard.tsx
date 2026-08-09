@@ -144,6 +144,11 @@ function DashboardSkeleton() {
                     <MetricCardSkeleton />
                     <MetricCardSkeleton />
                     <MetricCardSkeleton />
+                    <MetricCardSkeleton />
+                    <MetricCardSkeleton />
+                    <MetricCardSkeleton />
+                    <MetricCardSkeleton />
+                    <MetricCardSkeleton />
                 </div>
                 <Card>
                     <Skeleton className="mb-2 h-5 w-24" />
@@ -173,6 +178,10 @@ function DashboardSkeleton() {
             <section className="space-y-3">
                 <Skeleton className="h-3 w-16" />
                 <div className="grid gap-3 sm:grid-cols-2">
+                    <MetricCardSkeleton />
+                    <MetricCardSkeleton />
+                    <MetricCardSkeleton />
+                    <MetricCardSkeleton />
                     <MetricCardSkeleton />
                     <MetricCardSkeleton />
                 </div>
@@ -1012,6 +1021,26 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
                                 metric={m.scheduleVsForecast}
                                 loading={metricsBusy}
                             />
+                            <MetricCard
+                                metric={m.paceDeltaPct}
+                                loading={metricsBusy}
+                            />
+                            <MetricCard
+                                metric={m.allocationUtilizationPct}
+                                loading={metricsBusy}
+                            />
+                            <MetricCard
+                                metric={m.billableMixPct}
+                                loading={metricsBusy}
+                            />
+                            <MetricCard
+                                metric={m.runwayDays}
+                                loading={metricsBusy}
+                            />
+                            <MetricCard
+                                metric={m.remainingHoursSlip}
+                                loading={metricsBusy}
+                            />
                         </div>
                         <Card className={cn(metricsBusy && 'opacity-70')}>
                             <CardTitle className="mb-2">Burndown</CardTitle>
@@ -1127,6 +1156,22 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
                             />
                             <MetricCard
                                 metric={m.qualityCostPct}
+                                loading={metricsBusy}
+                            />
+                            <MetricCard
+                                metric={m.defectInjectionRatio}
+                                loading={metricsBusy}
+                            />
+                            <MetricCard
+                                metric={m.throughput30d}
+                                loading={metricsBusy}
+                            />
+                            <MetricCard
+                                metric={m.agingWipCount}
+                                loading={metricsBusy}
+                            />
+                            <MetricCard
+                                metric={m.healthCheckScore}
                                 loading={metricsBusy}
                             />
                         </div>

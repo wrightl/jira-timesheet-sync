@@ -7,6 +7,7 @@ import {
   userMappingUpdateSchema,
   adminUserCreateSchema,
   adminUserUpdateSchema,
+  meUpdateSchema,
 } from "@/lib/validators";
 
 describe("mappingCreateSchema", () => {
@@ -94,7 +95,7 @@ describe("adminUserCreateSchema", () => {
 });
 
 describe("adminUserUpdateSchema", () => {
-  it("requires role or password", () => {
+  it("requires role, password, or syncEnabled", () => {
     expect(adminUserUpdateSchema.safeParse({}).success).toBe(false);
     expect(adminUserUpdateSchema.parse({ role: "admin" })).toEqual({
       role: "admin",
@@ -102,5 +103,20 @@ describe("adminUserUpdateSchema", () => {
     expect(
       adminUserUpdateSchema.parse({ password: "longenough" }),
     ).toEqual({ password: "longenough" });
+    expect(adminUserUpdateSchema.parse({ syncEnabled: false })).toEqual({
+      syncEnabled: false,
+    });
+  });
+});
+
+describe("meUpdateSchema", () => {
+  it("requires syncEnabled boolean", () => {
+    expect(meUpdateSchema.safeParse({}).success).toBe(false);
+    expect(meUpdateSchema.parse({ syncEnabled: true })).toEqual({
+      syncEnabled: true,
+    });
+    expect(meUpdateSchema.parse({ syncEnabled: false })).toEqual({
+      syncEnabled: false,
+    });
   });
 });

@@ -61,5 +61,19 @@
     "when": 1754130000000,
     "tag": "0008_jira_settings_and_cache",
     "breakpoints": true
+  },
+  {
+    "idx": 9,
+    "version": "7",
+    "when": 1754140000000,
+    "tag": "0009_users_sync_enabled",
+    "breakpoints": true
+  },
+  {
+    "idx": 10,
+    "version": "7",
+    "when": 1754150000000,
+    "tag": "0010_users_sync_enabled_default_false",
+    "breakpoints": true
   }
 ]

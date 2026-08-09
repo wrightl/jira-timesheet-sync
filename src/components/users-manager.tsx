@@ -8,6 +8,7 @@ import { Card, CardTitle } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Toggle } from "@/components/ui/toggle";
 import {
   Table,
   TableBody,
@@ -21,6 +22,7 @@ type AppUserRow = {
   id: string;
   email: string;
   role: "admin" | "user";
+  syncEnabled: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -154,6 +156,7 @@ export function UsersManager({
           <tr>
             <TableHeaderCell>Email</TableHeaderCell>
             <TableHeaderCell>Role</TableHeaderCell>
+            <TableHeaderCell>Sync</TableHeaderCell>
             <TableHeaderCell>Reset password</TableHeaderCell>
             <TableHeaderCell />
           </tr>
@@ -161,7 +164,7 @@ export function UsersManager({
         <TableBody>
           {users.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={4} className="py-6 text-center text-muted">
+              <TableCell colSpan={5} className="py-6 text-center text-muted">
                 No users yet.
               </TableCell>
             </TableRow>
@@ -209,6 +212,31 @@ export function UsersManager({
                         {u.role === "admin" ? "Admin" : "User"}
                       </Badge>
                     </button>
+                  </TableCell>
+                  <TableCell>
+                    <Toggle
+                      checked={u.syncEnabled}
+                      disabled={pending}
+                      label={`Timesheet sync for ${u.email}`}
+                      onCheckedChange={(next) =>
+                        startTransition(async () => {
+                          setError(null);
+                          const res = await fetch(`/api/users?id=${u.id}`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              syncEnabled: next,
+                            }),
+                          });
+                          if (!res.ok) {
+                            const data = await res.json().catch(() => ({}));
+                            setError(data.error ?? "Sync update failed");
+                            return;
+                          }
+                          load();
+                        })
+                      }
+                    />
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-2">

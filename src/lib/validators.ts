@@ -74,10 +74,21 @@ export const adminUserUpdateSchema = z
       .string()
       .min(8, "Password must be at least 8 characters")
       .optional(),
+    syncEnabled: z.boolean().optional(),
   })
-  .refine((data) => data.role !== undefined || data.password !== undefined, {
-    message: "At least one of role or password is required",
-  });
+  .refine(
+    (data) =>
+      data.role !== undefined ||
+      data.password !== undefined ||
+      data.syncEnabled !== undefined,
+    {
+      message: "At least one of role, password, or syncEnabled is required",
+    },
+  );
+
+export const meUpdateSchema = z.object({
+  syncEnabled: z.boolean(),
+});
 
 export const settingsUpdateSchema = z
   .object({
@@ -107,3 +118,4 @@ export type UserSpaceMappingUpdateInput = z.infer<
 >;
 export type AdminUserCreateInput = z.infer<typeof adminUserCreateSchema>;
 export type AdminUserUpdateInput = z.infer<typeof adminUserUpdateSchema>;
+export type MeUpdateInput = z.infer<typeof meUpdateSchema>;

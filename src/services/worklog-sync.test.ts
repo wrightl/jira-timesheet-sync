@@ -581,6 +581,47 @@ describe("processWorklogWebhook", () => {
     expect(createTimesheet).not.toHaveBeenCalled();
   });
 
+  it("skips when the attributed app user has sync disabled", async () => {
+    const db = createMockDb({
+      mapping: {
+        id: "m1",
+        jiraSpaceKey: "ENG",
+        clientId: "client-9",
+        enabled: true,
+      },
+    });
+    const attribution = {
+      ensureAppUserIdForAuthor: vi.fn().mockResolvedValue("user-1"),
+      resolveAppUserIdForAuthor: vi.fn(),
+      ensureAppUserIdForEmail: vi.fn(),
+      isAppUserLinkedViaEmail: vi.fn(),
+    } as unknown as SyncAttributionService;
+
+    const service = createWorklogSyncService(db as never, {
+      attribution,
+      pmClient: pm,
+      users: {
+        isSyncEnabled: vi.fn().mockResolvedValue(false),
+      } as never,
+      settings: {
+        getAccessToken: async () => "token",
+      } as unknown as SettingsService,
+      resolver: {
+        createResolvingPmClient: () => pm,
+      } as unknown as BitmapResolverService,
+      syncs: new WorklogSyncsRepository(db as never),
+      spaceMappings: new SpaceProjectMappingsRepository(db as never),
+    });
+
+    const result = await service.process(
+      basePayload,
+      JSON.stringify(basePayload),
+    );
+    expect(result.status).toBe("skipped");
+    expect(result.skippedReason).toBe("user_sync_disabled");
+    expect(createTimesheet).not.toHaveBeenCalled();
+  });
+
   it("records failure when the PM client rejects resolution", async () => {
     createTimesheet.mockRejectedValueOnce(new Error("No Bitmap user found"));
     const db = createMockDb({

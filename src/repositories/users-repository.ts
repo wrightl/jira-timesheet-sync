@@ -8,13 +8,14 @@ import {
 
 export type PublicUser = Pick<
   AppUser,
-  "id" | "email" | "role" | "createdAt" | "updatedAt"
+  "id" | "email" | "role" | "syncEnabled" | "createdAt" | "updatedAt"
 >;
 
 const publicUserColumns = {
   id: users.id,
   email: users.email,
   role: users.role,
+  syncEnabled: users.syncEnabled,
   createdAt: users.createdAt,
   updatedAt: users.updatedAt,
 };
@@ -69,10 +70,22 @@ export class UsersRepository {
     return row;
   }
 
+  async isSyncEnabled(id: string): Promise<boolean | null> {
+    const rows = await this.db
+      .select({ syncEnabled: users.syncEnabled })
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
+    return rows[0]?.syncEnabled ?? null;
+  }
+
   async update(
     id: string,
     values: Partial<
-      Pick<AppUser, "role" | "passwordHash" | "email" | "mustSetPassword">
+      Pick<
+        AppUser,
+        "role" | "passwordHash" | "email" | "mustSetPassword" | "syncEnabled"
+      >
     > & {
       updatedAt?: Date;
     },

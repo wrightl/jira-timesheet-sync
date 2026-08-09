@@ -7,6 +7,7 @@ import { hashPassword, normalizeEmail } from "@/lib/password";
 import type {
   AdminUserCreateInput,
   AdminUserUpdateInput,
+  MeUpdateInput,
 } from "@/lib/validators";
 
 export type UsersServiceError =
@@ -19,6 +20,38 @@ export class UsersService {
 
   list(): Promise<PublicUser[]> {
     return this.users.listPublic();
+  }
+
+  async getPublicById(
+    id: string,
+  ): Promise<{ user: PublicUser } | { error: UsersServiceError }> {
+    const user = await this.users.findById(id);
+    if (!user) {
+      return { error: { code: "not_found", message: "User not found" } };
+    }
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        syncEnabled: user.syncEnabled,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      },
+    };
+  }
+
+  async updateMe(
+    id: string,
+    input: MeUpdateInput,
+  ): Promise<{ user: PublicUser } | { error: UsersServiceError }> {
+    const user = await this.users.update(id, {
+      syncEnabled: input.syncEnabled,
+    });
+    if (!user) {
+      return { error: { code: "not_found", message: "User not found" } };
+    }
+    return { user };
   }
 
   async create(
@@ -76,12 +109,16 @@ export class UsersService {
       role?: "admin" | "user";
       passwordHash?: string;
       mustSetPassword?: boolean;
+      syncEnabled?: boolean;
     } = {};
 
     if (input.role) updates.role = input.role;
     if (input.password) {
       updates.passwordHash = await hashPassword(input.password);
       updates.mustSetPassword = false;
+    }
+    if (input.syncEnabled !== undefined) {
+      updates.syncEnabled = input.syncEnabled;
     }
 
     const user = await this.users.update(id, updates);

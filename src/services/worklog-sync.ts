@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import type { InternalPmClient, TimesheetEntryInput } from "@/clients/bitmap-http";
 import { WorklogSyncsRepository } from "@/repositories/worklog-syncs-repository";
 import { SpaceProjectMappingsRepository } from "@/repositories/space-project-mappings-repository";
+import { UsersRepository } from "@/repositories/users-repository";
 import {
   createBitmapResolverService,
   formatTimesheetDate,
@@ -116,6 +117,7 @@ export interface AcceptResult {
 export interface WorklogSyncServiceDeps {
   syncs: WorklogSyncsRepository;
   spaceMappings: SpaceProjectMappingsRepository;
+  users: UsersRepository;
   attribution: SyncAttributionService;
   settings: SettingsService;
   resolver: BitmapResolverService;
@@ -252,6 +254,40 @@ export class WorklogSyncService {
     });
 
     try {
+      if (appUserId) {
+        const syncEnabled = await this.deps.users.isSyncEnabled(appUserId);
+        if (syncEnabled === false) {
+          log.warn("worklog-sync", "user_sync_disabled", {
+            reason: "user_sync_disabled",
+            appUserId,
+            authorDisplayName: event.authorDisplayName,
+            worklogId: event.worklogId,
+            issueKey: event.issueKey,
+            eventType: event.eventType,
+            syncId: syncId ?? null,
+          });
+          const id = await this.deps.syncs.finalize(syncId, {
+            jiraWorklogId: event.worklogId,
+            jiraIssueKey: event.issueKey,
+            jiraSpaceId: event.spaceId,
+            eventType: event.eventType,
+            internalTimesheetId: null,
+            status: "skipped",
+            payloadHash,
+            rawPayload: rawBody,
+            error: "user_sync_disabled",
+            ...identity(),
+          });
+          return {
+            status: "skipped",
+            eventType: event.eventType,
+            jiraWorklogId: event.worklogId,
+            skippedReason: "user_sync_disabled",
+            syncId: id,
+          };
+        }
+      }
+
       const mapping = await this.findMapping(event);
       if (!mapping || !mapping.enabled) {
         const reason = !event.spaceKey
@@ -567,6 +603,7 @@ export function createWorklogSyncService(
     overrides?.attribution ?? createSyncAttributionService(db);
   const settings = overrides?.settings ?? createSettingsService(db);
   const resolver = overrides?.resolver ?? createBitmapResolverService(db);
+  const users = overrides?.users ?? new UsersRepository(db);
   const spaceMappingDiscovery =
     overrides?.spaceMappingDiscovery ??
     createSpaceMappingDiscoveryService(db);
@@ -574,6 +611,7 @@ export function createWorklogSyncService(
   return new WorklogSyncService({
     syncs,
     spaceMappings,
+    users,
     attribution,
     settings,
     resolver,

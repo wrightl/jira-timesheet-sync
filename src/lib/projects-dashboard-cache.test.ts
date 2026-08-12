@@ -4,6 +4,7 @@ import {
   hydrateProjectsDashboardSelectionFromStorage,
   readProjectsDashboardCache,
   resetProjectsDashboardCacheForTests,
+  resolveSelectedProjectId,
   setProjectsDashboardSelection,
 } from "@/lib/projects-dashboard-cache";
 
@@ -124,5 +125,26 @@ describe("projects-dashboard-cache selection persistence", () => {
     expect(snapshot.clientId).toBe("");
     expect(snapshot.projectId).toBe("");
     expect(snapshot.projectStatus).toBe("active");
+  });
+});
+
+describe("resolveSelectedProjectId", () => {
+  const projects = [{ id: "p1" }, { id: "p2" }, { id: "p3" }];
+
+  it("keeps a previously selected project once the list is available", () => {
+    expect(resolveSelectedProjectId("p2", projects)).toBe("p2");
+  });
+
+  it("clears selection when the previous id is missing from the list", () => {
+    expect(resolveSelectedProjectId("gone", projects)).toBe("");
+  });
+
+  it("clears selection when previous id was wiped before load", () => {
+    expect(resolveSelectedProjectId("", projects)).toBe("");
+  });
+
+  it("auto-selects when there is exactly one project", () => {
+    expect(resolveSelectedProjectId("", [{ id: "only" }])).toBe("only");
+    expect(resolveSelectedProjectId("other", [{ id: "only" }])).toBe("only");
   });
 });

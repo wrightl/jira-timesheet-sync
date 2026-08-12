@@ -34,6 +34,7 @@ import {
     invalidateCachedProjects,
     hydrateProjectsDashboardSelectionFromStorage,
     readProjectsDashboardCache,
+    resolveSelectedProjectId,
     setCachedClients,
     setCachedDashboard,
     setCachedProjects,
@@ -481,14 +482,19 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
     const [pending, startTransition] = useTransition();
     const [selectionReady, setSelectionReady] = useState(false);
     const dashboardRequestId = useRef(0);
+    // Survives any intermediate setProjectId('') until the project list arrives.
+    const restoredProjectIdRef = useRef<string | null>(null);
 
     // Restore localStorage after mount so SSR and the first client paint match.
     useEffect(() => {
         const stored = hydrateProjectsDashboardSelectionFromStorage();
         if (stored) {
+            // Intentional: hydrate from localStorage only after mount (SSR-safe).
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- post-mount localStorage hydrate
             setClientId(stored.clientId);
             setProjectId(stored.projectId);
             setProjectStatus(stored.projectStatus);
+            restoredProjectIdRef.current = stored.projectId || null;
         }
         setSelectionReady(true);
     }, []);
@@ -506,9 +512,10 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
         );
         setProjects(sorted);
         setProjectId((prev) => {
-            if (sorted.length === 1) return sorted[0]?.id ?? '';
-            if (prev && sorted.some((p) => p.id === prev)) return prev;
-            return '';
+            const preferred = restoredProjectIdRef.current || prev;
+            const next = resolveSelectedProjectId(preferred, sorted);
+            restoredProjectIdRef.current = null;
+            return next;
         });
     }, []);
 
@@ -559,7 +566,11 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
         };
     }, [authed]);
 
+    // Wait for localStorage hydrate before loading projects. Otherwise the
+    // first mount run sees empty clientId and clears the restored projectId.
     useEffect(() => {
+        if (!selectionReady) return;
+
         let cancelled = false;
 
         void (async () => {
@@ -569,6 +580,7 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
             if (!clientId) {
                 setProjects([]);
                 setProjectId('');
+                restoredProjectIdRef.current = null;
                 return;
             }
 
@@ -591,6 +603,7 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
                     setError(data.error ?? 'Failed to load Bitmap projects');
                     setProjects([]);
                     setProjectId('');
+                    restoredProjectIdRef.current = null;
                     return;
                 }
                 const data = await res.json();
@@ -604,7 +617,7 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
         return () => {
             cancelled = true;
         };
-    }, [clientId, projectStatus, applyProjects]);
+    }, [selectionReady, clientId, projectStatus, applyProjects]);
 
     const reloadLists = useCallback(() => {
         const selectedClientId = clientId;

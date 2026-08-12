@@ -85,6 +85,37 @@ function IconProjects(props: IconProps) {
     );
 }
 
+function IconGithub(props: IconProps) {
+    return (
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden {...props}>
+            <path d="M12 2C6.477 2 2 6.584 2 12.253c0 4.526 2.865 8.363 6.839 9.712.5.094.683-.222.683-.48 0-.237-.009-.866-.013-1.7-2.782.618-3.369-1.38-3.369-1.38-.455-1.18-1.11-1.494-1.11-1.494-.908-.635.069-.623.069-.623 1.004.072 1.532 1.057 1.532 1.057.892 1.566 2.341 1.114 2.91.852.092-.662.35-1.114.636-1.37-2.22-.259-4.555-1.14-4.555-5.077 0-1.122.39-2.04 1.029-2.759-.103-.26-.446-1.302.098-2.714 0 0 .84-.276 2.75 1.052A9.35 9.35 0 0 1 12 6.844a9.35 9.35 0 0 1 2.504.346c1.909-1.328 2.748-1.052 2.748-1.052.546 1.412.203 2.454.1 2.714.64.72 1.028 1.637 1.028 2.759 0 3.948-2.338 4.815-4.566 5.068.359.317.679.943.679 1.902 0 1.371-.012 2.477-.012 2.813 0 .26.18.58.688.48A10.27 10.27 0 0 0 22 12.253C22 6.584 17.523 2 12 2Z" />
+        </svg>
+    );
+}
+
+function IconUserSettings(props: IconProps) {
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden
+            {...props}
+        >
+            <circle cx="12" cy="8" r="3.5" />
+            <path
+                d="M5 19a7 7 0 0 1 14 0"
+                strokeLinecap="round"
+            />
+            <path
+                d="M19 8.5v3M20.5 10h-3"
+                strokeLinecap="round"
+            />
+        </svg>
+    );
+}
+
 function IconSync(props: IconProps) {
     return (
         <svg
@@ -273,7 +304,9 @@ export function AppShell({
     const links: NavLink[] = [
         { href: '/', label: 'Dashboard', icon: IconHome },
         { href: '/projects', label: 'Projects', icon: IconProjects },
+        { href: '/github', label: 'GitHub', icon: IconGithub },
         { href: '/my-mappings', label: 'My mappings', icon: IconMap },
+        { href: '/my-settings', label: 'My settings', icon: IconUserSettings },
         ...(user?.role === 'admin'
             ? [
                   { href: '/syncs', label: 'Syncs', icon: IconSync },

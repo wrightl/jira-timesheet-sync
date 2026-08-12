@@ -90,6 +90,17 @@ export const meUpdateSchema = z.object({
   syncEnabled: z.boolean(),
 });
 
+export const githubSettingsUpdateSchema = z
+  .object({
+    githubToken: z.string().optional(),
+    githubOrg: z.string().optional(),
+  })
+  .refine(
+    (data) =>
+      data.githubToken !== undefined || data.githubOrg !== undefined,
+    { message: "At least one GitHub settings field is required" },
+  );
+
 export const settingsUpdateSchema = z
   .object({
     internalPmAccessToken: z.string().min(1).optional(),
@@ -119,3 +130,7 @@ export type UserSpaceMappingUpdateInput = z.infer<
 export type AdminUserCreateInput = z.infer<typeof adminUserCreateSchema>;
 export type AdminUserUpdateInput = z.infer<typeof adminUserUpdateSchema>;
 export type MeUpdateInput = z.infer<typeof meUpdateSchema>;
+export type GithubSettingsUpdateInput = z.infer<
+  typeof githubSettingsUpdateSchema
+>;
+export type SettingsUpdateInput = z.infer<typeof settingsUpdateSchema>;

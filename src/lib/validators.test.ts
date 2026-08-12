@@ -3,6 +3,7 @@ import {
   mappingCreateSchema,
   mappingUpdateSchema,
   settingsUpdateSchema,
+  githubSettingsUpdateSchema,
   userMappingCreateSchema,
   userMappingUpdateSchema,
   adminUserCreateSchema,
@@ -72,6 +73,15 @@ describe("settingsUpdateSchema", () => {
     expect(
       settingsUpdateSchema.parse({ internalPmAccessToken: "tok_abc" }),
     ).toEqual({ internalPmAccessToken: "tok_abc" });
+  });
+});
+
+describe("githubSettingsUpdateSchema", () => {
+  it("requires at least one field", () => {
+    expect(githubSettingsUpdateSchema.safeParse({}).success).toBe(false);
+    expect(
+      githubSettingsUpdateSchema.parse({ githubOrg: "acme" }),
+    ).toEqual({ githubOrg: "acme" });
   });
 });
 

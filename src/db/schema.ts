@@ -39,6 +39,8 @@ export const users = pgTable(
     role: userRoleEnum("role").notNull().default("user"),
     mustSetPassword: boolean("must_set_password").notNull().default(false),
     syncEnabled: boolean("sync_enabled").notNull().default(false),
+    githubTokenEncrypted: text("github_token_encrypted"),
+    githubOrg: text("github_org"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

@@ -482,6 +482,8 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
     const [pending, startTransition] = useTransition();
     const [selectionReady, setSelectionReady] = useState(false);
     const dashboardRequestId = useRef(0);
+    // Survives any intermediate setProjectId('') until the project list arrives.
+    const restoredProjectIdRef = useRef<string | null>(null);
 
     // Restore localStorage after mount so SSR and the first client paint match.
     useEffect(() => {
@@ -492,6 +494,7 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
             setClientId(stored.clientId);
             setProjectId(stored.projectId);
             setProjectStatus(stored.projectStatus);
+            restoredProjectIdRef.current = stored.projectId || null;
         }
         setSelectionReady(true);
     }, []);
@@ -508,7 +511,12 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
             }),
         );
         setProjects(sorted);
-        setProjectId((prev) => resolveSelectedProjectId(prev, sorted));
+        setProjectId((prev) => {
+            const preferred = restoredProjectIdRef.current || prev;
+            const next = resolveSelectedProjectId(preferred, sorted);
+            restoredProjectIdRef.current = null;
+            return next;
+        });
     }, []);
 
     useEffect(() => {
@@ -572,6 +580,7 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
             if (!clientId) {
                 setProjects([]);
                 setProjectId('');
+                restoredProjectIdRef.current = null;
                 return;
             }
 
@@ -594,6 +603,7 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
                     setError(data.error ?? 'Failed to load Bitmap projects');
                     setProjects([]);
                     setProjectId('');
+                    restoredProjectIdRef.current = null;
                     return;
                 }
                 const data = await res.json();

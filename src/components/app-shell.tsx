@@ -20,6 +20,7 @@ type NavUser = {
 };
 
 const SIDEBAR_COLLAPSED_KEY = 'app-sidebar-collapsed';
+const MOBILE_BREAKPOINT = 768;
 
 type IconProps = SVGProps<SVGSVGElement>;
 
@@ -104,14 +105,8 @@ function IconUserSettings(props: IconProps) {
             {...props}
         >
             <circle cx="12" cy="8" r="3.5" />
-            <path
-                d="M5 19a7 7 0 0 1 14 0"
-                strokeLinecap="round"
-            />
-            <path
-                d="M19 8.5v3M20.5 10h-3"
-                strokeLinecap="round"
-            />
+            <path d="M5 19a7 7 0 0 1 14 0" strokeLinecap="round" />
+            <path d="M19 8.5v3M20.5 10h-3" strokeLinecap="round" />
         </svg>
     );
 }
@@ -226,6 +221,36 @@ function IconPanelLeft(props: IconProps) {
     );
 }
 
+function IconMenu(props: IconProps) {
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden
+            {...props}
+        >
+            <path d="M4 7h16M4 12h16M4 17h16" strokeLinecap="round" />
+        </svg>
+    );
+}
+
+function IconClose(props: IconProps) {
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden
+            {...props}
+        >
+            <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" />
+        </svg>
+    );
+}
+
 function userInitials(email: string): string {
     const local = email.split('@')[0] ?? '';
     const parts = local.split(/[._\-+]/).filter(Boolean);
@@ -240,6 +265,57 @@ type NavLink = {
     label: string;
     icon: (props: IconProps) => ReactNode;
 };
+
+function NavLinks({
+    links,
+    currentPath,
+    collapsed,
+    onNavigate,
+}: {
+    links: NavLink[];
+    currentPath: string;
+    collapsed?: boolean;
+    onNavigate?: () => void;
+}) {
+    return (
+        <nav className="flex flex-col gap-0.5 p-2 pt-3">
+            {links.map((link) => {
+                const active = currentPath === link.href;
+                const Icon = link.icon;
+                return (
+                    <Link
+                        key={link.href}
+                        href={link.href}
+                        title={link.label}
+                        aria-label={link.label}
+                        aria-current={active ? 'page' : undefined}
+                        onClick={onNavigate}
+                        className={`flex h-10 items-center gap-2.5 rounded-md px-2.5 text-sm transition-colors ${
+                            active
+                                ? 'bg-accent-muted font-medium text-accent'
+                                : 'text-muted hover:bg-background hover:text-foreground'
+                        } ${collapsed ? 'justify-center px-0' : ''}`}
+                    >
+                        <Icon
+                            className={`h-4 w-4 shrink-0 ${
+                                active ? 'text-accent' : ''
+                            }`}
+                        />
+                        <span
+                            className={
+                                collapsed
+                                    ? 'sr-only'
+                                    : 'truncate'
+                            }
+                        >
+                            {link.label}
+                        </span>
+                    </Link>
+                );
+            })}
+        </nav>
+    );
+}
 
 export function AppShell({
     currentPath,
@@ -260,10 +336,18 @@ export function AppShell({
             return false;
         }
     });
+    const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const [profileOpen, setProfileOpen] = useState(false);
     const profileRef = useRef<HTMLDivElement>(null);
+    const menuToggleRef = useRef<HTMLButtonElement>(null);
+    const mobileNavRef = useRef<HTMLElement>(null);
     const menuId = useId();
+    const mobileNavId = useId();
     const signedIn = Boolean(user);
+
+    const closeMobileNav = useCallback(() => {
+        setMobileNavOpen(false);
+    }, []);
 
     const toggleCollapsed = useCallback(() => {
         setCollapsed((prev) => {
@@ -276,6 +360,38 @@ export function AppShell({
             return next;
         });
     }, []);
+
+    useEffect(() => {
+        if (!mobileNavOpen) return;
+
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+
+        function onKeyDown(event: KeyboardEvent) {
+            if (event.key === 'Escape') {
+                closeMobileNav();
+                menuToggleRef.current?.focus();
+            }
+        }
+
+        function onResize() {
+            if (window.innerWidth >= MOBILE_BREAKPOINT) {
+                closeMobileNav();
+            }
+        }
+
+        document.addEventListener('keydown', onKeyDown);
+        window.addEventListener('resize', onResize);
+
+        const firstLink = mobileNavRef.current?.querySelector('a');
+        firstLink?.focus();
+
+        return () => {
+            document.body.style.overflow = previousOverflow;
+            document.removeEventListener('keydown', onKeyDown);
+            window.removeEventListener('resize', onResize);
+        };
+    }, [mobileNavOpen, closeMobileNav]);
 
     useEffect(() => {
         if (!profileOpen) return;
@@ -322,6 +438,7 @@ export function AppShell({
         startTransition(async () => {
             await fetch('/api/auth/logout', { method: 'POST' });
             setProfileOpen(false);
+            closeMobileNav();
             router.push('/login');
             router.refresh();
         });
@@ -329,35 +446,59 @@ export function AppShell({
 
     return (
         <div className="flex h-full flex-col overflow-hidden">
-            <header className="sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur-sm">
-                <div className="flex h-14 items-center justify-between gap-4 px-4">
-                    <div className="flex min-w-0 items-center gap-3">
+            <header className="sticky top-0 z-50 border-b border-border bg-card/95 backdrop-blur-sm">
+                <div className="flex h-14 items-center justify-between gap-3 px-3 sm:gap-4 sm:px-4">
+                    <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                         {signedIn ? (
-                            <button
-                                type="button"
-                                onClick={toggleCollapsed}
-                                className="rounded-md p-2 text-muted transition-colors hover:bg-background hover:text-foreground"
-                                aria-label={
-                                    collapsed
-                                        ? 'Expand sidebar'
-                                        : 'Collapse sidebar'
-                                }
-                                title={
-                                    collapsed
-                                        ? 'Expand sidebar'
-                                        : 'Collapse sidebar'
-                                }
-                            >
-                                <IconPanelLeft className="h-4 w-4" />
-                            </button>
+                            <>
+                                <button
+                                    ref={menuToggleRef}
+                                    type="button"
+                                    onClick={() =>
+                                        setMobileNavOpen((open) => !open)
+                                    }
+                                    className="rounded-md p-2 text-muted transition-colors hover:bg-background hover:text-foreground md:hidden"
+                                    aria-label={
+                                        mobileNavOpen
+                                            ? 'Close navigation menu'
+                                            : 'Open navigation menu'
+                                    }
+                                    aria-expanded={mobileNavOpen}
+                                    aria-controls={mobileNavId}
+                                >
+                                    {mobileNavOpen ? (
+                                        <IconClose className="h-5 w-5" />
+                                    ) : (
+                                        <IconMenu className="h-5 w-5" />
+                                    )}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={toggleCollapsed}
+                                    className="hidden rounded-md p-2 text-muted transition-colors hover:bg-background hover:text-foreground md:inline-flex"
+                                    aria-label={
+                                        collapsed
+                                            ? 'Expand sidebar'
+                                            : 'Collapse sidebar'
+                                    }
+                                    title={
+                                        collapsed
+                                            ? 'Expand sidebar'
+                                            : 'Collapse sidebar'
+                                    }
+                                >
+                                    <IconPanelLeft className="h-4 w-4" />
+                                </button>
+                            </>
                         ) : null}
 
                         <Link
                             href={signedIn ? '/' : '/login'}
                             className="flex min-w-0 items-center gap-2.5"
+                            onClick={closeMobileNav}
                         >
                             <AppLogoMark className="h-8 w-8 shrink-0 text-accent" />
-                            <AppWordmark className="min-w-0" />
+                            <AppWordmark className="min-w-0 max-[360px]:hidden" />
                         </Link>
                     </div>
 
@@ -381,7 +522,7 @@ export function AppShell({
                                     <div
                                         id={menuId}
                                         role="menu"
-                                        className="absolute right-0 mt-2 w-60 overflow-hidden rounded-lg border border-border bg-card py-1"
+                                        className="absolute right-0 mt-2 w-60 overflow-hidden rounded-lg border border-border bg-card py-1 shadow-lg"
                                     >
                                         <div className="border-b border-border px-3 py-2.5">
                                             <p className="text-xs text-muted">
@@ -418,46 +559,66 @@ export function AppShell({
                 </div>
             </header>
 
-            <div className="flex min-h-0 flex-1">
+            <div className="relative flex min-h-0 flex-1">
                 {signedIn ? (
-                    <aside
-                        className={`shrink-0 overflow-hidden border-r border-border bg-card transition-[width] duration-200 ease-in-out ${
-                            collapsed ? 'w-[3.75rem]' : 'w-56'
-                        }`}
-                        aria-label="Main navigation"
-                    >
-                        <nav className="flex flex-col gap-0.5 p-2 pt-3">
-                            {links.map((link) => {
-                                const active = currentPath === link.href;
-                                const Icon = link.icon;
-                                return (
-                                    <Link
-                                        key={link.href}
-                                        href={link.href}
-                                        title={link.label}
-                                        aria-label={link.label}
-                                        aria-current={
-                                            active ? 'page' : undefined
-                                        }
-                                        className={`flex h-9 items-center gap-2.5 rounded-md px-2.5 text-sm transition-colors ${
-                                            active
-                                                ? 'bg-accent-muted font-medium text-accent'
-                                                : 'text-muted hover:bg-background hover:text-foreground'
-                                        }`}
-                                    >
-                                        <Icon
-                                            className={`h-4 w-4 shrink-0 ${
-                                                active ? 'text-accent' : ''
-                                            }`}
-                                        />
-                                        <span className="truncate">
-                                            {link.label}
-                                        </span>
-                                    </Link>
-                                );
-                            })}
-                        </nav>
-                    </aside>
+                    <>
+                        {/* Desktop sidebar */}
+                        <aside
+                            className={`hidden shrink-0 overflow-x-hidden overflow-y-auto border-r border-border bg-card transition-[width] duration-200 ease-in-out md:block ${
+                                collapsed ? 'w-[3.75rem]' : 'w-56'
+                            }`}
+                            aria-label="Main navigation"
+                        >
+                            <NavLinks
+                                links={links}
+                                currentPath={currentPath}
+                                collapsed={collapsed}
+                            />
+                        </aside>
+
+                        {/* Mobile drawer — sits under the sticky header */}
+                        <div
+                            className={`fixed inset-x-0 bottom-0 top-14 z-40 md:hidden ${
+                                mobileNavOpen
+                                    ? 'pointer-events-auto'
+                                    : 'pointer-events-none'
+                            }`}
+                            aria-hidden={!mobileNavOpen}
+                        >
+                            <button
+                                type="button"
+                                tabIndex={-1}
+                                aria-label="Close navigation menu"
+                                className={`absolute inset-0 bg-foreground/40 transition-opacity duration-200 ${
+                                    mobileNavOpen
+                                        ? 'opacity-100'
+                                        : 'opacity-0'
+                                }`}
+                                onClick={() => {
+                                    closeMobileNav();
+                                    menuToggleRef.current?.focus();
+                                }}
+                            />
+                            <aside
+                                ref={mobileNavRef}
+                                id={mobileNavId}
+                                role="dialog"
+                                aria-modal="true"
+                                aria-label="Main navigation"
+                                className={`absolute inset-y-0 left-0 flex w-[min(18rem,88vw)] flex-col overflow-y-auto border-r border-border bg-card shadow-xl transition-transform duration-200 ease-out ${
+                                    mobileNavOpen
+                                        ? 'translate-x-0'
+                                        : '-translate-x-full'
+                                }`}
+                            >
+                                <NavLinks
+                                    links={links}
+                                    currentPath={currentPath}
+                                    onNavigate={closeMobileNav}
+                                />
+                            </aside>
+                        </div>
+                    </>
                 ) : null}
 
                 <div className="min-w-0 flex-1 overflow-y-auto">{children}</div>

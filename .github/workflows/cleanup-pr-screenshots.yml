@@ -1,0 +1,80 @@
+name: Cleanup PR screenshots
+
+on:
+  schedule:
+    # 2:00 AM UTC daily
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check whether pr-screenshots exists
+        id: branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh api "repos/${{ github.repository }}/branches/pr-screenshots" --silent; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Branch pr-screenshots not found; nothing to clean up."
+          fi
+
+      - name: Checkout pr-screenshots
+        if: steps.branch.outputs.exists == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: pr-screenshots
+
+      - name: Delete screenshot folders for non-open PRs
+        if: steps.branch.outputs.exists == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ ! -d screenshots ]; then
+            echo "No screenshots/ directory on pr-screenshots."
+            exit 0
+          fi
+
+          removed=0
+          shopt -s nullglob
+          for dir in screenshots/*/; do
+            pr_number="$(basename "$dir")"
+            if ! [[ "$pr_number" =~ ^[0-9]+$ ]]; then
+              echo "Skipping non-numeric folder: $pr_number"
+              continue
+            fi
+
+            state="$(gh pr view "$pr_number" --repo "${{ github.repository }}" --json state --jq .state 2>/dev/null || echo "NOT_FOUND")"
+            if [ "$state" = "OPEN" ]; then
+              echo "Keeping screenshots for open PR #$pr_number"
+              continue
+            fi
+
+            echo "Removing screenshots for PR #$pr_number (state=$state)"
+            rm -rf "$dir"
+            removed=1
+          done
+
+          if [ "$removed" -eq 0 ]; then
+            echo "No screenshot folders to delete."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A screenshots
+          if git diff --cached --quiet; then
+            echo "No staged changes after cleanup."
+            exit 0
+          fi
+          git commit -m "chore: remove screenshots for closed or missing PRs"
+          git push origin HEAD:pr-screenshots

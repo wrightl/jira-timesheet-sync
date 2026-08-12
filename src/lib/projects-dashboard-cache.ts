@@ -1,5 +1,11 @@
-import type { ProjectListStatus } from "@/lib/project-list-status";
+import {
+  isProjectListStatus,
+  type ProjectListStatus,
+} from "@/lib/project-list-status";
 import type { ProjectDashboardResult } from "@/services/project-dashboard";
+
+export const PROJECTS_DASHBOARD_SELECTION_KEY =
+  "projects-dashboard-selection";
 
 export type CachedBitmapClient = {
   id: string;
@@ -24,6 +30,12 @@ type ProjectsDashboardSnapshot = {
   dashboard: ProjectDashboardResult | null;
 };
 
+type StoredSelection = {
+  clientId: string;
+  projectId: string;
+  projectStatus: ProjectListStatus;
+};
+
 function projectsKey(clientId: string, status: ProjectListStatus): string {
   return `${clientId}:${status}`;
 }
@@ -31,6 +43,7 @@ function projectsKey(clientId: string, status: ProjectListStatus): string {
 /**
  * Module-scoped client cache for the projects dashboard.
  * Survives App Router unmount when navigating away and back.
+ * Selection is also mirrored to localStorage so it survives full reloads.
  */
 const memory = {
   clients: null as CachedBitmapClient[] | null,
@@ -40,6 +53,64 @@ const memory = {
   projectStatus: "active" as ProjectListStatus,
   projectId: "",
 };
+
+let hydratedFromStorage = false;
+
+function readStoredSelection(): StoredSelection | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(PROJECTS_DASHBOARD_SELECTION_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    const record = parsed as Record<string, unknown>;
+    const clientId =
+      typeof record.clientId === "string" ? record.clientId : "";
+    const projectId =
+      typeof record.projectId === "string" ? record.projectId : "";
+    const statusCandidate =
+      typeof record.projectStatus === "string" ? record.projectStatus : null;
+    const projectStatus = isProjectListStatus(statusCandidate)
+      ? statusCandidate
+      : "active";
+    return { clientId, projectId, projectStatus };
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredSelection(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const payload: StoredSelection = {
+      clientId: memory.clientId,
+      projectId: memory.projectId,
+      projectStatus: memory.projectStatus,
+    };
+    localStorage.setItem(
+      PROJECTS_DASHBOARD_SELECTION_KEY,
+      JSON.stringify(payload),
+    );
+  } catch {
+    // ignore quota / private-mode failures
+  }
+}
+
+/**
+ * Apply persisted selection into module memory.
+ * Call from a client useEffect after mount — never during render — so SSR
+ * HTML stays aligned with the first client paint.
+ */
+export function hydrateProjectsDashboardSelectionFromStorage(): StoredSelection | null {
+  if (hydratedFromStorage) return null;
+  hydratedFromStorage = true;
+  const stored = readStoredSelection();
+  if (!stored) return null;
+  memory.clientId = stored.clientId;
+  memory.projectId = stored.projectId;
+  memory.projectStatus = stored.projectStatus;
+  return stored;
+}
 
 export function readProjectsDashboardCache(): ProjectsDashboardSnapshot {
   const { clientId, projectId, projectStatus } = memory;
@@ -77,6 +148,7 @@ export function setProjectsDashboardSelection(selection: {
   if (selection.projectStatus !== undefined) {
     memory.projectStatus = selection.projectStatus;
   }
+  writeStoredSelection();
 }
 
 export function getCachedClients(): CachedBitmapClient[] | null {
@@ -148,4 +220,15 @@ export function invalidateCachedDashboard(projectId?: string): void {
     return;
   }
   memory.dashboardByProjectId.clear();
+}
+
+/** Test helper: reset module memory and hydration flag. */
+export function resetProjectsDashboardCacheForTests(): void {
+  memory.clients = null;
+  memory.projectsByKey.clear();
+  memory.dashboardByProjectId.clear();
+  memory.clientId = "";
+  memory.projectStatus = "active";
+  memory.projectId = "";
+  hydratedFromStorage = false;
 }

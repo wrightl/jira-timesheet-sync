@@ -32,6 +32,7 @@ import {
     invalidateCachedClients,
     invalidateCachedDashboard,
     invalidateCachedProjects,
+    hydrateProjectsDashboardSelectionFromStorage,
     readProjectsDashboardCache,
     setCachedClients,
     setCachedDashboard,
@@ -478,11 +479,24 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
     const [dashboardLoading, setDashboardLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [pending, startTransition] = useTransition();
+    const [selectionReady, setSelectionReady] = useState(false);
     const dashboardRequestId = useRef(0);
 
+    // Restore localStorage after mount so SSR and the first client paint match.
     useEffect(() => {
+        const stored = hydrateProjectsDashboardSelectionFromStorage();
+        if (stored) {
+            setClientId(stored.clientId);
+            setProjectId(stored.projectId);
+            setProjectStatus(stored.projectStatus);
+        }
+        setSelectionReady(true);
+    }, []);
+
+    useEffect(() => {
+        if (!selectionReady) return;
         setProjectsDashboardSelection({ clientId, projectId, projectStatus });
-    }, [clientId, projectId, projectStatus]);
+    }, [selectionReady, clientId, projectId, projectStatus]);
 
     const applyProjects = useCallback((list: BitmapProjectOption[]) => {
         const sorted = [...list].sort((a, b) =>

@@ -1,0 +1,21 @@
+{
+  "name": "Jira Timesheet Sync",
+  "install": "bash scripts/cloud/install.sh",
+  "start": "bash scripts/cloud/start.sh",
+  "terminals": [
+    {
+      "name": "neon-proxy",
+      "command": "set -a; . ./.env.local; set +a; node scripts/neon-local-proxy.mjs",
+      "description": "Local Neon HTTP proxy bridging the serverless driver to in-VM Postgres."
+    },
+    {
+      "name": "dev",
+      "command": "set -a; . ./.env.local; set +a; npm run dev",
+      "description": "Next.js dev server on http://localhost:3000."
+    }
+  ],
+  "ports": [
+    { "name": "web", "port": 3000 },
+    { "name": "neon-proxy", "port": 4444 }
+  ]
+}

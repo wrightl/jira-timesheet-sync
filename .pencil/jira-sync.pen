@@ -61,7 +61,7 @@
               "width": 24,
               "height": 24,
               "cornerRadius": 6.0,
-              "fill": "#0b6e4f",
+              "fill": "#0047ab",
               "layout": "none",
               "clip": true,
               "children": [
@@ -141,7 +141,7 @@
               "width": 32,
               "height": 32,
               "cornerRadius": 8.0,
-              "fill": "#0b6e4f",
+              "fill": "#0047ab",
               "layout": "none",
               "clip": true,
               "children": [
@@ -221,7 +221,7 @@
               "width": 48,
               "height": 48,
               "cornerRadius": 12.0,
-              "fill": "#0b6e4f",
+              "fill": "#0047ab",
               "layout": "none",
               "clip": true,
               "children": [
@@ -301,7 +301,7 @@
               "width": 64,
               "height": 64,
               "cornerRadius": 16.0,
-              "fill": "#0b6e4f",
+              "fill": "#0047ab",
               "layout": "none",
               "clip": true,
               "children": [
@@ -391,7 +391,7 @@
               "width": 40,
               "height": 40,
               "cornerRadius": 10.0,
-              "fill": "#0b6e4f",
+              "fill": "#0047ab",
               "layout": "none",
               "clip": true,
               "children": [
@@ -513,7 +513,7 @@
               "width": 40,
               "height": 40,
               "cornerRadius": 10.0,
-              "fill": "#0b6e4f",
+              "fill": "#0047ab",
               "layout": "none",
               "clip": true,
               "children": [
@@ -667,7 +667,7 @@
                       "width": 32,
                       "height": 32,
                       "cornerRadius": 8.0,
-                      "fill": "#0b6e4f",
+                      "fill": "#0047ab",
                       "layout": "none",
                       "clip": true,
                       "children": [
@@ -780,7 +780,7 @@
               "width": 36,
               "height": 36,
               "cornerRadius": 18,
-              "fill": "#0b6e4f",
+              "fill": "#0047ab",
               "justifyContent": "center",
               "alignItems": "center",
               "children": [
@@ -833,7 +833,7 @@
                   "width": "fill_container",
                   "height": 36,
                   "cornerRadius": 8,
-                  "fill": "#e6f2ed",
+                  "fill": "#e5eef9",
                   "gap": 12,
                   "padding": [
                     8,
@@ -853,7 +853,7 @@
                           "id": "iHAOV",
                           "width": 16,
                           "height": 16,
-                          "fill": "#0b6e4f",
+                          "fill": "#0047ab",
                           "x": 0,
                           "y": 0,
                           "icon": "house",
@@ -864,7 +864,7 @@
                     {
                       "type": "text",
                       "id": "pjgxv",
-                      "fill": "#0b6e4f",
+                      "fill": "#0047ab",
                       "content": "Dashboard",
                       "fontFamily": "Geist",
                       "fontSize": 13,
@@ -1390,7 +1390,7 @@
                   "width": 48,
                   "height": 48,
                   "cornerRadius": 12.0,
-                  "fill": "#0b6e4f",
+                  "fill": "#0047ab",
                   "layout": "none",
                   "clip": true,
                   "children": [
@@ -1588,7 +1588,7 @@
               "width": "fill_container",
               "height": 40,
               "cornerRadius": 8,
-              "fill": "#0b6e4f",
+              "fill": "#0047ab",
               "justifyContent": "center",
               "alignItems": "center",
               "children": [
@@ -1667,7 +1667,7 @@
       "type": "color",
       "value": [
         {
-          "value": "#0b6e4f"
+          "value": "#0047ab"
         }
       ]
     },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -36,11 +36,12 @@ function metricBadgeVariant(
 export function GithubDashboard({ authed }: { authed: boolean }) {
   const [data, setData] = useState<GithubDashboardResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
 
-  const load = () => {
-    startTransition(async () => {
-      setError(null);
+  const load = async () => {
+    setPending(true);
+    setError(null);
+    try {
       const res = await fetch("/api/github/dashboard");
       if (!res.ok) {
         setError(
@@ -51,11 +52,16 @@ export function GithubDashboard({ authed }: { authed: boolean }) {
       }
       const json = (await res.json()) as GithubDashboardResult;
       setData(json);
-    });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load dashboard");
+      setData(null);
+    } finally {
+      setPending(false);
+    }
   };
 
   useEffect(() => {
-    if (authed) load();
+    if (authed) void load();
   }, [authed]);
 
   if (!authed) {
@@ -82,7 +88,7 @@ export function GithubDashboard({ authed }: { authed: boolean }) {
 
       {error ? <Alert variant="error">{error}</Alert> : null}
 
-      {data && !data.configured ? (
+      {!pending && (!data || !data.configured) ? (
         <Alert>
           GitHub is not configured for your account.{" "}
           <Link

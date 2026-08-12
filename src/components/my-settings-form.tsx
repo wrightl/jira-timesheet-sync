@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -20,11 +20,12 @@ export function MySettingsForm({ authed }: { authed: boolean }) {
   const [org, setOrg] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
 
-  const load = () => {
-    startTransition(async () => {
-      setError(null);
+  const load = async () => {
+    setPending(true);
+    setError(null);
+    try {
       const res = await fetch("/api/me/github");
       if (!res.ok) {
         setError(
@@ -36,11 +37,16 @@ export function MySettingsForm({ authed }: { authed: boolean }) {
       const data = (await res.json()) as GithubSettingsState;
       setSettings(data);
       setOrg(data.githubOrg ?? "");
-    });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load settings");
+      setSettings(null);
+    } finally {
+      setPending(false);
+    }
   };
 
   useEffect(() => {
-    if (authed) load();
+    if (authed) void load();
   }, [authed]);
 
   if (!authed) {
@@ -89,28 +95,35 @@ export function MySettingsForm({ authed }: { authed: boolean }) {
           className="flex flex-col gap-3"
           onSubmit={(e) => {
             e.preventDefault();
-            startTransition(async () => {
+            void (async () => {
+              setPending(true);
               setMessage(null);
               setError(null);
-              const res = await fetch("/api/me/github", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  githubOrg: org,
-                  githubToken: token || undefined,
-                }),
-              });
-              if (!res.ok) {
-                const data = await res.json().catch(() => ({}));
-                setError(
-                  (data as { error?: string }).error ?? "Save failed",
-                );
-                return;
+              try {
+                const res = await fetch("/api/me/github", {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    githubOrg: org,
+                    githubToken: token || undefined,
+                  }),
+                });
+                if (!res.ok) {
+                  const data = await res.json().catch(() => ({}));
+                  setError(
+                    (data as { error?: string }).error ?? "Save failed",
+                  );
+                  return;
+                }
+                setToken("");
+                setMessage("GitHub settings saved");
+                await load();
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Save failed");
+              } finally {
+                setPending(false);
               }
-              setToken("");
-              setMessage("GitHub settings saved");
-              load();
-            });
+            })();
           }}
         >
           <Input

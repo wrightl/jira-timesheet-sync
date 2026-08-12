@@ -28,7 +28,7 @@ export const apiCacheResourceTypeEnum = pgEnum("api_cache_resource_type", [
   "jira_search",
 ]);
 
-export const userRoleEnum = pgEnum("user_role", ["admin", "user"]);
+export const userRoleEnum = pgEnum("user_role", ["admin", "user", "exec"]);
 
 export const users = pgTable(
   "users",
@@ -41,6 +41,8 @@ export const users = pgTable(
     syncEnabled: boolean("sync_enabled").notNull().default(false),
     githubTokenEncrypted: text("github_token_encrypted"),
     githubOrg: text("github_org"),
+    oauthProvider: text("oauth_provider"),
+    oauthSubject: text("oauth_subject"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -48,7 +50,13 @@ export const users = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => [uniqueIndex("users_email_uidx").on(table.email)],
+  (table) => [
+    uniqueIndex("users_email_uidx").on(table.email),
+    uniqueIndex("users_oauth_provider_subject_uidx").on(
+      table.oauthProvider,
+      table.oauthSubject,
+    ),
+  ],
 );
 
 export const sessions = pgTable(
@@ -179,6 +187,9 @@ export const settings = pgTable("settings", {
   jiraBaseUrl: text("jira_base_url"),
   jiraEmail: text("jira_email"),
   jiraApiTokenEncrypted: text("jira_api_token_encrypted"),
+  slackWebhookUrlEncrypted: text("slack_webhook_url_encrypted"),
+  alertEmail: text("alert_email"),
+  alertThresholdsJson: text("alert_thresholds_json"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -232,6 +243,49 @@ export const worklogSyncs = pgTable(
   ],
 );
 
+export const teams = pgTable(
+  "teams",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [uniqueIndex("teams_name_uidx").on(table.name)],
+);
+
+export const teamMembers = pgTable(
+  "team_members",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    userMappingId: uuid("user_mapping_id").references(() => userMappings.id, {
+      onDelete: "set null",
+    }),
+    appUserId: uuid("app_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    displayName: text("display_name"),
+    weeklyCapacityHours: text("weekly_capacity_hours").default("40"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("team_members_team_id_idx").on(table.teamId),
+    index("team_members_app_user_id_idx").on(table.appUserId),
+  ],
+);
+
 export type AppUser = typeof users.$inferSelect;
 export type NewAppUser = typeof users.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
@@ -246,3 +300,7 @@ export type ApiCacheEntry = typeof apiCache.$inferSelect;
 export type NewApiCacheEntry = typeof apiCache.$inferInsert;
 export type WorklogSync = typeof worklogSyncs.$inferSelect;
 export type NewWorklogSync = typeof worklogSyncs.$inferInsert;
+export type Team = typeof teams.$inferSelect;
+export type NewTeam = typeof teams.$inferInsert;
+export type TeamMember = typeof teamMembers.$inferSelect;
+export type NewTeamMember = typeof teamMembers.$inferInsert;

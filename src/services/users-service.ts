@@ -93,7 +93,11 @@ export class UsersService {
       };
     }
 
-    if (target.role === "admin" && input.role === "user") {
+    if (
+      target.role === "admin" &&
+      input.role &&
+      input.role !== "admin"
+    ) {
       const adminCount = await this.users.countAdmins();
       if (adminCount <= 1) {
         return {
@@ -106,7 +110,7 @@ export class UsersService {
     }
 
     const updates: {
-      role?: "admin" | "user";
+      role?: "admin" | "user" | "exec";
       passwordHash?: string;
       mustSetPassword?: boolean;
       syncEnabled?: boolean;

@@ -50,6 +50,8 @@ export type JiraIssueAggregates = {
     summary: string | null;
     ageDays: number | null;
   } | null;
+  /** Median calendar days from created → last update for done issues (proxy cycle time). */
+  cycleTimeMedianDays: number | null;
   issues: JiraIssue[];
 };
 
@@ -221,6 +223,27 @@ export function aggregateJiraIssues(
     .sort((a, b) => (b.ageDays ?? 0) - (a.ageDays ?? 0));
   const agingWipOldest = agingWip[0] ?? null;
 
+  const doneCycleDays = issues
+    .filter((i) => isDone(i) && withinDays(i.fields.updated, now, windowDays))
+    .map((i) => {
+      const created = i.fields.created ? Date.parse(i.fields.created) : NaN;
+      const updated = i.fields.updated ? Date.parse(i.fields.updated) : NaN;
+      if (!Number.isFinite(created) || !Number.isFinite(updated)) return null;
+      return Math.max(0, (updated - created) / (24 * 60 * 60 * 1000));
+    })
+    .filter((d): d is number => d != null)
+    .sort((a, b) => a - b);
+
+  let cycleTimeMedianDays: number | null = null;
+  if (doneCycleDays.length > 0) {
+    const mid = Math.floor(doneCycleDays.length / 2);
+    const raw =
+      doneCycleDays.length % 2 === 0
+        ? (doneCycleDays[mid - 1]! + doneCycleDays[mid]!) / 2
+        : doneCycleDays[mid]!;
+    cycleTimeMedianDays = Math.round(raw * 10) / 10;
+  }
+
   return {
     scopedJql: options?.scopedJql ?? "",
     issueCount: issues.length,
@@ -241,6 +264,7 @@ export function aggregateJiraIssues(
     defectInjectionRatio,
     agingWipCount: agingWip.length,
     agingWipOldest,
+    cycleTimeMedianDays,
     issues,
   };
 }

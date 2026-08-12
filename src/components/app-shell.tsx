@@ -16,7 +16,7 @@ import { AppLogoMark, AppWordmark } from '@/components/app-logo';
 
 type NavUser = {
     email: string;
-    role: 'admin' | 'user';
+    role: 'admin' | 'user' | 'exec';
 };
 
 const SIDEBAR_COLLAPSED_KEY = 'app-sidebar-collapsed';
@@ -82,6 +82,56 @@ function IconProjects(props: IconProps) {
                 strokeLinejoin="round"
             />
             <path d="M8 11h8M8 15h5" strokeLinecap="round" />
+        </svg>
+    );
+}
+
+function IconPortfolio(props: IconProps) {
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden
+            {...props}
+        >
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <path d="M3 10h18M9 4v16" strokeLinecap="round" />
+        </svg>
+    );
+}
+
+function IconUtilization(props: IconProps) {
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden
+            {...props}
+        >
+            <path d="M4 19V5M10 19V9M16 19v-6M22 19H2" strokeLinecap="round" />
+        </svg>
+    );
+}
+
+function IconStatus(props: IconProps) {
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden
+            {...props}
+        >
+            <path
+                d="M6 4h9l3 3v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"
+                strokeLinejoin="round"
+            />
+            <path d="M9 12h6M9 16h4" strokeLinecap="round" />
         </svg>
     );
 }
@@ -419,12 +469,30 @@ export function AppShell({
 
     const links: NavLink[] = [
         { href: '/', label: 'Dashboard', icon: IconHome },
+        { href: '/portfolio', label: 'Portfolio', icon: IconPortfolio },
         { href: '/projects', label: 'Projects', icon: IconProjects },
+        { href: '/utilization', label: 'Utilization', icon: IconUtilization },
+        { href: '/status', label: 'Status', icon: IconStatus },
         { href: '/github', label: 'GitHub', icon: IconGithub },
-        { href: '/my-mappings', label: 'My mappings', icon: IconMap },
-        { href: '/my-settings', label: 'My settings', icon: IconUserSettings },
+        ...(user?.role === 'exec'
+            ? [
+                  {
+                      href: '/my-settings',
+                      label: 'My settings',
+                      icon: IconUserSettings,
+                  },
+              ]
+            : [
+                  { href: '/my-mappings', label: 'My mappings', icon: IconMap },
+                  {
+                      href: '/my-settings',
+                      label: 'My settings',
+                      icon: IconUserSettings,
+                  },
+              ]),
         ...(user?.role === 'admin'
             ? [
+                  { href: '/teams', label: 'Teams', icon: IconUsers },
                   { href: '/syncs', label: 'Syncs', icon: IconSync },
                   { href: '/mappings', label: 'Mappings', icon: IconLayers },
                   { href: '/users', label: 'Users', icon: IconUsers },

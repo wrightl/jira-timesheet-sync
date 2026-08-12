@@ -10,7 +10,11 @@ import { Card } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 
-export function LoginForm() {
+export function LoginForm({
+  googleEnabled = false,
+}: {
+  googleEnabled?: boolean;
+}) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -74,6 +78,21 @@ export function LoginForm() {
         <Button type="submit" disabled={pending} className="w-full">
           {pending ? "Signing in…" : "Sign in"}
         </Button>
+        {googleEnabled ? (
+          <>
+            <div className="my-4 flex items-center gap-3 text-xs text-muted">
+              <div className="h-px flex-1 bg-border" />
+              or
+              <div className="h-px flex-1 bg-border" />
+            </div>
+            <a
+              href="/api/auth/google"
+              className="inline-flex h-10 w-full items-center justify-center rounded-md border border-border bg-card text-sm font-medium text-foreground transition-colors hover:bg-background"
+            >
+              Continue with Google
+            </a>
+          </>
+        ) : null}
         <p className="mt-4 text-center text-sm text-muted">
           No account?{" "}
           <Link href="/register" className="text-accent hover:underline">

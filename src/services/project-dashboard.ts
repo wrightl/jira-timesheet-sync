@@ -77,6 +77,7 @@ export type ProjectDashboardResult = {
     defectInjectionRatio: DashboardMetric<number | null>;
     throughput30d: DashboardMetric<number | null>;
     agingWipCount: DashboardMetric<number | null>;
+    cycleTimeMedianDays: DashboardMetric<number | null>;
     healthCheckScore: DashboardMetric<number | null>;
   };
   burndown: BitmapBurndown | null;
@@ -241,6 +242,13 @@ export function agingWipStatus(count: number | null): MetricStatus {
   if (count == null) return "unavailable";
   if (count >= 10) return "risk";
   if (count >= 5) return "watch";
+  return "ok";
+}
+
+export function cycleTimeStatus(days: number | null): MetricStatus {
+  if (days == null) return "unavailable";
+  if (days >= 21) return "risk";
+  if (days >= 10) return "watch";
   return "ok";
 }
 
@@ -1007,6 +1015,25 @@ export class ProjectDashboardService {
             detail: jiraAgg!.agingWipOldest
               ? `Oldest ${jiraAgg!.agingWipOldest.key} (${jiraAgg!.agingWipOldest.ageDays ?? "?"}d since update)`
               : "No open issues stale ≥14d",
+          },
+      cycleTimeMedianDays: !jiraConfigured || (jiraConfigured && !jiraAgg)
+        ? unavailableMetric(
+            "cycle_time_median_days",
+            "Cycle time (median)",
+            "jira",
+            jiraUnavailableDetail,
+          )
+        : {
+            id: "cycle_time_median_days",
+            label: "Cycle time (median)",
+            value: jiraAgg!.cycleTimeMedianDays,
+            displayValue:
+              jiraAgg!.cycleTimeMedianDays == null
+                ? "—"
+                : `${jiraAgg!.cycleTimeMedianDays}d`,
+            status: cycleTimeStatus(jiraAgg!.cycleTimeMedianDays),
+            source: "jira",
+            detail: "Created → last update for issues done in 30d",
           },
       healthCheckScore:
         healthTotal === 0

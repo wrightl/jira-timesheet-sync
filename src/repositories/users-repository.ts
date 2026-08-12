@@ -1,4 +1,4 @@
-import { count, desc, eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, sql } from "drizzle-orm";
 import type { Db } from "@/db";
 import {
   users,
@@ -37,6 +37,23 @@ export class UsersRepository {
       .select()
       .from(users)
       .where(eq(users.id, id))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
+  async findByOAuth(
+    provider: string,
+    subject: string,
+  ): Promise<AppUser | null> {
+    const rows = await this.db
+      .select()
+      .from(users)
+      .where(
+        and(
+          eq(users.oauthProvider, provider),
+          eq(users.oauthSubject, subject),
+        ),
+      )
       .limit(1);
     return rows[0] ?? null;
   }
@@ -84,7 +101,13 @@ export class UsersRepository {
     values: Partial<
       Pick<
         AppUser,
-        "role" | "passwordHash" | "email" | "mustSetPassword" | "syncEnabled"
+        | "role"
+        | "passwordHash"
+        | "email"
+        | "mustSetPassword"
+        | "syncEnabled"
+        | "oauthProvider"
+        | "oauthSubject"
       >
     > & {
       updatedAt?: Date;

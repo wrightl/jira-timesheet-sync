@@ -6,6 +6,21 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
+type AlertConfig = {
+  hasSlackWebhook: boolean;
+  maskedSlackWebhook: string | null;
+  alertEmail: string | null;
+  thresholds: {
+    budgetBurnPctRisk: number;
+    runwayDaysRisk: number;
+    agingWipRisk: number;
+    openBugsRisk: number;
+    syncFailedOpenRisk: number;
+    estimateCoveragePctWatch: number;
+    scheduleSlipDaysRisk: number;
+  };
+};
+
 type SettingsState = {
   hasToken: boolean;
   tokenSource: string;
@@ -16,6 +31,7 @@ type SettingsState = {
   maskedJiraToken: string | null;
   jiraBaseUrl: string | null;
   jiraEmail: string | null;
+  alerts?: AlertConfig;
 };
 
 export function SettingsForm({ authed }: { authed: boolean }) {
@@ -24,6 +40,11 @@ export function SettingsForm({ authed }: { authed: boolean }) {
   const [jiraBaseUrl, setJiraBaseUrl] = useState("");
   const [jiraEmail, setJiraEmail] = useState("");
   const [jiraApiToken, setJiraApiToken] = useState("");
+  const [slackWebhookUrl, setSlackWebhookUrl] = useState("");
+  const [alertEmail, setAlertEmail] = useState("");
+  const [burnRisk, setBurnRisk] = useState("90");
+  const [runwayRisk, setRunwayRisk] = useState("5");
+  const [syncFailRisk, setSyncFailRisk] = useState("5");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -43,6 +64,12 @@ export function SettingsForm({ authed }: { authed: boolean }) {
       setSettings(data);
       setJiraBaseUrl(data.jiraBaseUrl ?? "");
       setJiraEmail(data.jiraEmail ?? "");
+      setAlertEmail(data.alerts?.alertEmail ?? "");
+      if (data.alerts?.thresholds) {
+        setBurnRisk(String(data.alerts.thresholds.budgetBurnPctRisk));
+        setRunwayRisk(String(data.alerts.thresholds.runwayDaysRisk));
+        setSyncFailRisk(String(data.alerts.thresholds.syncFailedOpenRisk));
+      }
     });
   };
 
@@ -223,6 +250,129 @@ export function SettingsForm({ authed }: { authed: boolean }) {
             />
             <Button type="submit" disabled={pending} className="shrink-0">
               {pending ? "Saving…" : "Save Jira"}
+            </Button>
+          </div>
+        </form>
+      </Card>
+
+      <Card>
+        <CardTitle className="mb-2">Slack alerts</CardTitle>
+        <CardDescription className="mb-4">
+          Incoming webhook for risk exceptions and weekly digests. Cron hits{" "}
+          <code className="font-mono text-xs">GET /api/alerts/run</code> with{" "}
+          <code className="font-mono text-xs">Authorization: Bearer CRON_SECRET</code>
+          . Use <code className="font-mono text-xs">?weekly=1</code> for the
+          weekly digest and <code className="font-mono text-xs">?dryRun=1</code>{" "}
+          to preview without posting.
+        </CardDescription>
+        {settings?.alerts ? (
+          <dl className="mb-4 grid gap-2 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-muted">Webhook</dt>
+              <dd>
+                {settings.alerts.hasSlackWebhook
+                  ? settings.alerts.maskedSlackWebhook
+                  : "Not set"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted">Alert email (stored)</dt>
+              <dd>{settings.alerts.alertEmail ?? "—"}</dd>
+            </div>
+          </dl>
+        ) : null}
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            startTransition(async () => {
+              setMessage(null);
+              setError(null);
+              const res = await fetch("/api/settings", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  slackWebhookUrl: slackWebhookUrl || undefined,
+                  alertEmail: alertEmail || null,
+                  alertThresholds: {
+                    budgetBurnPctRisk: Number(burnRisk),
+                    runwayDaysRisk: Number(runwayRisk),
+                    syncFailedOpenRisk: Number(syncFailRisk),
+                  },
+                }),
+              });
+              if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                setError(data.error ?? "Save failed");
+                return;
+              }
+              setSlackWebhookUrl("");
+              setMessage("Alert settings saved");
+              load();
+            });
+          }}
+        >
+          <Input
+            type="url"
+            value={slackWebhookUrl}
+            onChange={(e) => setSlackWebhookUrl(e.target.value)}
+            placeholder={
+              settings?.alerts?.hasSlackWebhook
+                ? "Leave blank to keep current Slack webhook"
+                : "https://hooks.slack.com/services/..."
+            }
+          />
+          <Input
+            type="email"
+            value={alertEmail}
+            onChange={(e) => setAlertEmail(e.target.value)}
+            placeholder="Ops email (stored for future delivery)"
+          />
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Input
+              value={burnRisk}
+              onChange={(e) => setBurnRisk(e.target.value)}
+              placeholder="Burn % risk"
+              aria-label="Budget burn risk threshold"
+            />
+            <Input
+              value={runwayRisk}
+              onChange={(e) => setRunwayRisk(e.target.value)}
+              placeholder="Runway days risk"
+              aria-label="Runway days risk threshold"
+            />
+            <Input
+              value={syncFailRisk}
+              onChange={(e) => setSyncFailRisk(e.target.value)}
+              placeholder="Open sync failures risk"
+              aria-label="Sync failures risk threshold"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" disabled={pending}>
+              {pending ? "Saving…" : "Save alerts"}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => {
+                startTransition(async () => {
+                  setMessage(null);
+                  setError(null);
+                  const res = await fetch("/api/alerts/run?dryRun=1");
+                  const data = await res.json().catch(() => ({}));
+                  if (!res.ok) {
+                    setError(data.error ?? "Dry run failed");
+                    return;
+                  }
+                  setMessage(
+                    `Dry run: ${data.alerts?.length ?? 0} alerts\n${data.digestText ?? ""}`,
+                  );
+                });
+              }}
+            >
+              Dry-run alerts
             </Button>
           </div>
         </form>

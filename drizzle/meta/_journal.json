@@ -82,5 +82,12 @@
     "when": 1754160000000,
     "tag": "0011_user_github_settings",
     "breakpoints": true
+  },
+  {
+    "idx": 12,
+    "version": "7",
+    "when": 1754170000000,
+    "tag": "0012_em_hoe_features",
+    "breakpoints": true
   }
 ]

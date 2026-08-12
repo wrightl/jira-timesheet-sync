@@ -1198,6 +1198,10 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
                                 loading={metricsBusy}
                             />
                             <MetricCard
+                                metric={m.cycleTimeMedianDays}
+                                loading={metricsBusy}
+                            />
+                            <MetricCard
                                 metric={m.healthCheckScore}
                                 loading={metricsBusy}
                             />

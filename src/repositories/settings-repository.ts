@@ -63,4 +63,34 @@ export class SettingsRepository {
         set,
       });
   }
+
+  async upsertAlertSettings(data: {
+    slackWebhookUrlEncrypted?: string | null;
+    alertEmail?: string | null;
+    alertThresholdsJson?: string | null;
+  }): Promise<void> {
+    const now = new Date();
+    const set: Record<string, unknown> = { updatedAt: now };
+    if (data.slackWebhookUrlEncrypted !== undefined) {
+      set.slackWebhookUrlEncrypted = data.slackWebhookUrlEncrypted;
+    }
+    if (data.alertEmail !== undefined) set.alertEmail = data.alertEmail;
+    if (data.alertThresholdsJson !== undefined) {
+      set.alertThresholdsJson = data.alertThresholdsJson;
+    }
+
+    await this.db
+      .insert(settings)
+      .values({
+        id: "default",
+        slackWebhookUrlEncrypted: data.slackWebhookUrlEncrypted ?? null,
+        alertEmail: data.alertEmail ?? null,
+        alertThresholdsJson: data.alertThresholdsJson ?? null,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: settings.id,
+        set,
+      });
+  }
 }

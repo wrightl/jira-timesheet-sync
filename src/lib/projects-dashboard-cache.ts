@@ -134,6 +134,21 @@ export function readProjectsDashboardCache(): ProjectsDashboardSnapshot {
   };
 }
 
+/**
+ * After a project list loads, keep the prior selection when still valid.
+ * Used so a hydrated localStorage projectId survives until options arrive.
+ */
+export function resolveSelectedProjectId(
+  previousId: string,
+  projects: Array<{ id: string }>,
+): string {
+  if (projects.length === 1) return projects[0]?.id ?? "";
+  if (previousId && projects.some((p) => p.id === previousId)) {
+    return previousId;
+  }
+  return "";
+}
+
 export function setProjectsDashboardSelection(selection: {
   clientId?: string;
   projectId?: string;

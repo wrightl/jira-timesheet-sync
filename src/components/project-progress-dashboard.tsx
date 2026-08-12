@@ -34,6 +34,7 @@ import {
     invalidateCachedProjects,
     hydrateProjectsDashboardSelectionFromStorage,
     readProjectsDashboardCache,
+    resolveSelectedProjectId,
     setCachedClients,
     setCachedDashboard,
     setCachedProjects,
@@ -486,6 +487,8 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
     useEffect(() => {
         const stored = hydrateProjectsDashboardSelectionFromStorage();
         if (stored) {
+            // Intentional: hydrate from localStorage only after mount (SSR-safe).
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- post-mount localStorage hydrate
             setClientId(stored.clientId);
             setProjectId(stored.projectId);
             setProjectStatus(stored.projectStatus);
@@ -505,11 +508,7 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
             }),
         );
         setProjects(sorted);
-        setProjectId((prev) => {
-            if (sorted.length === 1) return sorted[0]?.id ?? '';
-            if (prev && sorted.some((p) => p.id === prev)) return prev;
-            return '';
-        });
+        setProjectId((prev) => resolveSelectedProjectId(prev, sorted));
     }, []);
 
     useEffect(() => {
@@ -559,7 +558,11 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
         };
     }, [authed]);
 
+    // Wait for localStorage hydrate before loading projects. Otherwise the
+    // first mount run sees empty clientId and clears the restored projectId.
     useEffect(() => {
+        if (!selectionReady) return;
+
         let cancelled = false;
 
         void (async () => {
@@ -604,7 +607,7 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
         return () => {
             cancelled = true;
         };
-    }, [clientId, projectStatus, applyProjects]);
+    }, [selectionReady, clientId, projectStatus, applyProjects]);
 
     const reloadLists = useCallback(() => {
         const selectedClientId = clientId;

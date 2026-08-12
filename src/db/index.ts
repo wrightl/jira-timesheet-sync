@@ -1,7 +1,16 @@
-import { neon } from "@neondatabase/serverless";
+import { neon, neonConfig } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { requireDatabaseUrl } from "@/lib/env";
 import * as schema from "./schema";
+
+// Local development only: route the Neon HTTP driver at a local proxy
+// (see scripts/neon-local-proxy.mjs) so the app can run against a plain
+// Postgres instance without a Neon Cloud account. Unset in production, where
+// the driver talks to Neon directly.
+const localFetchEndpoint = process.env.NEON_LOCAL_FETCH_ENDPOINT;
+if (localFetchEndpoint) {
+  neonConfig.fetchEndpoint = localFetchEndpoint;
+}
 
 function createDb() {
   const sql = neon(requireDatabaseUrl());

@@ -96,18 +96,23 @@ function writeStoredSelection(): void {
   }
 }
 
-function hydrateSelectionFromStorage(): void {
-  if (hydratedFromStorage) return;
+/**
+ * Apply persisted selection into module memory.
+ * Call from a client useEffect after mount — never during render — so SSR
+ * HTML stays aligned with the first client paint.
+ */
+export function hydrateProjectsDashboardSelectionFromStorage(): StoredSelection | null {
+  if (hydratedFromStorage) return null;
   hydratedFromStorage = true;
   const stored = readStoredSelection();
-  if (!stored) return;
+  if (!stored) return null;
   memory.clientId = stored.clientId;
   memory.projectId = stored.projectId;
   memory.projectStatus = stored.projectStatus;
+  return stored;
 }
 
 export function readProjectsDashboardCache(): ProjectsDashboardSnapshot {
-  hydrateSelectionFromStorage();
   const { clientId, projectId, projectStatus } = memory;
   const key = clientId ? projectsKey(clientId, projectStatus) : "";
   const projects =
@@ -134,7 +139,6 @@ export function setProjectsDashboardSelection(selection: {
   projectId?: string;
   projectStatus?: ProjectListStatus;
 }): void {
-  hydrateSelectionFromStorage();
   if (selection.clientId !== undefined) {
     memory.clientId = selection.clientId;
   }

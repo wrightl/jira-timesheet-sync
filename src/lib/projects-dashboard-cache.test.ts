@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   PROJECTS_DASHBOARD_SELECTION_KEY,
+  hydrateProjectsDashboardSelectionFromStorage,
   readProjectsDashboardCache,
   resetProjectsDashboardCacheForTests,
   setProjectsDashboardSelection,
@@ -60,7 +61,23 @@ describe("projects-dashboard-cache selection persistence", () => {
     });
   });
 
-  it("restores selection from localStorage after a cache reset (reload)", () => {
+  it("does not read localStorage during cache snapshot (SSR-safe)", () => {
+    localStorage.setItem(
+      PROJECTS_DASHBOARD_SELECTION_KEY,
+      JSON.stringify({
+        clientId: "client-2",
+        projectId: "project-3",
+        projectStatus: "upcoming",
+      }),
+    );
+
+    const snapshot = readProjectsDashboardCache();
+    expect(snapshot.clientId).toBe("");
+    expect(snapshot.projectId).toBe("");
+    expect(snapshot.projectStatus).toBe("active");
+  });
+
+  it("restores selection from localStorage after hydrate (reload)", () => {
     setProjectsDashboardSelection({
       clientId: "client-2",
       projectId: "project-3",
@@ -68,6 +85,13 @@ describe("projects-dashboard-cache selection persistence", () => {
     });
 
     resetProjectsDashboardCacheForTests();
+
+    const stored = hydrateProjectsDashboardSelectionFromStorage();
+    expect(stored).toEqual({
+      clientId: "client-2",
+      projectId: "project-3",
+      projectStatus: "upcoming",
+    });
 
     const snapshot = readProjectsDashboardCache();
     expect(snapshot.clientId).toBe("client-2");
@@ -85,6 +109,7 @@ describe("projects-dashboard-cache selection persistence", () => {
       }),
     );
 
+    hydrateProjectsDashboardSelectionFromStorage();
     const snapshot = readProjectsDashboardCache();
     expect(snapshot.clientId).toBe("client-1");
     expect(snapshot.projectId).toBe("project-1");
@@ -94,6 +119,7 @@ describe("projects-dashboard-cache selection persistence", () => {
   it("ignores corrupt localStorage JSON", () => {
     localStorage.setItem(PROJECTS_DASHBOARD_SELECTION_KEY, "{not-json");
 
+    hydrateProjectsDashboardSelectionFromStorage();
     const snapshot = readProjectsDashboardCache();
     expect(snapshot.clientId).toBe("");
     expect(snapshot.projectId).toBe("");

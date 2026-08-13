@@ -23,7 +23,7 @@ cp .env.example .env.local
 # ADMIN_EMAIL, ADMIN_PASSWORD
 
 npm install
-npm run db:push   # or npm run db:migrate against Neon
+npm run db:push   # sync schema to Neon / local Postgres (preferred)
 npm run db:seed   # creates/updates the admin user
 npm run dev
 ```
@@ -157,6 +157,10 @@ Local tip: leave `LOG_LEVEL` unset (or set `debug`) while using `npm run dev` / 
 | `GET` | `/api/syncs` | Session (admins see all; users see own) |
 | `POST` | `/api/syncs?action=retry&id=` | Session (admin or owner) |
 | `GET` | `/api/health` | None |
+
+## Schema sync
+
+This app applies schema with **`drizzle-kit push`** (see `npm run db:push` and Cloud Agent `scripts/cloud/start.sh`). Vercel builds run the same via `scripts/migrate-on-build.mjs`. Do not use `drizzle-kit migrate` against the existing Neon database unless you have baselined a `__drizzle_migrations` journal — replaying from `0000_init` fails when tables already exist.
 
 ## Project progress dashboard
 

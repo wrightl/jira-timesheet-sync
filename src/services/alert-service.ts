@@ -5,6 +5,10 @@ import {
   type AlertThresholds,
 } from "@/lib/alert-thresholds";
 import { decryptSecret, encryptSecret, maskToken } from "@/lib/crypto";
+import {
+  isEmailDigestConfigured,
+  sendAlertEmailDigest,
+} from "@/lib/email-digest";
 import { getEnv } from "@/lib/env";
 import { log } from "@/lib/log";
 import { isAllowedSlackWebhookUrl } from "@/lib/outbound-urls";
@@ -30,6 +34,8 @@ export type AlertRunResult = {
   alerts: AlertItem[];
   slackDelivered: boolean;
   slackError: string | null;
+  emailDelivered: boolean;
+  emailError: string | null;
   digestText: string;
 };
 
@@ -52,6 +58,7 @@ export class AlertService {
     maskedSlackWebhook: string | null;
     alertEmail: string | null;
     thresholds: AlertThresholds;
+    emailDeliveryConfigured: boolean;
   }> {
     const env = getEnv();
     const row = await this.settingsRepo.getDefault();
@@ -69,6 +76,7 @@ export class AlertService {
       maskedSlackWebhook: webhook ? maskToken(webhook) : null,
       alertEmail: nonEmpty(row?.alertEmail),
       thresholds: parseAlertThresholds(row?.alertThresholdsJson),
+      emailDeliveryConfigured: isEmailDigestConfigured(),
     };
   }
 
@@ -113,10 +121,17 @@ export class AlertService {
   async evaluate(options?: {
     deliver?: boolean;
     weeklyDigest?: boolean;
+    /** Scope portfolio alerts to teams owned by this app user. */
+    mineForUserId?: string | null;
+    teamId?: string | null;
   }): Promise<AlertRunResult> {
     const config = await this.getAlertConfig();
     const thresholds = config.thresholds;
-    const portfolio = await this.portfolio.getPortfolio({ thresholds });
+    const portfolio = await this.portfolio.getPortfolio({
+      thresholds,
+      mineForUserId: options?.mineForUserId ?? null,
+      teamId: options?.teamId ?? null,
+    });
     const alerts: AlertItem[] = [];
 
     if (portfolio.syncFailedOpen >= thresholds.syncFailedOpenRisk) {
@@ -137,13 +152,21 @@ export class AlertService {
 
     for (const project of portfolio.projects) {
       if (project.riskTier !== "risk" && project.riskTier !== "watch") continue;
+      const owners =
+        project.owningTeamNames?.length > 0
+          ? ` · owned by ${project.owningTeamNames.join(", ")}`
+          : "";
       alerts.push({
         severity: project.riskTier,
         title: project.projectName ?? project.projectKey ?? project.projectId,
         detail:
-          project.riskReasons.join("; ") ||
-          `${project.riskTier} project in portfolio`,
-        href: `/projects?projectId=${encodeURIComponent(project.projectId)}`,
+          (project.riskReasons.join("; ") ||
+            `${project.riskTier} project in portfolio`) + owners,
+        href: `/projects?projectId=${encodeURIComponent(project.projectId)}${
+          project.clientId
+            ? `&clientId=${encodeURIComponent(project.clientId)}`
+            : ""
+        }`,
       });
     }
 
@@ -160,13 +183,40 @@ export class AlertService {
 
     let slackDelivered = false;
     let slackError: string | null = null;
-    if (options?.deliver !== false && config.hasSlackWebhook) {
-      try {
-        await this.deliverSlack(digestText);
-        slackDelivered = true;
-      } catch (err) {
-        slackError = err instanceof Error ? err.message : String(err);
-        log.warn("alerts", "Slack delivery failed", { error: slackError });
+    let emailDelivered = false;
+    let emailError: string | null = null;
+
+    if (options?.deliver !== false) {
+      if (config.hasSlackWebhook) {
+        try {
+          await this.deliverSlack(digestText);
+          slackDelivered = true;
+        } catch (err) {
+          slackError = err instanceof Error ? err.message : String(err);
+          log.warn("alerts", "Slack delivery failed", { error: slackError });
+        }
+      }
+
+      if (config.alertEmail) {
+        if (!config.emailDeliveryConfigured) {
+          emailError =
+            "RESEND_API_KEY and EMAIL_FROM are required to deliver alert email";
+        } else {
+          try {
+            await sendAlertEmailDigest({
+              to: config.alertEmail,
+              subject: options?.weeklyDigest
+                ? "Weekly engineering digest"
+                : "Engineering risk alerts",
+              digestText,
+              fetchImpl: this.fetchImpl,
+            });
+            emailDelivered = true;
+          } catch (err) {
+            emailError = err instanceof Error ? err.message : String(err);
+            log.warn("alerts", "Email delivery failed", { error: emailError });
+          }
+        }
       }
     }
 
@@ -175,6 +225,8 @@ export class AlertService {
       alerts,
       slackDelivered,
       slackError,
+      emailDelivered,
+      emailError,
       digestText,
     };
   }
@@ -226,7 +278,9 @@ export class AlertService {
     }
     const webhook = decryptSecret(row.slackWebhookUrlEncrypted, key);
     if (!isAllowedSlackWebhookUrl(webhook)) {
-      throw new Error("Slack webhook URL is not an allowed https://hooks.slack.com endpoint");
+      throw new Error(
+        "Slack webhook URL is not an allowed https://hooks.slack.com endpoint",
+      );
     }
     const res = await this.fetchImpl(webhook, {
       method: "POST",

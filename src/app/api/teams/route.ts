@@ -10,16 +10,19 @@ export async function GET(request: NextRequest) {
   if (auth.error) return auth.error;
 
   const repo = new TeamsRepository(getDb());
-  const [teams, members] = await Promise.all([
+  const [teams, members, ownerships] = await Promise.all([
     repo.listTeams(),
     repo.listMembers(),
+    repo.listOwnershipsWithTeamNames(),
   ]);
   return Response.json({
     teams: teams.map((team) => ({
       ...team,
       memberCount: members.filter((m) => m.teamId === team.id).length,
+      ownershipCount: ownerships.filter((o) => o.teamId === team.id).length,
     })),
     members,
+    ownerships,
   });
 }
 

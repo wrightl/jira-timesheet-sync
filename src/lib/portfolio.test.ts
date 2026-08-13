@@ -18,11 +18,17 @@ function row(
     clientId: "c1",
     clientName: "Acme",
     ownerName: "Lee",
+    owningTeamIds: [],
+    owningTeamNames: [],
     state: "active",
     budgetBurnPct: 10,
     billableRemainingHours: 20,
     runwayDays: 12,
     scheduleSlipDays: 0,
+    remainingEngWeeks: null,
+    staffingGapEngWeeks: null,
+    staffingAsk: null,
+    forecastConfidence: "unavailable",
     unhealthyChecks: 0,
     healthy: true,
     riskTier: "ok",
@@ -79,6 +85,35 @@ describe("filterPortfolioResult", () => {
   it("filters owner case-insensitively", () => {
     const filtered = filterPortfolioResult(full, { owner: "sam" });
     expect(filtered.projects.map((p) => p.projectId)).toEqual(["b"]);
+  });
+
+  it("filters by owning team", () => {
+    const withTeams = result([
+      row({
+        projectId: "a",
+        owningTeamIds: ["t1"],
+        owningTeamNames: ["Alpha"],
+      }),
+      row({
+        projectId: "b",
+        owningTeamIds: ["t2"],
+        owningTeamNames: ["Beta"],
+      }),
+    ]);
+    const filtered = filterPortfolioResult(withTeams, { teamId: "t2" });
+    expect(filtered.projects.map((p) => p.projectId)).toEqual(["b"]);
+  });
+
+  it("filters by teamIds (my risk)", () => {
+    const withTeams = result([
+      row({ projectId: "a", owningTeamIds: ["t1"] }),
+      row({ projectId: "b", owningTeamIds: ["t2"] }),
+      row({ projectId: "c", owningTeamIds: ["t1", "t3"] }),
+    ]);
+    const filtered = filterPortfolioResult(withTeams, {
+      teamIds: ["t1"],
+    });
+    expect(filtered.projects.map((p) => p.projectId)).toEqual(["a", "c"]);
   });
 
   it("treats all as no-op for client and risk", () => {

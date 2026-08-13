@@ -78,6 +78,15 @@ If a mapped project/budget is inactive, the sync **fails** (no silent fallback).
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth SSO |
 | `GOOGLE_ALLOWED_DOMAIN` | Hosted-domain restriction. **Required in production** when Google OAuth is configured (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `APP_BASE_URL`). Optional in local/test/dev. |
 | `GOOGLE_DEFAULT_ROLE` | `user` (default) or `exec` for new Google accounts |
+| `RESEND_API_KEY` | Resend API key for alert email digests (optional) |
+| `EMAIL_FROM` | From address for Resend (e.g. `alerts@yourdomain.com`) |
+
+### Production verify (after deploy)
+
+1. Confirm schema sync via build (`scripts/migrate-on-build.mjs` / `drizzle-kit push`).
+2. Set Slack webhook + thresholds in **Settings**; set `CRON_SECRET` for `/api/alerts/run` and `/api/alerts/weekly`.
+3. Optionally set `GOOGLE_*` + `APP_BASE_URL` for SSO, and `RESEND_API_KEY` + `EMAIL_FROM` plus an alert email in Settings.
+4. As admin, call `GET /api/ops/readiness` and clear any `missing` checks.
 
 Bitmap token resolution: encrypted token in Settings (DB) first; if unset, `INTERNAL_PM_ACCESS_TOKEN` is used as bootstrap. Once a token is saved in Settings, the DB value is the source of truth.
 
@@ -173,7 +182,8 @@ Authenticated users can open **Projects** (`/projects`) to inspect budget burn, 
 - **Utilisation** (`/utilisation`) — billable hours from Bitmap timesheets vs Bitmap `billable_target_hours`; optional **Teams** (`/teams`, admin)
 - **Status pack** (`/status`) — one-click weekly Markdown narrative for a project
 - **GitHub** — review lag, stale PRs, merge rate, WIP by author (in addition to open/draft counts)
-- **Slack alerts** — configure webhook + thresholds under **Settings**; cron `GET /api/alerts/run` (Bearer `CRON_SECRET`), `?weekly=1` for Monday digest
+- **Slack / email alerts** — configure webhook + alert email under **Settings**; cron `GET /api/alerts/run` (Bearer `CRON_SECRET`), `?weekly=1` for Monday digest. Email uses Resend when `RESEND_API_KEY` + `EMAIL_FROM` are set.
+- **Portfolio forecast** — staffing ask / eng-week gap on `/portfolio` and project dashboards; team ownership scopes “my risk” filters.
 - **Google SSO** — set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `APP_BASE_URL`, and `GOOGLE_ALLOWED_DOMAIN` (required in production). `GOOGLE_DEFAULT_ROLE=exec|user` is optional. Google will not link onto a password account that has already been claimed (`mustSetPassword` false).
 - **Exec role** — read-focused portfolio/utilisation/status access without sync-admin tools
 

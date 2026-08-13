@@ -9,14 +9,6 @@ import { Input } from '@/components/ui/input';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { Select } from '@/components/ui/select';
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeaderCell,
-    TableRow,
-} from '@/components/ui/table';
-import {
     filterPortfolioResult,
     type PortfolioResult,
     type PortfolioRiskTier,
@@ -32,6 +24,10 @@ import {
     type PortfolioDashboardRiskFilter,
 } from '@/lib/portfolio-dashboard-cache';
 
+type PortfolioApiResult = PortfolioResult & {
+    teams?: Array<{ id: string; name: string }>;
+};
+
 function riskBadge(
     tier: PortfolioRiskTier,
 ): 'ok' | 'warning' | 'danger' | 'muted' {
@@ -43,7 +39,7 @@ function riskBadge(
 
 export function PortfolioDashboard({ authed }: { authed: boolean }) {
     const initial = readPortfolioDashboardCache();
-    const [data, setData] = useState<PortfolioResult | null>(
+    const [data, setData] = useState<PortfolioApiResult | null>(
         () => initial.data,
     );
     const [error, setError] = useState<string | null>(null);
@@ -55,43 +51,52 @@ export function PortfolioDashboard({ authed }: { authed: boolean }) {
         () => initial.riskFilter,
     );
     const [ownerFilter, setOwnerFilter] = useState(() => initial.ownerFilter);
+    const [teamFilter, setTeamFilter] = useState('all');
+    const [mineOnly, setMineOnly] = useState(false);
     const [selectionReady, setSelectionReady] = useState(false);
 
-    const load = useCallback(async (options?: { refresh?: boolean }) => {
-        if (!options?.refresh) {
-            const cached = getCachedPortfolio();
-            if (cached) {
-                setData(cached);
-                return;
+    const load = useCallback(
+        async (options?: { refresh?: boolean; mine?: boolean }) => {
+            const useMine = options?.mine ?? mineOnly;
+            if (!options?.refresh && !useMine) {
+                const cached = getCachedPortfolio();
+                if (cached) {
+                    setData(cached);
+                    return;
+                }
             }
-        }
 
-        setPending(true);
-        setError(null);
-        if (options?.refresh) invalidateCachedPortfolio();
-        try {
-            const res = await fetch('/api/portfolio');
-            if (!res.ok) {
+            setPending(true);
+            setError(null);
+            if (options?.refresh) invalidateCachedPortfolio();
+            try {
+                const qs = useMine ? '?mine=1' : '';
+                const res = await fetch(`/api/portfolio${qs}`);
+                if (!res.ok) {
+                    setError(
+                        res.status === 401
+                            ? 'Sign in required'
+                            : 'Failed to load portfolio',
+                    );
+                    if (options?.refresh) setData(null);
+                    return;
+                }
+                const next = (await res.json()) as PortfolioApiResult;
+                if (!useMine) setCachedPortfolio(next);
+                setData(next);
+            } catch (err) {
                 setError(
-                    res.status === 401
-                        ? 'Sign in required'
+                    err instanceof Error
+                        ? err.message
                         : 'Failed to load portfolio',
                 );
                 if (options?.refresh) setData(null);
-                return;
+            } finally {
+                setPending(false);
             }
-            const next = (await res.json()) as PortfolioResult;
-            setCachedPortfolio(next);
-            setData(next);
-        } catch (err) {
-            setError(
-                err instanceof Error ? err.message : 'Failed to load portfolio',
-            );
-            if (options?.refresh) setData(null);
-        } finally {
-            setPending(false);
-        }
-    }, []);
+        },
+        [mineOnly],
+    );
 
     useEffect(() => {
         const stored = hydratePortfolioDashboardSelectionFromStorage();
@@ -121,13 +126,13 @@ export function PortfolioDashboard({ authed }: { authed: boolean }) {
         void (async () => {
             await Promise.resolve();
             if (cancelled) return;
-            await load();
+            await load({ mine: mineOnly });
         })();
 
         return () => {
             cancelled = true;
         };
-    }, [authed, selectionReady, load]);
+    }, [authed, selectionReady, load, mineOnly]);
 
     const clients = useMemo(() => {
         const map = new Map<string, string>();
@@ -137,6 +142,8 @@ export function PortfolioDashboard({ authed }: { authed: boolean }) {
         return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
     }, [data]);
 
+    const teams = data?.teams ?? [];
+
     const view = useMemo(
         () =>
             data
@@ -144,9 +151,10 @@ export function PortfolioDashboard({ authed }: { authed: boolean }) {
                       clientId: clientFilter,
                       riskTier: riskFilter,
                       owner: ownerFilter,
+                      teamId: teamFilter,
                   })
                 : null,
-        [data, clientFilter, riskFilter, ownerFilter],
+        [data, clientFilter, riskFilter, ownerFilter, teamFilter],
     );
 
     if (!authed) {
@@ -160,7 +168,7 @@ export function PortfolioDashboard({ authed }: { authed: boolean }) {
     return (
         <div className="space-y-6">
             <div className="flex flex-wrap items-end justify-between gap-3">
-                <div className="grid flex-1 gap-3 sm:grid-cols-3">
+                <div className="grid flex-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                     <label className="block text-sm">
                         <span className="mb-1 block text-muted">Client</span>
                         <Select
@@ -193,21 +201,45 @@ export function PortfolioDashboard({ authed }: { authed: boolean }) {
                         </Select>
                     </label>
                     <label className="block text-sm">
-                        <span className="mb-1 block text-muted">Owner</span>
-                        <div className="flex gap-2">
-                            <Input
-                                value={ownerFilter}
-                                onChange={(e) => setOwnerFilter(e.target.value)}
-                                placeholder="Filter by owner"
-                            />
-                            <RefreshButton
-                                pending={pending}
-                                onClick={() => void load({ refresh: true })}
-                                title="Reload portfolio"
-                                aria-label="Reload portfolio from Bitmap"
-                            />
-                        </div>
+                        <span className="mb-1 block text-muted">Team</span>
+                        <Select
+                            value={teamFilter}
+                            onChange={(e) => setTeamFilter(e.target.value)}
+                        >
+                            <option value="all">All teams</option>
+                            {teams.map((team) => (
+                                <option key={team.id} value={team.id}>
+                                    {team.name}
+                                </option>
+                            ))}
+                        </Select>
                     </label>
+                    <label className="block text-sm">
+                        <span className="mb-1 block text-muted">Owner</span>
+                        <Input
+                            value={ownerFilter}
+                            onChange={(e) => setOwnerFilter(e.target.value)}
+                            placeholder="Filter by owner"
+                        />
+                    </label>
+                    <div className="flex flex-wrap items-end gap-2">
+                        <label className="flex items-center gap-2 pb-2 text-sm">
+                            <input
+                                type="checkbox"
+                                checked={mineOnly}
+                                onChange={(e) => setMineOnly(e.target.checked)}
+                            />
+                            <span className="text-muted">My risk</span>
+                        </label>
+                        <RefreshButton
+                            pending={pending}
+                            onClick={() =>
+                                void load({ refresh: true, mine: mineOnly })
+                            }
+                            title="Reload portfolio"
+                            aria-label="Reload portfolio from Bitmap"
+                        />
+                    </div>
                 </div>
             </div>
 
@@ -262,8 +294,8 @@ export function PortfolioDashboard({ authed }: { authed: boolean }) {
                 <CardTitle className="mb-1">Portfolio projects</CardTitle>
                 <CardDescription className="mb-4">
                     Cross-client health from Bitmap active projects whose start
-                    and end dates include today. Open a row for detail or weekly
-                    status.
+                    and end dates include today, including staffing ask vs end
+                    date. Open a row for detail or weekly status.
                 </CardDescription>
                 {!view || view.projects.length === 0 ? (
                     <p className="text-sm text-muted">
@@ -272,78 +304,112 @@ export function PortfolioDashboard({ authed }: { authed: boolean }) {
                             : 'No projects match the current filters.'}
                     </p>
                 ) : (
-                    <Table>
-                        <TableHead>
-                            <TableRow>
-                                <TableHeaderCell>Project</TableHeaderCell>
-                                <TableHeaderCell>Client</TableHeaderCell>
-                                <TableHeaderCell>Owner</TableHeaderCell>
-                                <TableHeaderCell>Burn</TableHeaderCell>
-                                <TableHeaderCell>Runway</TableHeaderCell>
-                                <TableHeaderCell>Risk</TableHeaderCell>
-                                <TableHeaderCell>Actions</TableHeaderCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {view.projects.map((project) => (
-                                <TableRow key={project.projectId}>
-                                    <TableCell>
-                                        <div className="flex flex-col">
-                                            <span className="font-medium">
-                                                {project.projectName ??
-                                                    project.projectKey ??
-                                                    project.projectId}
-                                            </span>
-                                            <span className="text-xs text-muted">
-                                                {project.projectKey}
-                                            </span>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>
-                                        {project.clientName ?? '—'}
-                                    </TableCell>
-                                    <TableCell>
-                                        {project.ownerName ?? '—'}
-                                    </TableCell>
-                                    <TableCell className="font-mono text-xs">
-                                        {project.budgetBurnPct != null
-                                            ? `${project.budgetBurnPct}%`
-                                            : '—'}
-                                    </TableCell>
-                                    <TableCell className="font-mono text-xs">
-                                        {project.runwayDays != null
-                                            ? `${project.runwayDays}d`
-                                            : '—'}
-                                    </TableCell>
-                                    <TableCell>
-                                        <Badge
-                                            variant={riskBadge(project.riskTier)}
-                                        >
-                                            {project.riskTier}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="flex flex-wrap gap-2 text-sm">
-                                            <Link
-                                                href={`/projects`}
-                                                className="text-accent underline-offset-2 hover:underline"
-                                            >
-                                                Detail
-                                            </Link>
-                                            <Link
-                                                href={`/status?projectId=${encodeURIComponent(project.projectId)}`}
-                                                className="text-accent underline-offset-2 hover:underline"
-                                            >
-                                                Status
-                                            </Link>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
+                    <TablePortfolio projects={view.projects} />
                 )}
             </Card>
         </div>
+    );
+}
+
+function TablePortfolio({
+    projects,
+}: {
+    projects: PortfolioResult['projects'];
+}) {
+    return (
+        <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+            <thead>
+                <tr className="border-b border-border text-muted">
+                    <th className="px-2 py-2 font-medium">Project</th>
+                    <th className="px-2 py-2 font-medium">Client</th>
+                    <th className="px-2 py-2 font-medium">Owner / team</th>
+                    <th className="px-2 py-2 font-medium">Burn</th>
+                    <th className="px-2 py-2 font-medium">Runway</th>
+                    <th className="px-2 py-2 font-medium">Staffing ask</th>
+                    <th className="px-2 py-2 font-medium">Risk</th>
+                    <th className="px-2 py-2 font-medium">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {projects.map((project) => (
+                    <tr
+                        key={project.projectId}
+                        className="border-b border-border/60 align-top"
+                    >
+                        <td className="px-2 py-3">
+                            <div className="flex flex-col">
+                                <span className="font-medium">
+                                    {project.projectName ??
+                                        project.projectKey ??
+                                        project.projectId}
+                                </span>
+                                <span className="text-xs text-muted">
+                                    {project.projectKey}
+                                </span>
+                            </div>
+                        </td>
+                        <td className="px-2 py-3">
+                            {project.clientName ?? '—'}
+                        </td>
+                        <td className="px-2 py-3">
+                            <div className="flex flex-col gap-0.5">
+                                <span>{project.ownerName ?? '—'}</span>
+                                {project.owningTeamNames?.length ? (
+                                    <span className="text-xs text-muted">
+                                        {project.owningTeamNames.join(', ')}
+                                    </span>
+                                ) : null}
+                            </div>
+                        </td>
+                        <td className="px-2 py-3 font-mono text-xs">
+                            {project.budgetBurnPct != null
+                                ? `${project.budgetBurnPct}%`
+                                : '—'}
+                        </td>
+                        <td className="px-2 py-3 font-mono text-xs">
+                            {project.runwayDays != null
+                                ? `${project.runwayDays}d`
+                                : '—'}
+                        </td>
+                        <td className="px-2 py-3 text-xs">
+                            <div className="flex flex-col gap-0.5">
+                                <span>{project.staffingAsk ?? '—'}</span>
+                                {project.forecastConfidence &&
+                                project.forecastConfidence !== 'unavailable' ? (
+                                    <span className="text-muted">
+                                        conf. {project.forecastConfidence}
+                                    </span>
+                                ) : null}
+                            </div>
+                        </td>
+                        <td className="px-2 py-3">
+                            <Badge variant={riskBadge(project.riskTier)}>
+                                {project.riskTier}
+                            </Badge>
+                        </td>
+                        <td className="px-2 py-3">
+                            <div className="flex flex-wrap gap-2 text-sm">
+                                <Link
+                                    href={`/projects?projectId=${encodeURIComponent(project.projectId)}${
+                                        project.clientId
+                                            ? `&clientId=${encodeURIComponent(project.clientId)}`
+                                            : ''
+                                    }`}
+                                    className="text-accent underline-offset-2 hover:underline"
+                                >
+                                    Detail
+                                </Link>
+                                <Link
+                                    href={`/status?projectId=${encodeURIComponent(project.projectId)}`}
+                                    className="text-accent underline-offset-2 hover:underline"
+                                >
+                                    Status
+                                </Link>
+                            </div>
+                        </td>
+                    </tr>
+                ))}
+            </tbody>
+        </table>
     );
 }

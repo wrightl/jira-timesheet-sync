@@ -488,13 +488,20 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
     // Restore localStorage after mount so SSR and the first client paint match.
     useEffect(() => {
         const stored = hydrateProjectsDashboardSelectionFromStorage();
-        if (stored) {
-            // Intentional: hydrate from localStorage only after mount (SSR-safe).
-            // eslint-disable-next-line react-hooks/set-state-in-effect -- post-mount localStorage hydrate
-            setClientId(stored.clientId);
-            setProjectId(stored.projectId);
-            setProjectStatus(stored.projectStatus);
-            restoredProjectIdRef.current = stored.projectId || null;
+        const params =
+            typeof window !== 'undefined'
+                ? new URLSearchParams(window.location.search)
+                : null;
+        const urlProjectId = params?.get('projectId');
+        const urlClientId = params?.get('clientId');
+        if (stored || urlProjectId || urlClientId) {
+            // Intentional: hydrate from localStorage/URL only after mount (SSR-safe).
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- post-mount hydrate
+            setClientId(urlClientId || stored?.clientId || '');
+            if (stored) setProjectStatus(stored.projectStatus);
+            const preferred = urlProjectId || stored?.projectId || '';
+            setProjectId(preferred);
+            restoredProjectIdRef.current = preferred || null;
         }
         setSelectionReady(true);
     }, []);
@@ -1066,6 +1073,22 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
                             />
                             <MetricCard
                                 metric={m.remainingHoursSlip}
+                                loading={metricsBusy}
+                            />
+                            <MetricCard
+                                metric={m.staffingAsk}
+                                loading={metricsBusy}
+                            />
+                            <MetricCard
+                                metric={m.remainingEngWeeks}
+                                loading={metricsBusy}
+                            />
+                            <MetricCard
+                                metric={m.staffingGapEngWeeks}
+                                loading={metricsBusy}
+                            />
+                            <MetricCard
+                                metric={m.forecastConfidence}
                                 loading={metricsBusy}
                             />
                         </div>

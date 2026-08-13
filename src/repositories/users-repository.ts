@@ -11,6 +11,20 @@ export type PublicUser = Pick<
   "id" | "email" | "role" | "syncEnabled" | "createdAt" | "updatedAt"
 >;
 
+/** Columns that exist before migration 0012 (oauth_*). Safe for login. */
+const authUserColumns = {
+  id: users.id,
+  email: users.email,
+  passwordHash: users.passwordHash,
+  role: users.role,
+  mustSetPassword: users.mustSetPassword,
+  syncEnabled: users.syncEnabled,
+  githubTokenEncrypted: users.githubTokenEncrypted,
+  githubOrg: users.githubOrg,
+  createdAt: users.createdAt,
+  updatedAt: users.updatedAt,
+};
+
 const publicUserColumns = {
   id: users.id,
   email: users.email,
@@ -20,25 +34,50 @@ const publicUserColumns = {
   updatedAt: users.updatedAt,
 };
 
+function asAppUser(row: {
+  id: string;
+  email: string;
+  passwordHash: string;
+  role: AppUser["role"];
+  mustSetPassword: boolean;
+  syncEnabled: boolean;
+  githubTokenEncrypted: string | null;
+  githubOrg: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): AppUser {
+  return {
+    ...row,
+    oauthProvider: null,
+    oauthSubject: null,
+  };
+}
+
 export class UsersRepository {
   constructor(private readonly db: Db) {}
 
+  /**
+   * Auth lookup that avoids selecting oauth_* columns so login still works
+   * if migration 0012 has not been applied yet on the deployment database.
+   */
   async findByEmail(email: string): Promise<AppUser | null> {
     const rows = await this.db
-      .select()
+      .select(authUserColumns)
       .from(users)
       .where(eq(users.email, email))
       .limit(1);
-    return rows[0] ?? null;
+    const row = rows[0];
+    return row ? asAppUser(row) : null;
   }
 
   async findById(id: string): Promise<AppUser | null> {
     const rows = await this.db
-      .select()
+      .select(authUserColumns)
       .from(users)
       .where(eq(users.id, id))
       .limit(1);
-    return rows[0] ?? null;
+    const row = rows[0];
+    return row ? asAppUser(row) : null;
   }
 
   async findByOAuth(
@@ -83,8 +122,12 @@ export class UsersRepository {
   }
 
   async createFull(values: NewAppUser): Promise<AppUser> {
-    const [row] = await this.db.insert(users).values(values).returning();
-    return row;
+    // Prefer returning auth columns only so seed/create still works pre-0012.
+    const [row] = await this.db
+      .insert(users)
+      .values(values)
+      .returning(authUserColumns);
+    return asAppUser(row);
   }
 
   async isSyncEnabled(id: string): Promise<boolean | null> {

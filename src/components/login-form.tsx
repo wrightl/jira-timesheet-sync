@@ -10,6 +10,23 @@ import { Card } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 
+function readErrorMessage(data: unknown): string {
+  if (!data || typeof data !== "object") return "Login failed";
+  const record = data as Record<string, unknown>;
+  const error = record.error;
+  if (typeof error === "string" && error.trim()) return error;
+  if (error && typeof error === "object") {
+    const nested = error as Record<string, unknown>;
+    if (typeof nested.message === "string" && nested.message.trim()) {
+      return nested.message;
+    }
+  }
+  if (typeof record.message === "string" && record.message.trim()) {
+    return record.message;
+  }
+  return "Login failed";
+}
+
 export function LoginForm({
   googleEnabled = false,
 }: {
@@ -28,18 +45,28 @@ export function LoginForm({
           e.preventDefault();
           setError(null);
           startTransition(async () => {
-            const res = await fetch("/api/auth/login", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ email, password }),
-            });
-            if (!res.ok) {
-              const data = await res.json().catch(() => ({}));
-              setError(data.error ?? "Login failed");
-              return;
+            try {
+              const res = await fetch("/api/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "same-origin",
+                body: JSON.stringify({ email, password }),
+              });
+              const data: unknown = await res.json().catch(() => null);
+              if (!res.ok) {
+                const message = readErrorMessage(data);
+                setError(
+                  message === "Protected deployment"
+                    ? "This preview is protected. Open the site while signed into Vercel, then try again."
+                    : message,
+                );
+                return;
+              }
+              router.push("/");
+              router.refresh();
+            } catch {
+              setError("Login failed");
             }
-            router.push("/");
-            router.refresh();
           });
         }}
       >

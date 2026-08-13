@@ -76,7 +76,7 @@ export function GithubDashboard({ authed }: { authed: boolean }) {
         <div className="text-sm text-muted">
           {data?.org ? (
             <>
-              Organization{" "}
+              Organisation{" "}
               <span className="font-mono text-foreground">{data.org}</span>
             </>
           ) : (
@@ -95,7 +95,7 @@ export function GithubDashboard({ authed }: { authed: boolean }) {
             href="/my-settings"
             className="underline underline-offset-2"
           >
-            Add a token and organization
+            Add a token and organisation
           </Link>
           .
         </Alert>
@@ -159,7 +159,7 @@ export function GithubDashboard({ authed }: { authed: boolean }) {
             <div>
               <CardTitle className="mb-1">Recently updated pull requests</CardTitle>
               <CardDescription>
-                Open PRs across the organization, sorted by last update.
+                Open PRs across the organisation, sorted by last update.
               </CardDescription>
             </div>
           </div>

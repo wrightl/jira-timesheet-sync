@@ -6,7 +6,7 @@ import type { AuthResult, AuthUser } from "@/lib/auth-types";
 
 export type { AuthUser, AuthSuccess, AuthFailure, AuthResult } from "@/lib/auth-types";
 
-function unauthorized(message = "Unauthorized"): Response {
+function unauthorised(message = "Unauthorised"): Response {
   return Response.json({ error: message }, { status: 401 });
 }
 
@@ -25,7 +25,7 @@ export async function getSessionUser(
 export async function requireAuth(request: NextRequest): Promise<AuthResult> {
   const user = await getSessionUser(request);
   if (!user) {
-    return { error: unauthorized() };
+    return { error: unauthorised() };
   }
   return { user };
 }

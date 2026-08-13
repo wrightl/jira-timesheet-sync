@@ -7,6 +7,10 @@ import type {
   BitmapTimesheetEntry,
 } from "@/clients/bitmap-http";
 import {
+  ExcludedClientError,
+  isExcludedClient,
+} from "@/lib/excluded-clients";
+import {
   createJiraMetricsService,
   type JiraIssueAggregates,
   type JiraMetricsService,
@@ -64,7 +68,7 @@ export type ProjectDashboardResult = {
     budgetLineItemBurn: DashboardMetric<BudgetLineBurn[]>;
     scheduleVsForecast: DashboardMetric<number | null>;
     paceDeltaPct: DashboardMetric<number | null>;
-    allocationUtilizationPct: DashboardMetric<number | null>;
+    allocationUtilisationPct: DashboardMetric<number | null>;
     billableMixPct: DashboardMetric<number | null>;
     runwayDays: DashboardMetric<number | null>;
     remainingHoursSlip: DashboardMetric<number | null>;
@@ -76,7 +80,7 @@ export type ProjectDashboardResult = {
     qualityCostPct: DashboardMetric<number | null>;
     defectInjectionRatio: DashboardMetric<number | null>;
     throughput30d: DashboardMetric<number | null>;
-    agingWipCount: DashboardMetric<number | null>;
+    ageingWipCount: DashboardMetric<number | null>;
     cycleTimeMedianDays: DashboardMetric<number | null>;
     healthCheckScore: DashboardMetric<number | null>;
   };
@@ -205,7 +209,7 @@ export function paceStatus(paceDeltaPct: number | null): MetricStatus {
   return "ok";
 }
 
-export function allocationUtilizationStatus(
+export function allocationUtilisationStatus(
   pctValue: number | null,
 ): MetricStatus {
   if (pctValue == null) return "unavailable";
@@ -238,7 +242,7 @@ export function throughputStatus(
   return "ok";
 }
 
-export function agingWipStatus(count: number | null): MetricStatus {
+export function ageingWipStatus(count: number | null): MetricStatus {
   if (count == null) return "unavailable";
   if (count >= 10) return "risk";
   if (count >= 5) return "watch";
@@ -418,6 +422,9 @@ export class ProjectDashboardService {
   async getDashboard(projectId: string): Promise<ProjectDashboardResult> {
     const bitmap = await this.settings.createConfiguredBitmapClient();
     const project = await bitmap.getProject(projectId);
+    if (isExcludedClient(project.client)) {
+      throw new ExcludedClientError();
+    }
 
     const [budgets, burndown, healthChecks, jiraTickets, timesheets] =
       await Promise.all([
@@ -436,13 +443,11 @@ export class ProjectDashboardService {
     let jiraAgg: JiraIssueAggregates | null = null;
     let scopedJql: string | null = project.jira_budget_jql ?? null;
 
-    const jiraClient = await this.settings.createConfiguredJiraClient(
-      project.jira_instance_url,
-    );
+    const jiraClient = await this.settings.createConfiguredJiraClient();
     const creds = await this.settings.getJiraCredentials(
       project.jira_instance_url,
     );
-    const jiraBrowseBaseUrl = creds.baseUrl;
+    const jiraBrowseBaseUrl = creds.browseBaseUrl;
     if (jiraClient) {
       jiraConfigured = true;
       try {
@@ -456,9 +461,7 @@ export class ProjectDashboardService {
         jiraError = err instanceof Error ? err.message : String(err);
       }
     } else {
-      jiraConfigured = await this.settings.isJiraConfigured(
-        project.jira_instance_url,
-      );
+      jiraConfigured = await this.settings.isJiraConfigured();
       if (!jiraConfigured) {
         jiraError = "Configure Jira Cloud API in Settings";
       }
@@ -595,7 +598,7 @@ export class ProjectDashboardService {
       burnPct != null && elapsedPct != null
         ? round1(burnPct - elapsedPct)
         : null;
-    const allocationUtilizationPct = pct(timeLogged ?? 0, timeAllocated ?? 0);
+    const allocationUtilisationPct = pct(timeLogged ?? 0, timeAllocated ?? 0);
 
     let billableHours = 0;
     let totalHours = 0;
@@ -803,20 +806,20 @@ export class ProjectDashboardService {
               unit: "pp",
               detail: `Burn ${formatPct(burnPct)} vs calendar ${formatPct(elapsedPct)}`,
             },
-      allocationUtilizationPct:
+      allocationUtilisationPct:
         timeAllocated == null || timeAllocated <= 0
           ? unavailableMetric(
-              "allocation_utilization_pct",
-              "Allocation utilization",
+              "allocation_utilisation_pct",
+              "Allocation utilisation",
               "bitmap",
               "No time allocated on project",
             )
           : {
-              id: "allocation_utilization_pct",
-              label: "Allocation utilization",
-              value: allocationUtilizationPct,
-              displayValue: formatPct(allocationUtilizationPct),
-              status: allocationUtilizationStatus(allocationUtilizationPct),
+              id: "allocation_utilisation_pct",
+              label: "Allocation utilisation",
+              value: allocationUtilisationPct,
+              displayValue: formatPct(allocationUtilisationPct),
+              status: allocationUtilisationStatus(allocationUtilisationPct),
               source: "bitmap",
               unit: "%",
               detail: `${formatHours(timeLogged)} logged of ${formatHours(timeAllocated)} allocated`,
@@ -998,22 +1001,22 @@ export class ProjectDashboardService {
             source: "jira",
             detail: "Stories/tasks/features completed in last 30 days",
           },
-      agingWipCount: !jiraConfigured || (jiraConfigured && !jiraAgg)
+      ageingWipCount: !jiraConfigured || (jiraConfigured && !jiraAgg)
         ? unavailableMetric(
-            "aging_wip_count",
-            "Aging WIP",
+            "ageing_wip_count",
+            "Ageing WIP",
             "jira",
             jiraUnavailableDetail,
           )
         : {
-            id: "aging_wip_count",
-            label: "Aging WIP",
-            value: jiraAgg!.agingWipCount,
-            displayValue: String(jiraAgg!.agingWipCount),
-            status: agingWipStatus(jiraAgg!.agingWipCount),
+            id: "ageing_wip_count",
+            label: "Ageing WIP",
+            value: jiraAgg!.ageingWipCount,
+            displayValue: String(jiraAgg!.ageingWipCount),
+            status: ageingWipStatus(jiraAgg!.ageingWipCount),
             source: "jira",
-            detail: jiraAgg!.agingWipOldest
-              ? `Oldest ${jiraAgg!.agingWipOldest.key} (${jiraAgg!.agingWipOldest.ageDays ?? "?"}d since update)`
+            detail: jiraAgg!.ageingWipOldest
+              ? `Oldest ${jiraAgg!.ageingWipOldest.key} (${jiraAgg!.ageingWipOldest.ageDays ?? "?"}d since update)`
               : "No open issues stale ≥14d",
           },
       cycleTimeMedianDays: !jiraConfigured || (jiraConfigured && !jiraAgg)

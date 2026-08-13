@@ -1,3 +1,8 @@
+import {
+    withoutExcludedClientProjects,
+    withoutExcludedClients,
+} from "@/lib/excluded-clients";
+
 export interface TimesheetEntryInput {
     clientId: string;
     jiraSpaceKey: string | null;
@@ -19,6 +24,8 @@ export interface BitmapUser {
     full_name: string;
     email?: string | null;
     job_title?: string | null;
+    hours_per_week?: number | null;
+    billable_target_hours?: number | null;
 }
 
 export interface BitmapClient {
@@ -129,6 +136,17 @@ export interface BitmapJiraTicket {
     acknowledged_overage?: boolean | null;
 }
 
+export interface BitmapTimesheetEntryUser {
+    id?: string;
+    full_name?: string | null;
+}
+
+export interface BitmapTimesheetEntryProject {
+    id?: string;
+    name?: string | null;
+    client?: BitmapProjectClient | null;
+}
+
 export interface BitmapTimesheetEntry {
     id?: string;
     hours?: number | null;
@@ -136,6 +154,15 @@ export interface BitmapTimesheetEntry {
     billable?: boolean | null;
     nonbillable_reason?: string | null;
     notes?: string | null;
+    state?: string | null;
+    user?: BitmapTimesheetEntryUser | null;
+    project?: BitmapTimesheetEntryProject | null;
+}
+
+export interface ListTimesheetEntriesParams {
+    startDate: string;
+    endDate: string;
+    userIds?: string[];
 }
 
 export interface BitmapTimeAllocationStatistics {
@@ -209,6 +236,9 @@ export interface BitmapApiClient {
     listProjectTimesheetEntries(
         projectId: string,
     ): Promise<BitmapTimesheetEntry[]>;
+    listTimesheetEntries(
+        params: ListTimesheetEntriesParams,
+    ): Promise<BitmapTimesheetEntry[]>;
     getTimeAllocationStatistics(
         projectId: string,
     ): Promise<BitmapTimeAllocationStatistics>;
@@ -261,7 +291,7 @@ function extractTimesheetId(payload: unknown, fallback: string): string {
     return fallback;
 }
 
-function normalizeArray<T>(payload: unknown): T[] {
+function normaliseArray<T>(payload: unknown): T[] {
     if (Array.isArray(payload)) {
         return payload as T[];
     }
@@ -272,8 +302,8 @@ function normalizeArray<T>(payload: unknown): T[] {
     return [];
 }
 
-function normalizeBudgets(payload: unknown): BitmapProjectBudget[] {
-    return normalizeArray<BitmapProjectBudget>(payload);
+function normaliseBudgets(payload: unknown): BitmapProjectBudget[] {
+    return normaliseArray<BitmapProjectBudget>(payload);
 }
 
 function unwrapProject(payload: unknown): BitmapProject {
@@ -362,7 +392,7 @@ export class BitmapHttpClient implements BitmapApiClient {
     async listClients(
         params?: ListClientsParams,
     ): Promise<PaginatedResponse<BitmapClient>> {
-        return this.request<PaginatedResponse<BitmapClient>>(
+        const response = await this.request<PaginatedResponse<BitmapClient>>(
             'GET',
             '/api/v1/clients.json',
             {
@@ -372,6 +402,10 @@ export class BitmapHttpClient implements BitmapApiClient {
                 },
             },
         );
+        return {
+            ...response,
+            data: withoutExcludedClients(response.data ?? []),
+        };
     }
 
     async listProjects(
@@ -399,7 +433,7 @@ export class BitmapHttpClient implements BitmapApiClient {
     async listProjectsForDiscovery(
         params?: ListProjectsForDiscoveryParams,
     ): Promise<PaginatedResponse<BitmapProject>> {
-        return this.request<PaginatedResponse<BitmapProject>>(
+        const response = await this.request<PaginatedResponse<BitmapProject>>(
             'GET',
             '/api/v1/projects.json',
             {
@@ -409,6 +443,10 @@ export class BitmapHttpClient implements BitmapApiClient {
                 },
             },
         );
+        return {
+            ...response,
+            data: withoutExcludedClientProjects(response.data ?? []),
+        };
     }
 
     async getProject(projectId: string): Promise<BitmapProject> {
@@ -431,7 +469,7 @@ export class BitmapHttpClient implements BitmapApiClient {
             `/api/v1/projects/${projectId}/project_budgets`,
             { query: { project_id: projectId } },
         );
-        return normalizeBudgets(payload);
+        return normaliseBudgets(payload);
     }
 
     async getProjectBurndown(projectId: string): Promise<BitmapBurndown> {
@@ -448,7 +486,7 @@ export class BitmapHttpClient implements BitmapApiClient {
             'GET',
             `/api/v1/projects/${projectId}/project_health_checks`,
         );
-        return normalizeArray<BitmapProjectHealthCheck>(payload);
+        return normaliseArray<BitmapProjectHealthCheck>(payload);
     }
 
     async listProjectJiraTickets(
@@ -458,7 +496,7 @@ export class BitmapHttpClient implements BitmapApiClient {
             'GET',
             `/api/v1/projects/${projectId}/jira_tickets`,
         );
-        return normalizeArray<BitmapJiraTicket>(payload);
+        return normaliseArray<BitmapJiraTicket>(payload);
     }
 
     async listProjectTimesheetEntries(
@@ -468,7 +506,25 @@ export class BitmapHttpClient implements BitmapApiClient {
             'GET',
             `/api/v1/projects/${projectId}/timesheet_entries`,
         );
-        return normalizeArray<BitmapTimesheetEntry>(payload);
+        return normaliseArray<BitmapTimesheetEntry>(payload);
+    }
+
+    async listTimesheetEntries(
+        params: ListTimesheetEntriesParams,
+    ): Promise<BitmapTimesheetEntry[]> {
+        const query: Record<string, string | number | undefined> = {
+            start_date: params.startDate,
+            end_date: params.endDate,
+        };
+        if (params.userIds && params.userIds.length > 0) {
+            query.user_id = params.userIds.join(',');
+        }
+        const payload = await this.request<unknown>(
+            'GET',
+            '/api/v1/timesheet_entries',
+            { query },
+        );
+        return normaliseArray<BitmapTimesheetEntry>(payload);
     }
 
     async getTimeAllocationStatistics(

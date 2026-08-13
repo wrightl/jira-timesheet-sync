@@ -6,6 +6,7 @@ import {
   githubSettingsUpdateSchema,
   userMappingCreateSchema,
   userMappingUpdateSchema,
+  userSpaceMappingCreateSchema,
   adminUserCreateSchema,
   adminUserUpdateSchema,
   meUpdateSchema,
@@ -27,6 +28,15 @@ describe("mappingCreateSchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("rejects the excluded TheCurve client", () => {
+    expect(
+      mappingCreateSchema.safeParse({
+        jiraSpaceKey: "INT",
+        clientId: "5e8f8b80d9f37277a88e7f10",
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe("mappingUpdateSchema", () => {
@@ -34,6 +44,19 @@ describe("mappingUpdateSchema", () => {
     expect(mappingUpdateSchema.parse({ enabled: false })).toEqual({
       enabled: false,
     });
+  });
+});
+
+describe("userSpaceMappingCreateSchema", () => {
+  it("rejects the excluded TheCurve client", () => {
+    expect(
+      userSpaceMappingCreateSchema.safeParse({
+        jiraSpaceKey: "INT",
+        clientId: "5e8f8b80d9f37277a88e7f10",
+        projectId: "p1",
+        projectBudgetId: "b1",
+      }).success,
+    ).toBe(false);
   });
 });
 
@@ -73,6 +96,54 @@ describe("settingsUpdateSchema", () => {
     expect(
       settingsUpdateSchema.parse({ internalPmAccessToken: "tok_abc" }),
     ).toEqual({ internalPmAccessToken: "tok_abc" });
+  });
+
+  it("accepts Atlassian Cloud and Slack webhook https URLs", () => {
+    expect(
+      settingsUpdateSchema.parse({
+        jiraBaseUrl: "https://acme.atlassian.net",
+      }).jiraBaseUrl,
+    ).toBe("https://acme.atlassian.net");
+    expect(
+      settingsUpdateSchema.parse({
+        slackWebhookUrl: "https://hooks.slack.com/services/T00/B00/xxx",
+      }).slackWebhookUrl,
+    ).toBe("https://hooks.slack.com/services/T00/B00/xxx");
+  });
+
+  it("allows empty URL fields so settings can be left unchanged or cleared", () => {
+    expect(
+      settingsUpdateSchema.parse({ jiraBaseUrl: "" }).jiraBaseUrl,
+    ).toBe("");
+    expect(
+      settingsUpdateSchema.parse({ slackWebhookUrl: "" }).slackWebhookUrl,
+    ).toBe("");
+  });
+
+  it("rejects javascript, http, private, and non-allowlisted hosts", () => {
+    expect(
+      settingsUpdateSchema.safeParse({ jiraBaseUrl: "javascript:alert(1)" })
+        .success,
+    ).toBe(false);
+    expect(
+      settingsUpdateSchema.safeParse({
+        jiraBaseUrl: "http://acme.atlassian.net",
+      }).success,
+    ).toBe(false);
+    expect(
+      settingsUpdateSchema.safeParse({
+        jiraBaseUrl: "https://evil.example.com",
+      }).success,
+    ).toBe(false);
+    expect(
+      settingsUpdateSchema.safeParse({ jiraBaseUrl: "https://127.0.0.1" })
+        .success,
+    ).toBe(false);
+    expect(
+      settingsUpdateSchema.safeParse({
+        slackWebhookUrl: "https://example.com/hooks",
+      }).success,
+    ).toBe(false);
   });
 });
 

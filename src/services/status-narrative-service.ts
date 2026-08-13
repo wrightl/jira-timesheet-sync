@@ -71,7 +71,7 @@ export class StatusNarrativeService {
     for (const metric of [
       dashboard.metrics.budgetBurnPct,
       dashboard.metrics.runwayDays,
-      dashboard.metrics.agingWipCount,
+      dashboard.metrics.ageingWipCount,
       dashboard.metrics.openBugCount,
       dashboard.metrics.scheduleVsForecast,
     ]) {
@@ -129,7 +129,7 @@ export class StatusNarrativeService {
       ``,
       `## Quality & flow`,
       line("Open bugs", dashboard.metrics.openBugCount.displayValue),
-      line("Aging WIP", dashboard.metrics.agingWipCount.displayValue),
+      line("Ageing WIP", dashboard.metrics.ageingWipCount.displayValue),
       line("Estimate coverage", dashboard.metrics.estimateCoveragePct.displayValue),
       line("Throughput (30d)", dashboard.metrics.throughput30d.displayValue),
       ``,

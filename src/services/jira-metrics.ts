@@ -44,8 +44,8 @@ export type JiraIssueAggregates = {
   bugsCreatedInWindow: number;
   storiesCompletedInWindow: number;
   defectInjectionRatio: number | null;
-  agingWipCount: number;
-  agingWipOldest: {
+  ageingWipCount: number;
+  ageingWipOldest: {
     key: string;
     summary: string | null;
     ageDays: number | null;
@@ -210,18 +210,18 @@ export function aggregateJiraIssues(
         ? null
         : 0;
 
-  const agingThresholdDays = 14;
-  const agingWip = open
+  const ageingThresholdDays = 14;
+  const ageingWip = open
     .map((issue) => ({
       key: issue.key,
       summary: issue.fields.summary ?? null,
       ageDays: daysSince(issue.fields.updated, now),
     }))
     .filter(
-      (row) => row.ageDays != null && row.ageDays >= agingThresholdDays,
+      (row) => row.ageDays != null && row.ageDays >= ageingThresholdDays,
     )
     .sort((a, b) => (b.ageDays ?? 0) - (a.ageDays ?? 0));
-  const agingWipOldest = agingWip[0] ?? null;
+  const ageingWipOldest = ageingWip[0] ?? null;
 
   const doneCycleDays = issues
     .filter((i) => isDone(i) && withinDays(i.fields.updated, now, windowDays))
@@ -262,8 +262,8 @@ export function aggregateJiraIssues(
     bugsCreatedInWindow,
     storiesCompletedInWindow,
     defectInjectionRatio,
-    agingWipCount: agingWip.length,
-    agingWipOldest,
+    ageingWipCount: ageingWip.length,
+    ageingWipOldest,
     cycleTimeMedianDays,
     issues,
   };

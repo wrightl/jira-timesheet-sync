@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth";
+import { isExcludedClientId } from "@/lib/excluded-clients";
 import {
   isProjectListStatus,
   type ProjectListStatus,
@@ -28,6 +29,9 @@ export async function GET(request: NextRequest) {
   const clientId = searchParams.get("clientId");
   if (!clientId) {
     return Response.json({ error: "clientId is required" }, { status: 400 });
+  }
+  if (isExcludedClientId(clientId)) {
+    return Response.json({ projects: [] });
   }
 
   const status = parseProjectListStatus(

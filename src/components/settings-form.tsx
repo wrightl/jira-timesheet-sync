@@ -13,7 +13,7 @@ type AlertConfig = {
   thresholds: {
     budgetBurnPctRisk: number;
     runwayDaysRisk: number;
-    agingWipRisk: number;
+    ageingWipRisk: number;
     openBugsRisk: number;
     syncFailedOpenRisk: number;
     estimateCoveragePctWatch: number;

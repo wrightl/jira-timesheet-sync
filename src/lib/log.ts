@@ -12,8 +12,8 @@ const LEVELS = new Set<string>(["debug", "info", "warn", "error"]);
 
 function parseLogLevel(value: string | undefined): LogLevel | undefined {
   if (!value) return undefined;
-  const normalized = value.trim().toLowerCase();
-  return LEVELS.has(normalized) ? (normalized as LogLevel) : undefined;
+  const normalised = value.trim().toLowerCase();
+  return LEVELS.has(normalised) ? (normalised as LogLevel) : undefined;
 }
 
 function defaultLogLevel(): LogLevel {

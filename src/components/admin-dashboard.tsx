@@ -29,7 +29,7 @@ function statusVariant(
 ): "ok" | "warning" | "accent" | "danger" {
   if (status === "synced") return "ok";
   if (status === "skipped") return "warning";
-  if (status === "pending") return "accent";
+  if (status === "pending" || status === "processing") return "accent";
   return "danger";
 }
 

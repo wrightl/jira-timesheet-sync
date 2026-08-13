@@ -44,7 +44,7 @@ export function AppLogoMark({ title = 'Timesheet Sync', ...props }: LogoProps) {
                 strokeLinecap="round"
                 strokeLinejoin="round"
             />
-            {/* Timesheet hash in the center */}
+            {/* Timesheet hash in the centre */}
             <path
                 d="M13 14.5h6M13 17.5h6M14.5 13v6M17.5 13v6"
                 stroke="#fff"

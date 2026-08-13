@@ -1,12 +1,12 @@
 import { NextRequest } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { getEnv } from "@/lib/env";
+import { matchesBearerSecret } from "@/lib/timing-safe";
 import { createAlertService } from "@/services/alert-service";
 
-async function authorize(request: NextRequest): Promise<Response | null> {
+async function authorise(request: NextRequest): Promise<Response | null> {
   const secret = getEnv().CRON_SECRET;
-  const header = request.headers.get("authorization");
-  if (secret && header === `Bearer ${secret}`) {
+  if (matchesBearerSecret(request.headers.get("authorization"), secret)) {
     return null;
   }
   const auth = await requireAdmin(request);
@@ -14,7 +14,7 @@ async function authorize(request: NextRequest): Promise<Response | null> {
 }
 
 export async function GET(request: NextRequest) {
-  const denied = await authorize(request);
+  const denied = await authorise(request);
   if (denied) return denied;
 
   const dryRun = request.nextUrl.searchParams.get("dryRun") === "1";

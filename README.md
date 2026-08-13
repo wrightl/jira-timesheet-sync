@@ -13,7 +13,7 @@ Next.js integration that receives **Jira Cloud worklog** webhooks (`created` / `
 - Optional per-user space → project/budget overrides (validated as active on sync)
 - Caches Bitmap projects and project budgets for 24 hours
 - Neon Postgres via Drizzle ORM
-- Containerized for Kubernetes
+- Containerised for Kubernetes
 
 ## Quick start
 
@@ -38,7 +38,8 @@ Open [http://localhost:3000](http://localhost:3000), sign in with the seeded adm
 | `user` | Own space→project/budget mappings (`/my-mappings`); read global spaces to pick from |
 
 - Login username is the **email address**
-- Self-register creates role `user` when `ALLOW_PUBLIC_REGISTER=true`; otherwise only admins create accounts via **Users**
+- Login and register are rate-limited (8 failures per email+IP per 15 minutes)
+- Self-register creates role `user` when `ALLOW_PUBLIC_REGISTER=true` (default off). Existing emails, including provisioned `mustSetPassword` accounts, return conflict — an admin must set the password. Keep this flag off in production.
 - Seed admin: `npm run db:seed` using `ADMIN_EMAIL` / `ADMIN_PASSWORD`
 - Admin APIs use session cookies from login (no API key)
 
@@ -75,7 +76,7 @@ If a mapped project/budget is inactive, the sync **fails** (no silent fallback).
 | `APP_BASE_URL` | Public app URL (required for Google OAuth redirects) |
 | `CRON_SECRET` | Bearer token for `/api/alerts/run` and `/api/alerts/weekly` |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth SSO |
-| `GOOGLE_ALLOWED_DOMAIN` | Optional hosted-domain restriction |
+| `GOOGLE_ALLOWED_DOMAIN` | Hosted-domain restriction. **Required in production** when Google OAuth is configured (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `APP_BASE_URL`). Optional in local/test/dev. |
 | `GOOGLE_DEFAULT_ROLE` | `user` (default) or `exec` for new Google accounts |
 
 Bitmap token resolution: encrypted token in Settings (DB) first; if unset, `INTERNAL_PM_ACCESS_TOKEN` is used as bootstrap. Once a token is saved in Settings, the DB value is the source of truth.
@@ -116,9 +117,9 @@ On each create/update sync:
 
 ## Async webhooks and retry
 
-`POST /api/webhooks/jira` authenticates, stores a `pending` sync row (including the raw payload), and returns **202** immediately. Bitmap processing continues via Next.js [`after()`](https://nextjs.org/docs/app/api-reference/functions/after). The dashboard shows `pending` / `synced` / `skipped` / `failed` and polls while any row is pending.
+`POST /api/webhooks/jira` authenticates, stores a `pending` sync row (including the raw payload), and returns **202** immediately. Bitmap processing continues via Next.js [`after()`](https://nextjs.org/docs/app/api-reference/functions/after). The worker CAS-claims `pending` → `processing` before Bitmap writes. The dashboard shows `pending` / `processing` / `synced` / `skipped` / `failed` and polls while any row is pending or processing.
 
-Admins and owning users can **Retry** failed or skipped events (`POST /api/syncs?action=retry&id=`). Retry uses a compare-and-set claim on `failed`/`skipped` rows. Retry requires a stored raw payload (events accepted after this feature). Stuck `pending` rows older than 15 minutes are reclaimed on the next webhook accept.
+Admins and owning users can **Retry** failed or skipped events (`POST /api/syncs?action=retry&id=`). Retry uses a compare-and-set claim on `failed`/`skipped` rows. Retry requires a stored raw payload (events accepted after this feature). Stuck `pending` or `processing` rows older than 15 minutes are reclaimed on the next webhook accept.
 
 ## Debugging sync / missing mappings
 
@@ -169,12 +170,12 @@ Authenticated users can open **Projects** (`/projects`) to inspect budget burn, 
 ## Engineering manager surfaces
 
 - **Portfolio** (`/portfolio`) — cross-client active project rollup (burn, runway, schedule slip, risk tier)
-- **Utilization** (`/utilization`) — people hours from worklog syncs vs weekly capacity; optional **Teams** (`/teams`, admin)
+- **Utilisation** (`/utilisation`) — billable hours from Bitmap timesheets vs Bitmap `billable_target_hours`; optional **Teams** (`/teams`, admin)
 - **Status pack** (`/status`) — one-click weekly Markdown narrative for a project
 - **GitHub** — review lag, stale PRs, merge rate, WIP by author (in addition to open/draft counts)
 - **Slack alerts** — configure webhook + thresholds under **Settings**; cron `GET /api/alerts/run` (Bearer `CRON_SECRET`), `?weekly=1` for Monday digest
-- **Google SSO** — set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `APP_BASE_URL` (optional `GOOGLE_ALLOWED_DOMAIN`, `GOOGLE_DEFAULT_ROLE=exec|user`)
-- **Exec role** — read-focused portfolio/utilization/status access without sync-admin tools
+- **Google SSO** — set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `APP_BASE_URL`, and `GOOGLE_ALLOWED_DOMAIN` (required in production). `GOOGLE_DEFAULT_ROLE=exec|user` is optional. Google will not link onto a password account that has already been claimed (`mustSetPassword` false).
+- **Exec role** — read-focused portfolio/utilisation/status access without sync-admin tools
 
 ## Architecture
 

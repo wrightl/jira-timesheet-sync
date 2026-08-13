@@ -1,3 +1,5 @@
+import { safeHttpsOrigin } from "@/lib/outbound-urls";
+
 export interface JiraStatusCategory {
   key?: string | null;
   name?: string | null;
@@ -84,14 +86,20 @@ const API_PREFIX = "/rest/api/3";
 const DEFAULT_MAX_RESULTS = 100;
 const DEFAULT_MAX_PAGES = 20;
 
-function normalizeBaseUrl(baseUrl: string): string {
-  const trimmed = baseUrl.trim().replace(/\/$/, "");
+function normaliseBaseUrl(baseUrl: string): string {
+  const trimmed = baseUrl.trim();
   if (/\/rest\/api\/\d+/i.test(trimmed)) {
     throw new Error(
       "JIRA base URL must not include an API version path; use the site origin only",
     );
   }
-  return trimmed;
+  const origin = safeHttpsOrigin(trimmed);
+  if (!origin) {
+    throw new Error(
+      "JIRA base URL must be a public https origin without credentials",
+    );
+  }
+  return origin;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -121,7 +129,7 @@ export class JiraHttpClient implements JiraApiClient {
     apiToken: string;
     fetchImpl?: JiraFetch;
   }) {
-    this.baseUrl = normalizeBaseUrl(options.baseUrl);
+    this.baseUrl = normaliseBaseUrl(options.baseUrl);
     const token = Buffer.from(
       `${options.email}:${options.apiToken}`,
       "utf8",

@@ -2,11 +2,12 @@ import { getDb, type Db } from "@/db";
 import { UsersRepository } from "@/repositories/users-repository";
 import { SessionsRepository } from "@/repositories/sessions-repository";
 import { allowPublicRegister } from "@/lib/env";
-import { normalizeEmail } from "@/lib/email";
+import { normaliseEmail } from "@/lib/email";
 import {
   SESSION_TTL_MS,
   createSessionToken,
   hashPassword,
+  hashSessionToken,
   verifyPassword,
 } from "@/lib/password";
 import type { AuthUser } from "@/lib/auth-types";
@@ -26,11 +27,18 @@ export class AuthService {
   ) {}
 
   async resolveSessionUser(token: string): Promise<AuthUser | null> {
-    return this.sessions.findValidUserByToken(token);
+    const hashed = hashSessionToken(token);
+    const user = await this.sessions.findValidUserByToken(hashed);
+    if (user) return user;
+    // Dual-read: pre-hash rows until the SQL migration (or TTL) clears them.
+    if (hashed !== token) {
+      return this.sessions.findValidUserByToken(token);
+    }
+    return null;
   }
 
   async login(emailRaw: string, password: string): Promise<LoginResult> {
-    const email = normalizeEmail(emailRaw);
+    const email = normaliseEmail(emailRaw);
     const user = await this.users.findByEmail(email);
     if (!user) return { error: "invalid_credentials" };
 
@@ -49,27 +57,13 @@ export class AuthService {
       return { error: "disabled" };
     }
 
-    const email = normalizeEmail(emailRaw);
-    const passwordHash = await hashPassword(password);
-
+    const email = normaliseEmail(emailRaw);
     const existing = await this.users.findByEmail(email);
     if (existing) {
-      if (!existing.mustSetPassword) {
-        return { error: "conflict" };
-      }
-
-      const user = await this.users.update(existing.id, {
-        passwordHash,
-        mustSetPassword: false,
-      });
-      if (!user) return { error: "conflict" };
-
-      const session = await this.createSession(user.id);
-      return {
-        user: { id: user.id, email: user.email, role: user.role },
-        ...session,
-      };
+      return { error: "conflict" };
     }
+
+    const passwordHash = await hashPassword(password);
 
     try {
       const user = await this.users.createFull({
@@ -93,13 +87,21 @@ export class AuthService {
   ): Promise<{ token: string; expiresAt: Date }> {
     const token = createSessionToken();
     const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
-    await this.sessions.create({ userId, token, expiresAt });
+    await this.sessions.create({
+      userId,
+      token: hashSessionToken(token),
+      expiresAt,
+    });
     return { token, expiresAt };
   }
 
   async destroySession(token: string | undefined): Promise<void> {
     if (!token) return;
-    await this.sessions.deleteByToken(token);
+    const hashed = hashSessionToken(token);
+    await this.sessions.deleteByToken(hashed);
+    if (hashed !== token) {
+      await this.sessions.deleteByToken(token);
+    }
   }
 }
 

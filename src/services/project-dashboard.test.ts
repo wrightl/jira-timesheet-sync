@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { BitmapBurndown, BitmapTimesheetEntry } from "@/clients/bitmap-http";
 import {
-  allocationUtilizationStatus,
+  allocationUtilisationStatus,
   avgDailyBillableBurnHours,
   billableMixStatus,
   burndownRemainingSlipHours,
@@ -11,7 +11,7 @@ import {
   paceStatus,
   remainingHoursSlipStatus,
   runwayDaysStatus,
-  agingWipStatus,
+  ageingWipStatus,
   throughputStatus,
 } from "@/services/project-dashboard";
 
@@ -31,20 +31,20 @@ describe("project-dashboard metric helpers", () => {
     expect(paceStatus(16)).toBe("risk");
     expect(paceStatus(6)).toBe("watch");
     expect(paceStatus(-2)).toBe("ok");
-    expect(allocationUtilizationStatus(120)).toBe("risk");
-    expect(allocationUtilizationStatus(50)).toBe("watch");
+    expect(allocationUtilisationStatus(120)).toBe("risk");
+    expect(allocationUtilisationStatus(50)).toBe("watch");
     expect(billableMixStatus(60)).toBe("risk");
     expect(billableMixStatus(80)).toBe("watch");
     expect(billableMixStatus(90)).toBe("ok");
   });
 
-  it("applies defect / throughput / aging / runway / slip / health statuses", () => {
+  it("applies defect / throughput / ageing / runway / slip / health statuses", () => {
     expect(defectInjectionStatus(1)).toBe("risk");
     expect(defectInjectionStatus(0.5)).toBe("watch");
     expect(throughputStatus(0, 5)).toBe("watch");
     expect(throughputStatus(2, 5)).toBe("ok");
-    expect(agingWipStatus(10)).toBe("risk");
-    expect(agingWipStatus(5)).toBe("watch");
+    expect(ageingWipStatus(10)).toBe("risk");
+    expect(ageingWipStatus(5)).toBe("watch");
     expect(runwayDaysStatus(4)).toBe("risk");
     expect(runwayDaysStatus(8)).toBe("watch");
     expect(remainingHoursSlipStatus(16)).toBe("risk");

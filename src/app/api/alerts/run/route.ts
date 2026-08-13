@@ -1,19 +1,19 @@
 import { NextRequest } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { getEnv } from "@/lib/env";
+import { matchesBearerSecret } from "@/lib/timing-safe";
 import { createAlertService } from "@/services/alert-service";
 
-function authorizeCronOrAdmin(request: NextRequest): Promise<Response | null> {
+function authoriseCronOrAdmin(request: NextRequest): Promise<Response | null> {
   const secret = getEnv().CRON_SECRET;
-  const header = request.headers.get("authorization");
-  if (secret && header === `Bearer ${secret}`) {
+  if (matchesBearerSecret(request.headers.get("authorization"), secret)) {
     return Promise.resolve(null);
   }
   return requireAdmin(request).then((auth) => auth.error ?? null);
 }
 
 export async function GET(request: NextRequest) {
-  const denied = await authorizeCronOrAdmin(request);
+  const denied = await authoriseCronOrAdmin(request);
   if (denied) return denied;
 
   const weekly =

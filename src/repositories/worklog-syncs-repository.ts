@@ -38,7 +38,7 @@ export type ListSyncsOptions = {
   dir?: SyncListSortDir;
 };
 
-export type FinalizeSyncData = {
+export type FinaliseSyncData = {
   jiraWorklogId: string;
   jiraIssueKey: string | null;
   jiraSpaceId: string | null;
@@ -187,9 +187,9 @@ export class WorklogSyncsRepository {
     return row ?? null;
   }
 
-  async finalize(
+  async finalise(
     syncId: string | undefined,
-    data: FinalizeSyncData,
+    data: FinaliseSyncData,
   ): Promise<string | undefined> {
     const identity = {
       authorAccountId: data.authorAccountId ?? null,
@@ -198,7 +198,7 @@ export class WorklogSyncsRepository {
     };
 
     if (syncId) {
-      await this.db
+      const [row] = await this.db
         .update(worklogSyncs)
         .set({
           jiraIssueKey: data.jiraIssueKey,
@@ -209,8 +209,14 @@ export class WorklogSyncsRepository {
           ...identity,
           updatedAt: new Date(),
         })
-        .where(eq(worklogSyncs.id, syncId));
-      return syncId;
+        .where(
+          and(
+            eq(worklogSyncs.id, syncId),
+            inArray(worklogSyncs.status, ["pending", "processing"]),
+          ),
+        )
+        .returning({ id: worklogSyncs.id });
+      return row?.id;
     }
 
     const [row] = await this.db
@@ -231,6 +237,24 @@ export class WorklogSyncsRepository {
       .returning({ id: worklogSyncs.id });
 
     return row?.id;
+  }
+
+  /**
+   * Atomically claim a pending row for the initial after() process path.
+   * Neon HTTP has no multi-statement transactions — this WHERE acts as CAS.
+   */
+  async claimForProcess(id: string): Promise<WorklogSync | null> {
+    const [row] = await this.db
+      .update(worklogSyncs)
+      .set({
+        status: "processing",
+        updatedAt: new Date(),
+      })
+      .where(
+        and(eq(worklogSyncs.id, id), eq(worklogSyncs.status, "pending")),
+      )
+      .returning();
+    return row ?? null;
   }
 
   /**
@@ -255,7 +279,7 @@ export class WorklogSyncsRepository {
     return row ?? null;
   }
 
-  /** Reclaim rows stuck in pending longer than PENDING_STALE_MS. */
+  /** Reclaim rows stuck in pending/processing longer than PENDING_STALE_MS. */
   async reclaimStalePending(now = new Date()): Promise<number> {
     const cutoff = new Date(now.getTime() - PENDING_STALE_MS);
     const rows = await this.db
@@ -267,7 +291,7 @@ export class WorklogSyncsRepository {
       })
       .where(
         and(
-          eq(worklogSyncs.status, "pending"),
+          inArray(worklogSyncs.status, ["pending", "processing"]),
           lt(worklogSyncs.updatedAt, cutoff),
         ),
       )
@@ -303,7 +327,7 @@ export class WorklogSyncsRepository {
   async dashboardOpenCounts(scope: DashboardScope) {
     const where = this.scopeAnd(
       scope,
-      inArray(worklogSyncs.status, ["failed", "pending"]),
+          inArray(worklogSyncs.status, ["failed", "pending", "processing"]),
     );
     return this.db
       .select({

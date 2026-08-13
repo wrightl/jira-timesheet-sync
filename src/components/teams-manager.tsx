@@ -98,7 +98,7 @@ export function TeamsManager({ authed }: { authed: boolean }) {
             <Card>
                 <CardTitle className="mb-1">Teams</CardTitle>
                 <CardDescription className="mb-4">
-                    Lightweight groupings for utilization rollups. Members can
+                    Lightweight groupings for utilisation rollups. Members can
                     link to Jira↔Bitmap user mappings.
                 </CardDescription>
                 <form

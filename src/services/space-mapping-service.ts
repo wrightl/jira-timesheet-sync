@@ -1,6 +1,7 @@
 import { getDb, type Db } from "@/db";
 import type { SpaceProjectMapping } from "@/db/schema";
 import { SpaceProjectMappingsRepository } from "@/repositories/space-project-mappings-repository";
+import { withoutExcludedClientRows } from "@/lib/excluded-clients";
 import type {
   MappingCreateInput,
   MappingUpdateInput,
@@ -9,8 +10,9 @@ import type {
 export class SpaceMappingService {
   constructor(private readonly mappings: SpaceProjectMappingsRepository) {}
 
-  list(): Promise<SpaceProjectMapping[]> {
-    return this.mappings.list();
+  async list(): Promise<SpaceProjectMapping[]> {
+    const mappings = await this.mappings.list();
+    return withoutExcludedClientRows(mappings);
   }
 
   findBySpaceKey(jiraSpaceKey: string): Promise<SpaceProjectMapping | null> {

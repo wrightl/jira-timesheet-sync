@@ -9,7 +9,7 @@ App architecture (routes → services → repositories → db) is documented in 
 <!-- VERCEL BEST PRACTICES START -->
 ## Best practices for developing on Vercel
 
-These defaults are optimized for AI coding agents (and humans) working on apps that deploy to Vercel.
+These defaults are optimised for AI coding agents (and humans) working on apps that deploy to Vercel.
 
 - Treat Vercel Functions as stateless + ephemeral (no durable RAM/FS, no background daemons), use Blob or marketplace integrations for preserving state
 - Edge Functions (standalone) are deprecated; prefer Vercel Functions

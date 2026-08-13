@@ -2,6 +2,7 @@ import { getDb, type Db } from "@/db";
 import type { BitmapApiClient, BitmapProject } from "@/clients/bitmap-http";
 import type { SpaceProjectMapping } from "@/db/schema";
 import { extractJiraSpaceKeyFromBudgetJql } from "@/lib/jira-budget-jql";
+import { isExcludedClient } from "@/lib/excluded-clients";
 import { log } from "@/lib/log";
 import { SpaceProjectMappingsRepository } from "@/repositories/space-project-mappings-repository";
 import {
@@ -53,7 +54,7 @@ export class SpaceMappingDiscoveryService {
       if (page > totalPages) break;
     }
 
-    return projects;
+    return projects.filter((project) => !isExcludedClient(project.client));
   }
 
   /**

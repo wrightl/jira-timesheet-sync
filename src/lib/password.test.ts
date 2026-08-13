@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   createSessionToken,
   hashPassword,
-  normalizeEmail,
+  hashSessionToken,
+  normaliseEmail,
   verifyPassword,
 } from "@/lib/password";
 import {
@@ -11,9 +12,9 @@ import {
   userSpaceMappingCreateSchema,
 } from "@/lib/validators";
 
-describe("normalizeEmail", () => {
+describe("normaliseEmail", () => {
   it("trims and lowercases", () => {
-    expect(normalizeEmail("  Ada@Example.COM ")).toBe("ada@example.com");
+    expect(normaliseEmail("  Ada@Example.COM ")).toBe("ada@example.com");
   });
 });
 
@@ -30,6 +31,16 @@ describe("createSessionToken", () => {
   it("returns a long opaque token", () => {
     const token = createSessionToken();
     expect(token.length).toBeGreaterThanOrEqual(32);
+  });
+});
+
+describe("hashSessionToken", () => {
+  it("returns a stable sha256 hex digest", () => {
+    const token = "abc";
+    const hashed = hashSessionToken(token);
+    expect(hashed).toHaveLength(64);
+    expect(hashed).not.toBe(token);
+    expect(hashSessionToken(token)).toBe(hashed);
   });
 });
 

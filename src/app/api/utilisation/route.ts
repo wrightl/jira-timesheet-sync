@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth";
-import { createUtilizationService } from "@/services/utilization-service";
+import { createUtilisationService } from "@/services/utilisation-service";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
   const teamId = request.nextUrl.searchParams.get("teamId");
 
   try {
-    const result = await createUtilizationService().getUtilization({
+    const result = await createUtilisationService().getUtilisation({
       rangeDays: Number.isFinite(rangeDays) ? rangeDays : 7,
       teamId,
     });
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     return Response.json(
       {
         error:
-          err instanceof Error ? err.message : "Failed to load utilization",
+          err instanceof Error ? err.message : "Failed to load utilisation",
       },
       { status: 502 },
     );

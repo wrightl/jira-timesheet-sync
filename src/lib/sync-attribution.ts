@@ -2,7 +2,7 @@ import { randomBytes } from "crypto";
 import { getDb, type Db } from "@/db";
 import { UserMappingsRepository } from "@/repositories/user-mappings-repository";
 import { UsersRepository } from "@/repositories/users-repository";
-import { normalizeEmail } from "@/lib/email";
+import { normaliseEmail } from "@/lib/email";
 import { hashPassword } from "@/lib/password";
 import { log } from "@/lib/log";
 
@@ -25,20 +25,20 @@ export class SyncAttributionService {
       await this.userMappings.findBitmapEmailByDisplayName(authorDisplayName);
     if (!bitmapEmail) return null;
 
-    return this.users.findIdByEmailLower(normalizeEmail(bitmapEmail));
+    return this.users.findIdByEmailLower(normaliseEmail(bitmapEmail));
   }
 
   /**
    * Find or create an app user for the given Bitmap email.
-   * Provisioned accounts use a random password and mustSetPassword=true
-   * so they can be claimed via public register later.
+   * Provisioned accounts use a random password and mustSetPassword=true.
+   * Public register cannot claim them; an admin must set the password.
    */
   async ensureAppUserIdForEmail(
     emailRaw: string | null | undefined,
   ): Promise<string | null> {
     if (!emailRaw) return null;
 
-    const email = normalizeEmail(emailRaw);
+    const email = normaliseEmail(emailRaw);
     if (!email) return null;
 
     const existingId = await this.users.findIdByEmailLower(email);
@@ -78,7 +78,7 @@ export class SyncAttributionService {
   /** True when the given app login email is linked via a user mapping bitmapEmail. */
   async isAppUserLinkedViaEmail(appUserEmail: string): Promise<boolean> {
     return this.userMappings.existsByBitmapEmailLower(
-      normalizeEmail(appUserEmail),
+      normaliseEmail(appUserEmail),
     );
   }
 }

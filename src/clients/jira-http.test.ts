@@ -12,6 +12,23 @@ describe("JiraHttpClient", () => {
     ).toThrow(/must not include an API version/);
   });
 
+  it("rejects http and credentialed base URLs", () => {
+    expect(() =>
+      createJiraApiClient({
+        baseUrl: "http://example.atlassian.net",
+        email: "a@b.com",
+        apiToken: "token",
+      }),
+    ).toThrow(/public https origin/);
+    expect(() =>
+      createJiraApiClient({
+        baseUrl: "https://user:pass@example.atlassian.net",
+        email: "a@b.com",
+        apiToken: "token",
+      }),
+    ).toThrow(/public https origin/);
+  });
+
   it("calls v3 search/jql", async () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       expect(String(input)).toBe(

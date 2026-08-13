@@ -1,7 +1,7 @@
-import { randomBytes } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import bcrypt from "bcrypt";
 
-export { normalizeEmail } from "@/lib/email";
+export { normaliseEmail } from "@/lib/email";
 
 const BCRYPT_ROUNDS = 12;
 export const SESSION_COOKIE = "session_token";
@@ -20,4 +20,9 @@ export async function verifyPassword(
 
 export function createSessionToken(): string {
   return randomBytes(32).toString("hex");
+}
+
+/** SHA-256 hex digest stored in `sessions.token` (cookie keeps the plaintext). */
+export function hashSessionToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
 }

@@ -24,7 +24,13 @@ export default function ErrorPage({
         description="An unexpected error occurred while rendering this page."
       />
       <Alert variant="error" className="mb-6">
-        {error.message || "Unknown error"}
+        An unexpected error occurred.
+        {error.digest ? (
+          <>
+            {" "}
+            <span className="font-mono text-xs">Reference: {error.digest}</span>
+          </>
+        ) : null}
       </Alert>
       <div className="flex gap-3">
         <Button type="button" onClick={reset}>

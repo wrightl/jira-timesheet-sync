@@ -83,7 +83,7 @@ function IconPortfolio(props: IconProps) {
     );
 }
 
-function IconUtilization(props: IconProps) {
+function IconUtilisation(props: IconProps) {
     return (
         <svg
             viewBox="0 0 24 24"
@@ -315,13 +315,7 @@ function NavLinks({
                                 active ? 'text-accent' : ''
                             }`}
                         />
-                        <span
-                            className={
-                                collapsed
-                                    ? 'sr-only'
-                                    : 'truncate'
-                            }
-                        >
+                        <span className={collapsed ? 'sr-only' : 'truncate'}>
                             {link.label}
                         </span>
                     </Link>
@@ -435,25 +429,9 @@ export function AppShell({
         { href: '/', label: 'Dashboard', icon: IconHome },
         { href: '/portfolio', label: 'Portfolio', icon: IconPortfolio },
         { href: '/projects', label: 'Projects', icon: IconProjects },
-        { href: '/utilization', label: 'Utilization', icon: IconUtilization },
+        { href: '/utilisation', label: 'Utilisation', icon: IconUtilisation },
         { href: '/status', label: 'Status', icon: IconStatus },
         { href: '/github', label: 'GitHub', icon: IconGithub },
-        ...(user?.role === 'exec'
-            ? [
-                  {
-                      href: '/my-settings',
-                      label: 'My settings',
-                      icon: IconUserSettings,
-                  },
-              ]
-            : [
-                  { href: '/my-mappings', label: 'My mappings', icon: IconMap },
-                  {
-                      href: '/my-settings',
-                      label: 'My settings',
-                      icon: IconUserSettings,
-                  },
-              ]),
         ...(user?.role === 'admin'
             ? [
                   { href: '/teams', label: 'Teams', icon: IconUsers },
@@ -467,8 +445,8 @@ export function AppShell({
     ];
 
     const profileLinks: { href: string; label: string }[] = [
-        { href: '/my-mappings', label: 'My mappings' },
-        { href: '/my-settings', label: 'My settings' },
+        { href: '/my-mappings', label: 'Mappings' },
+        { href: '/my-settings', label: 'Settings' },
     ];
 
     function signOut() {
@@ -645,9 +623,7 @@ export function AppShell({
                                 tabIndex={-1}
                                 aria-label="Close navigation menu"
                                 className={`absolute inset-0 bg-foreground/40 transition-opacity duration-200 ${
-                                    mobileNavOpen
-                                        ? 'opacity-100'
-                                        : 'opacity-0'
+                                    mobileNavOpen ? 'opacity-100' : 'opacity-0'
                                 }`}
                                 onClick={() => {
                                     closeMobileNav();

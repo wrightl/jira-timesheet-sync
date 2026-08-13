@@ -66,7 +66,7 @@ const WORKLOG_EVENTS = new Set<WorklogEventType>([
 ]);
 
 /**
- * Parse a Jira Cloud worklog webhook payload into a normalized event.
+ * Parse a Jira Cloud worklog webhook payload into a normalised event.
  */
 export function parseWorklogWebhookPayload(
   payload: unknown,

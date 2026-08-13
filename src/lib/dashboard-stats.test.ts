@@ -59,13 +59,14 @@ describe("statusCountsFromRows", () => {
         { status: "failed", count: 2 },
         { status: "skipped", count: 3 },
         { status: "pending", count: 1 },
+        { status: "processing", count: 2 },
         { status: "other", count: 99 },
       ]),
     ).toEqual({
       synced: 10,
       failed: 2,
       skipped: 3,
-      pending: 1,
+      pending: 3,
     });
   });
 
@@ -132,7 +133,7 @@ describe("buildVolumeBuckets", () => {
     expect(volume.find((v) => v.key === "2026-08-03T14")?.count).toBe(3);
   });
 
-  it("normalizes Date day values to UTC date keys", () => {
+  it("normalises Date day values to UTC date keys", () => {
     const now = new Date("2026-08-03T12:00:00.000Z");
     const volume = buildVolumeBuckets(
       [{ bucket: new Date("2026-08-02T00:00:00.000Z"), count: 2 }],

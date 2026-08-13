@@ -25,7 +25,7 @@ import {
 } from '@/services/api-cache';
 import type { ProjectListStatus } from '@/lib/project-list-status';
 import { SyncAttributionService } from '@/lib/sync-attribution';
-import { normalizeEmail } from '@/lib/email';
+import { normaliseEmail } from '@/lib/email';
 import { getEnv } from '@/lib/env';
 import { log } from '@/lib/log';
 
@@ -470,7 +470,7 @@ export class BitmapResolverService {
             return null;
         }
 
-        const email = normalizeEmail(bitmapEmail);
+        const email = normaliseEmail(bitmapEmail);
         const appUserId = await this.users.findIdByEmailLower(email);
         if (!appUserId) {
             return null;

@@ -28,4 +28,21 @@ describe("jiraIssueBrowseUrl", () => {
       ),
     ).toBeNull();
   });
+
+  it("rejects javascript, http, and private hosts", () => {
+    expect(jiraIssueBrowseUrl("javascript:alert(1)", "ENG-42")).toBeNull();
+    expect(
+      jiraIssueBrowseUrl("http://example.atlassian.net", "ENG-42"),
+    ).toBeNull();
+    expect(jiraIssueBrowseUrl("https://127.0.0.1", "ENG-42")).toBeNull();
+    expect(
+      jiraIssueBrowseUrl("https://user:pass@example.atlassian.net", "ENG-42"),
+    ).toBeNull();
+  });
+
+  it("uses the https origin only, ignoring extra path", () => {
+    expect(
+      jiraIssueBrowseUrl("https://example.atlassian.net/wiki", "ENG-42"),
+    ).toBe("https://example.atlassian.net/browse/ENG-42");
+  });
 });

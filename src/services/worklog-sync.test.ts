@@ -122,12 +122,28 @@ function createMockDb(options?: {
           updates.push(value);
           return {
             where() {
-              const promise = Promise.resolve([]) as unknown as Promise<
+              const setValue = value as { status?: string };
+              const returningRows =
+                setValue.status === "processing"
+                  ? [
+                      {
+                        id: "sync-pending-1",
+                        status: "processing",
+                        jiraWorklogId: "wl-1",
+                        eventType: "worklog_created",
+                      },
+                    ]
+                  : setValue.status === "synced" ||
+                      setValue.status === "skipped" ||
+                      setValue.status === "failed"
+                    ? [{ id: "sync-pending-1" }]
+                    : [];
+              const promise = Promise.resolve(returningRows) as unknown as Promise<
                 unknown[]
               > & {
                 returning: () => Promise<unknown[]>;
               };
-              promise.returning = () => Promise.resolve([]);
+              promise.returning = () => Promise.resolve(returningRows);
               return promise;
             },
           };
@@ -645,6 +661,56 @@ describe("processWorklogWebhook", () => {
         error: "No Bitmap user found",
       }),
     );
+  });
+
+  it("CAS-claims pending before Bitmap writes and skips a lost race", async () => {
+    const createTimesheet = vi.fn(async () => ({ timesheetId: "ts-1" }));
+    const claimForProcess = vi
+      .fn()
+      .mockResolvedValueOnce({ id: "s1", status: "processing" })
+      .mockResolvedValueOnce(null);
+    const finalise = vi.fn(async (id: string | undefined) => id);
+    const service = createWorklogSyncService({} as never, {
+      syncs: {
+        claimForProcess,
+        finalise,
+        findLatestSyncedTimesheet: async () => null,
+        findLatestSyncedTimesheetId: async () => null,
+      } as never,
+      spaceMappings: {
+        findBySpaceKey: async () => ({
+          id: "m1",
+          jiraSpaceKey: "ENG",
+          clientId: "client-9",
+          enabled: true,
+        }),
+      } as never,
+      users: { isSyncEnabled: async () => true } as never,
+      attribution: {
+        ensureAppUserIdForAuthor: async () => null,
+      } as never,
+      settings: { getAccessToken: async () => "token" } as never,
+      resolver: { createResolvingPmClient: () => pm } as never,
+      pmClient: {
+        createTimesheet,
+        updateTimesheet: vi.fn(),
+        deleteTimesheet: vi.fn(),
+      } as never,
+      spaceMappingDiscovery: {
+        ensureMappingForSpaceKey: async () => null,
+      } as never,
+    });
+
+    const raw = JSON.stringify(basePayload);
+    const first = await service.process(basePayload, raw, "s1");
+    const second = await service.process(basePayload, raw, "s1");
+
+    expect(first.status).toBe("synced");
+    expect(createTimesheet).toHaveBeenCalledTimes(1);
+    expect(second.status).toBe("failed");
+    expect(second.error).toBe("process_not_claimed");
+    expect(createTimesheet).toHaveBeenCalledTimes(1);
+    expect(finalise).toHaveBeenCalledTimes(1);
   });
 });
 

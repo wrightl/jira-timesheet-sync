@@ -1,12 +1,12 @@
 import { NextRequest } from "next/server";
-import { requireAdmin, requireAuth } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/api";
 import { teamCreateSchema } from "@/lib/validators";
 import { getDb } from "@/db";
 import { TeamsRepository } from "@/repositories/teams-repository";
 
 export async function GET(request: NextRequest) {
-  const auth = await requireAuth(request);
+  const auth = await requireAdmin(request);
   if (auth.error) return auth.error;
 
   const repo = new TeamsRepository(getDb());

@@ -8,6 +8,10 @@ import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import type { StatusNarrative } from '@/services/status-narrative-service';
 import type { PortfolioResult } from '@/lib/portfolio';
+import {
+    getCachedPortfolio,
+    setCachedPortfolio,
+} from '@/lib/portfolio-dashboard-cache';
 
 export function StatusNarrativePanel({ authed }: { authed: boolean }) {
     const searchParams = useSearchParams();
@@ -21,12 +25,29 @@ export function StatusNarrativePanel({ authed }: { authed: boolean }) {
 
     useEffect(() => {
         if (!authed) return;
+        let cancelled = false;
+
         void (async () => {
-            const res = await fetch('/api/portfolio');
-            if (res.ok) {
-                setPortfolio((await res.json()) as PortfolioResult);
+            await Promise.resolve();
+            if (cancelled) return;
+
+            const cached = getCachedPortfolio();
+            if (cached) {
+                setPortfolio(cached);
+                return;
             }
+
+            const res = await fetch('/api/portfolio');
+            if (cancelled || !res.ok) return;
+            const next = (await res.json()) as PortfolioResult;
+            if (cancelled) return;
+            setCachedPortfolio(next);
+            setPortfolio(next);
         })();
+
+        return () => {
+            cancelled = true;
+        };
     }, [authed]);
 
     const load = async (id = projectId) => {
@@ -64,7 +85,11 @@ export function StatusNarrativePanel({ authed }: { authed: boolean }) {
     };
 
     useEffect(() => {
-        if (authed && initialProjectId) void load(initialProjectId);
+        if (!authed || !initialProjectId) return;
+        void (async () => {
+            await Promise.resolve();
+            await load(initialProjectId);
+        })();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [authed, initialProjectId]);
 

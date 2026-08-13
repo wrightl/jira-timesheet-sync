@@ -2,6 +2,11 @@ import {
   isProjectListStatus,
   type ProjectListStatus,
 } from "@/lib/project-list-status";
+import {
+  isExcludedClientId,
+  isExcludedClientName,
+  withoutExcludedClients,
+} from "@/lib/excluded-clients";
 import type { ProjectDashboardResult } from "@/services/project-dashboard";
 
 export const PROJECTS_DASHBOARD_SELECTION_KEY =
@@ -106,6 +111,13 @@ export function hydrateProjectsDashboardSelectionFromStorage(): StoredSelection 
   hydratedFromStorage = true;
   const stored = readStoredSelection();
   if (!stored) return null;
+  if (isExcludedClientId(stored.clientId)) {
+    memory.clientId = "";
+    memory.projectId = "";
+    memory.projectStatus = stored.projectStatus;
+    writeStoredSelection();
+    return { clientId: "", projectId: "", projectStatus: stored.projectStatus };
+  }
   memory.clientId = stored.clientId;
   memory.projectId = stored.projectId;
   memory.projectStatus = stored.projectStatus;
@@ -113,19 +125,25 @@ export function hydrateProjectsDashboardSelectionFromStorage(): StoredSelection 
 }
 
 export function readProjectsDashboardCache(): ProjectsDashboardSnapshot {
-  const { clientId, projectId, projectStatus } = memory;
+  const clientId = isExcludedClientId(memory.clientId) ? "" : memory.clientId;
+  const projectId = clientId ? memory.projectId : "";
+  const { projectStatus } = memory;
   const key = clientId ? projectsKey(clientId, projectStatus) : "";
   const projects =
     key && memory.projectsByKey.has(key)
       ? (memory.projectsByKey.get(key) ?? [])
       : [];
-  const dashboard =
+  const dashboardRaw =
     projectId && memory.dashboardByProjectId.has(projectId)
       ? (memory.dashboardByProjectId.get(projectId) ?? null)
       : null;
+  const dashboard =
+    dashboardRaw && isExcludedClientName(dashboardRaw.project.clientName)
+      ? null
+      : dashboardRaw;
 
   return {
-    clients: memory.clients ?? [],
+    clients: withoutExcludedClients(memory.clients ?? []),
     clientId,
     projectStatus,
     projects,
@@ -155,9 +173,14 @@ export function setProjectsDashboardSelection(selection: {
   projectStatus?: ProjectListStatus;
 }): void {
   if (selection.clientId !== undefined) {
-    memory.clientId = selection.clientId;
+    memory.clientId = isExcludedClientId(selection.clientId)
+      ? ""
+      : selection.clientId;
+    if (!memory.clientId) {
+      memory.projectId = "";
+    }
   }
-  if (selection.projectId !== undefined) {
+  if (selection.projectId !== undefined && memory.clientId) {
     memory.projectId = selection.projectId;
   }
   if (selection.projectStatus !== undefined) {
@@ -167,11 +190,12 @@ export function setProjectsDashboardSelection(selection: {
 }
 
 export function getCachedClients(): CachedBitmapClient[] | null {
-  return memory.clients;
+  if (!memory.clients) return null;
+  return withoutExcludedClients(memory.clients);
 }
 
 export function setCachedClients(clients: CachedBitmapClient[]): void {
-  memory.clients = clients;
+  memory.clients = withoutExcludedClients(clients);
 }
 
 export function invalidateCachedClients(): void {
@@ -218,7 +242,14 @@ export function getCachedDashboard(
   projectId: string,
 ): ProjectDashboardResult | null {
   if (!projectId) return null;
-  return memory.dashboardByProjectId.get(projectId) ?? null;
+  const dashboard = memory.dashboardByProjectId.get(projectId) ?? null;
+  if (
+    dashboard &&
+    isExcludedClientName(dashboard.project.clientName)
+  ) {
+    return null;
+  }
+  return dashboard;
 }
 
 export function setCachedDashboard(

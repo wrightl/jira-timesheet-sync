@@ -1,5 +1,6 @@
 import { after } from "next/server";
 import {
+  hashPayload,
   verifyHubSignature,
   verifyWebhookToken,
 } from "@/lib/webhook-auth";
@@ -23,21 +24,25 @@ export async function POST(request: Request) {
   const hubSignature = request.headers.get("x-hub-signature");
   const webhookToken = request.headers.get("x-webhook-token");
 
-  const authorized = hubSignature
+  const authorised = hubSignature
     ? verifyHubSignature(hubSignature, rawBody, secret)
     : webhookToken
       ? verifyWebhookToken(webhookToken, secret)
       : false;
 
-  if (!authorized) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (!authorised) {
+    return Response.json({ error: "Unauthorised" }, { status: 401 });
   }
 
   let payload: unknown;
   try {
     payload = JSON.parse(rawBody);
   } catch (err) {
-    log.error("webhook/jira", err, { phase: "parse", rawBody });
+    log.error("webhook/jira", err, {
+      phase: "parse",
+      payloadHash: hashPayload(rawBody),
+      payloadLength: rawBody.length,
+    });
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 

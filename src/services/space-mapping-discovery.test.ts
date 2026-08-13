@@ -133,6 +133,33 @@ describe("SpaceMappingDiscoveryService", () => {
     expect(created).toHaveLength(0);
   });
 
+  it("skips TheCurve projects when discovering mappings", async () => {
+    const { service, created } = createService({
+      projects: [
+        project({
+          id: "p-internal",
+          jira_budget_jql: "project = INT",
+          client: { id: "5e8f8b80d9f37277a88e7f10", name: "TheCurve" },
+        }),
+        project({
+          id: "p2",
+          jira_budget_jql: "project = ACME",
+          client: { id: "client-2" },
+        }),
+      ],
+    });
+
+    const result = await service.discoverAndCreateMissing();
+    expect(result.created).toEqual([
+      expect.objectContaining({
+        jiraSpaceKey: "ACME",
+        clientId: "client-2",
+      }),
+    ]);
+    expect(created).toHaveLength(1);
+    expect(await service.ensureMappingForSpaceKey("INT")).toBeNull();
+  });
+
   it("discoverAndCreateMissing creates only missing keys", async () => {
     const existing: SpaceProjectMapping = {
       id: "m1",

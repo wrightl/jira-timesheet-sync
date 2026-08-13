@@ -7,6 +7,7 @@ import {
 import { decryptSecret, encryptSecret, maskToken } from "@/lib/crypto";
 import { getEnv } from "@/lib/env";
 import { log } from "@/lib/log";
+import { isAllowedSlackWebhookUrl } from "@/lib/outbound-urls";
 import { SettingsRepository } from "@/repositories/settings-repository";
 import {
   createPortfolioService,
@@ -224,6 +225,9 @@ export class AlertService {
       throw new Error("Slack webhook is not configured");
     }
     const webhook = decryptSecret(row.slackWebhookUrlEncrypted, key);
+    if (!isAllowedSlackWebhookUrl(webhook)) {
+      throw new Error("Slack webhook URL is not an allowed https://hooks.slack.com endpoint");
+    }
     const res = await this.fetchImpl(webhook, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

@@ -1,7 +1,7 @@
 export type AlertThresholds = {
   budgetBurnPctRisk: number;
   runwayDaysRisk: number;
-  agingWipRisk: number;
+  ageingWipRisk: number;
   openBugsRisk: number;
   syncFailedOpenRisk: number;
   estimateCoveragePctWatch: number;
@@ -11,7 +11,7 @@ export type AlertThresholds = {
 export const DEFAULT_ALERT_THRESHOLDS: AlertThresholds = {
   budgetBurnPctRisk: 90,
   runwayDaysRisk: 5,
-  agingWipRisk: 10,
+  ageingWipRisk: 10,
   openBugsRisk: 10,
   syncFailedOpenRisk: 5,
   estimateCoveragePctWatch: 70,
@@ -23,7 +23,9 @@ export function parseAlertThresholds(
 ): AlertThresholds {
   if (!raw?.trim()) return { ...DEFAULT_ALERT_THRESHOLDS };
   try {
-    const parsed = JSON.parse(raw) as Partial<AlertThresholds>;
+    const parsed = JSON.parse(raw) as Partial<AlertThresholds> & {
+      agingWipRisk?: number;
+    };
     return {
       budgetBurnPctRisk:
         typeof parsed.budgetBurnPctRisk === "number"
@@ -33,10 +35,12 @@ export function parseAlertThresholds(
         typeof parsed.runwayDaysRisk === "number"
           ? parsed.runwayDaysRisk
           : DEFAULT_ALERT_THRESHOLDS.runwayDaysRisk,
-      agingWipRisk:
-        typeof parsed.agingWipRisk === "number"
-          ? parsed.agingWipRisk
-          : DEFAULT_ALERT_THRESHOLDS.agingWipRisk,
+      ageingWipRisk:
+        typeof parsed.ageingWipRisk === "number"
+          ? parsed.ageingWipRisk
+          : typeof parsed.agingWipRisk === "number"
+            ? parsed.agingWipRisk
+            : DEFAULT_ALERT_THRESHOLDS.ageingWipRisk,
       openBugsRisk:
         typeof parsed.openBugsRisk === "number"
           ? parsed.openBugsRisk

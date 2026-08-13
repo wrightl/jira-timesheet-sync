@@ -14,10 +14,10 @@ import {
     TableHeaderCell,
     TableRow,
 } from '@/components/ui/table';
-import type { UtilizationResult } from '@/services/utilization-service';
+import type { UtilisationResult } from '@/services/utilisation-service';
 
 function statusBadge(
-    status: UtilizationResult['people'][number]['status'],
+    status: UtilisationResult['people'][number]['status'],
 ): 'ok' | 'warning' | 'danger' | 'muted' {
     if (status === 'ok') return 'ok';
     if (status === 'watch' || status === 'under') return 'warning';
@@ -25,8 +25,8 @@ function statusBadge(
     return 'muted';
 }
 
-export function UtilizationDashboard({ authed }: { authed: boolean }) {
-    const [data, setData] = useState<UtilizationResult | null>(null);
+export function UtilisationDashboard({ authed }: { authed: boolean }) {
+    const [data, setData] = useState<UtilisationResult | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [pending, setPending] = useState(false);
     const [rangeDays, setRangeDays] = useState('7');
@@ -38,22 +38,25 @@ export function UtilizationDashboard({ authed }: { authed: boolean }) {
         try {
             const params = new URLSearchParams({ rangeDays });
             if (teamId !== 'all') params.set('teamId', teamId);
-            const res = await fetch(`/api/utilization?${params.toString()}`);
+            const res = await fetch(`/api/utilisation?${params.toString()}`);
             if (!res.ok) {
+                const body = (await res.json().catch(() => null)) as {
+                    error?: string;
+                } | null;
                 setError(
                     res.status === 401
                         ? 'Sign in required'
-                        : 'Failed to load utilization',
+                        : (body?.error ?? 'Failed to load utilisation'),
                 );
                 setData(null);
                 return;
             }
-            setData((await res.json()) as UtilizationResult);
+            setData((await res.json()) as UtilisationResult);
         } catch (err) {
             setError(
                 err instanceof Error
                     ? err.message
-                    : 'Failed to load utilization',
+                    : 'Failed to load utilisation',
             );
             setData(null);
         } finally {
@@ -69,7 +72,7 @@ export function UtilizationDashboard({ authed }: { authed: boolean }) {
     if (!authed) {
         return (
             <p className="text-sm text-muted">
-                Sign in to view people utilization.
+                Sign in to view people utilisation.
             </p>
         );
     }
@@ -108,16 +111,17 @@ export function UtilizationDashboard({ authed }: { authed: boolean }) {
             {error ? <Alert variant="error">{error}</Alert> : null}
 
             <Card>
-                <CardTitle className="mb-1">People utilization</CardTitle>
+                <CardTitle className="mb-1">Billable utilisation</CardTitle>
                 <CardDescription className="mb-4">
-                    Hours from Jira worklog sync events vs weekly capacity.
-                    Failed/skipped hours highlight billing leakage.
+                    Billable hours from Bitmap timesheets vs each person&apos;s
+                    Bitmap billable_target_hours. Planned and rejected entries
+                    are excluded.
                 </CardDescription>
                 {!data || data.people.length === 0 ? (
                     <p className="text-sm text-muted">
                         {pending
                             ? 'Loading…'
-                            : 'No utilization data in this range. Add team members under Teams or wait for syncs.'}
+                            : 'No utilisation data in this range. Add team members under Teams or ensure Bitmap timesheets exist.'}
                     </p>
                 ) : (
                     <Table>
@@ -125,10 +129,10 @@ export function UtilizationDashboard({ authed }: { authed: boolean }) {
                             <TableRow>
                                 <TableHeaderCell>Person</TableHeaderCell>
                                 <TableHeaderCell>Team</TableHeaderCell>
-                                <TableHeaderCell>Logged</TableHeaderCell>
-                                <TableHeaderCell>Synced</TableHeaderCell>
-                                <TableHeaderCell>Failed</TableHeaderCell>
-                                <TableHeaderCell>Utilization</TableHeaderCell>
+                                <TableHeaderCell>Billable</TableHeaderCell>
+                                <TableHeaderCell>Non-billable</TableHeaderCell>
+                                <TableHeaderCell>Target</TableHeaderCell>
+                                <TableHeaderCell>Utilisation</TableHeaderCell>
                                 <TableHeaderCell>Status</TableHeaderCell>
                             </TableRow>
                         </TableHead>
@@ -145,19 +149,21 @@ export function UtilizationDashboard({ authed }: { authed: boolean }) {
                                             </span>
                                         </div>
                                     </TableCell>
-                                    <TableCell>{person.teamName ?? '—'}</TableCell>
-                                    <TableCell className="font-mono text-xs">
-                                        {person.loggedHours}h
+                                    <TableCell>
+                                        {person.teamName ?? '—'}
                                     </TableCell>
                                     <TableCell className="font-mono text-xs">
-                                        {person.syncedHours}h
+                                        {person.billableHours}h
                                     </TableCell>
                                     <TableCell className="font-mono text-xs">
-                                        {person.failedHours}h
+                                        {person.nonBillableHours}h
                                     </TableCell>
                                     <TableCell className="font-mono text-xs">
-                                        {person.utilizationPct != null
-                                            ? `${person.utilizationPct}%`
+                                        {person.targetHours}h
+                                    </TableCell>
+                                    <TableCell className="font-mono text-xs">
+                                        {person.utilisationPct != null
+                                            ? `${person.utilisationPct}%`
                                             : '—'}
                                     </TableCell>
                                     <TableCell>

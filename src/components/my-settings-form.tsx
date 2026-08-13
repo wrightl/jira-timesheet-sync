@@ -63,7 +63,7 @@ export function MySettingsForm({ authed }: { authed: boolean }) {
           Personal access token is encrypted at rest and never shared with other
           users. Use a classic or fine-grained PAT with{" "}
           <code className="font-mono text-xs">repo</code> (or org read) scope so
-          private organization repositories are visible. Leave the token blank to
+          private organisation repositories are visible. Leave the token blank to
           keep the current value.
         </CardDescription>
         {settings ? (
@@ -79,7 +79,7 @@ export function MySettingsForm({ authed }: { authed: boolean }) {
               </dd>
             </div>
             <div>
-              <dt className="text-muted">Organization</dt>
+              <dt className="text-muted">Organisation</dt>
               <dd className="font-mono text-xs">
                 {settings.githubOrg ?? "—"}
               </dd>
@@ -130,7 +130,7 @@ export function MySettingsForm({ authed }: { authed: boolean }) {
             type="text"
             value={org}
             onChange={(e) => setOrg(e.target.value)}
-            placeholder="Organization login (e.g. acme-corp)"
+            placeholder="Organisation login (e.g. acme-corp)"
             required
             autoComplete="off"
           />

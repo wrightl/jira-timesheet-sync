@@ -10,6 +10,7 @@ export type SyncListStatus = WorklogSync["status"];
 
 export const SYNC_STATUSES = [
   "pending",
+  "processing",
   "synced",
   "skipped",
   "failed",

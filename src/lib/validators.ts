@@ -1,14 +1,63 @@
 import { z } from "zod";
+import { isExcludedClientId } from "@/lib/excluded-clients";
+import {
+  isAllowedJiraBaseUrl,
+  isAllowedSlackWebhookUrl,
+} from "@/lib/outbound-urls";
+
+const optionalJiraBaseUrl = z
+  .string()
+  .optional()
+  .refine(
+    (value) =>
+      value === undefined ||
+      value.trim() === "" ||
+      isAllowedJiraBaseUrl(value),
+    {
+      message:
+        "jiraBaseUrl must be https://*.atlassian.net with no credentials or API path",
+    },
+  );
+
+const optionalSlackWebhookUrl = z
+  .string()
+  .optional()
+  .refine(
+    (value) =>
+      value === undefined ||
+      value.trim() === "" ||
+      isAllowedSlackWebhookUrl(value),
+    {
+      message:
+        "slackWebhookUrl must be an https://hooks.slack.com webhook",
+    },
+  );
+
+const excludedClientMessage = "This client is excluded from the app";
+
+const requiredClientId = z
+  .string()
+  .min(1, "clientId is required")
+  .refine((id) => !isExcludedClientId(id), {
+    message: excludedClientMessage,
+  });
+
+const optionalClientId = z
+  .string()
+  .min(1)
+  .refine((id) => !isExcludedClientId(id), {
+    message: excludedClientMessage,
+  });
 
 export const mappingCreateSchema = z.object({
   jiraSpaceKey: z.string().min(1, "jiraSpaceKey is required"),
-  clientId: z.string().min(1, "clientId is required"),
+  clientId: requiredClientId,
   enabled: z.boolean().optional().default(true),
 });
 
 export const mappingUpdateSchema = z.object({
   jiraSpaceKey: z.string().min(1).optional(),
-  clientId: z.string().min(1).optional(),
+  clientId: optionalClientId.optional(),
   enabled: z.boolean().optional(),
 });
 
@@ -32,7 +81,7 @@ export const userMappingUpdateSchema = z.object({
 
 export const userSpaceMappingCreateSchema = z.object({
   jiraSpaceKey: z.string().min(1, "jiraSpaceKey is required"),
-  clientId: z.string().min(1, "clientId is required"),
+  clientId: requiredClientId,
   projectId: z.string().min(1, "projectId is required"),
   projectBudgetId: z.string().min(1, "projectBudgetId is required"),
   projectName: z.string().nullable().optional(),
@@ -43,7 +92,7 @@ export const userSpaceMappingCreateSchema = z.object({
 
 export const userSpaceMappingUpdateSchema = z.object({
   jiraSpaceKey: z.string().min(1).optional(),
-  clientId: z.string().min(1).optional(),
+  clientId: optionalClientId.optional(),
   projectId: z.string().min(1).optional(),
   projectBudgetId: z.string().min(1).optional(),
   projectName: z.string().nullable().optional(),
@@ -104,16 +153,16 @@ export const githubSettingsUpdateSchema = z
 export const settingsUpdateSchema = z
   .object({
     internalPmAccessToken: z.string().min(1).optional(),
-    jiraBaseUrl: z.string().optional(),
+    jiraBaseUrl: optionalJiraBaseUrl,
     jiraEmail: z.string().optional(),
     jiraApiToken: z.string().optional(),
-    slackWebhookUrl: z.string().optional(),
+    slackWebhookUrl: optionalSlackWebhookUrl,
     alertEmail: z.string().nullable().optional(),
     alertThresholds: z
       .object({
         budgetBurnPctRisk: z.number().optional(),
         runwayDaysRisk: z.number().optional(),
-        agingWipRisk: z.number().optional(),
+        ageingWipRisk: z.number().optional(),
         openBugsRisk: z.number().optional(),
         syncFailedOpenRisk: z.number().optional(),
         estimateCoveragePctWatch: z.number().optional(),

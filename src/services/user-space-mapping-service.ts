@@ -1,6 +1,7 @@
 import { getDb, type Db } from "@/db";
 import type { UserSpaceMapping } from "@/db/schema";
 import { UserSpaceMappingsRepository } from "@/repositories/user-space-mappings-repository";
+import { withoutExcludedClientRows } from "@/lib/excluded-clients";
 import type {
   UserSpaceMappingCreateInput,
   UserSpaceMappingUpdateInput,
@@ -9,19 +10,21 @@ import type {
 export class UserSpaceMappingService {
   constructor(private readonly mappings: UserSpaceMappingsRepository) {}
 
-  listForViewer(options: {
+  async listForViewer(options: {
     viewerId: string;
     viewerRole: "admin" | "user" | "exec";
     filterUserId?: string | null;
     all?: boolean;
   }): Promise<UserSpaceMapping[]> {
+    let mappings: UserSpaceMapping[];
     if (options.viewerRole === "admin" && options.filterUserId) {
-      return this.mappings.listByUserId(options.filterUserId);
+      mappings = await this.mappings.listByUserId(options.filterUserId);
+    } else if (options.viewerRole === "admin" && options.all) {
+      mappings = await this.mappings.listAll();
+    } else {
+      mappings = await this.mappings.listByUserId(options.viewerId);
     }
-    if (options.viewerRole === "admin" && options.all) {
-      return this.mappings.listAll();
-    }
-    return this.mappings.listByUserId(options.viewerId);
+    return withoutExcludedClientRows(mappings);
   }
 
   findById(id: string): Promise<UserSpaceMapping | null> {

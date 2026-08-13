@@ -8,11 +8,15 @@ import {
 import { decryptSecret, encryptSecret, maskToken } from "@/lib/crypto";
 import { getEnv } from "@/lib/env";
 import { log } from "@/lib/log";
+import { safeHttpsOrigin } from "@/lib/outbound-urls";
 
 export type TokenSource = "database" | "env" | "none";
 
 export type JiraCredentials = {
+  /** Settings/env origin used for the Jira API. Never a Bitmap-supplied host. */
   baseUrl: string | null;
+  /** Browse-link origin: validated Bitmap override, else the API base URL. */
+  browseBaseUrl: string | null;
   email: string | null;
   apiToken: string | null;
   tokenSource: TokenSource;
@@ -97,7 +101,7 @@ export class SettingsService {
     const envEmail = nonEmpty(env.JIRA_EMAIL);
     const envBaseUrl = nonEmpty(env.JIRA_BASE_URL);
     const envToken = nonEmpty(env.JIRA_API_TOKEN);
-    const override = nonEmpty(baseUrlOverride);
+    const overrideOrigin = safeHttpsOrigin(baseUrlOverride);
 
     const email = dbEmail ?? envEmail;
     const emailSource: TokenSource = dbEmail
@@ -113,17 +117,19 @@ export class SettingsService {
         ? "env"
         : "none";
 
-    let baseUrl: string | null = dbBaseUrl ?? envBaseUrl ?? override;
-    let baseUrlSource: TokenSource | "project" = dbBaseUrl
+    // API credentials are only ever sent to settings/env. Bitmap jira_instance_url
+    // may be used as a browse-link origin after https validation.
+    const baseUrl = dbBaseUrl ?? envBaseUrl;
+    const baseUrlSource: TokenSource | "project" = dbBaseUrl
       ? "database"
       : envBaseUrl
         ? "env"
-        : override
-          ? "project"
-          : "none";
+        : "none";
+    const browseBaseUrl = overrideOrigin ?? safeHttpsOrigin(baseUrl);
 
     return {
       baseUrl,
+      browseBaseUrl,
       email,
       apiToken,
       tokenSource,
@@ -132,9 +138,11 @@ export class SettingsService {
     };
   }
 
-  async isJiraConfigured(baseUrlOverride?: string | null): Promise<boolean> {
-    const creds = await this.getJiraCredentials(baseUrlOverride);
-    return Boolean(creds.email && creds.apiToken && creds.baseUrl);
+  async isJiraConfigured(): Promise<boolean> {
+    const creds = await this.getJiraCredentials();
+    return Boolean(
+      creds.email && creds.apiToken && safeHttpsOrigin(creds.baseUrl),
+    );
   }
 
   async getStatus(): Promise<SettingsStatus> {
@@ -263,11 +271,15 @@ export class SettingsService {
     });
   }
 
-  async createConfiguredJiraClient(
-    baseUrlOverride?: string | null,
-  ): Promise<JiraApiClient | null> {
-    const creds = await this.getJiraCredentials(baseUrlOverride);
+  async createConfiguredJiraClient(): Promise<JiraApiClient | null> {
+    const creds = await this.getJiraCredentials();
     if (!creds.baseUrl || !creds.email || !creds.apiToken) {
+      return null;
+    }
+    if (!safeHttpsOrigin(creds.baseUrl)) {
+      return null;
+    }
+    if (/\/rest\/api\/\d+/i.test(creds.baseUrl)) {
       return null;
     }
     return createJiraApiClient({

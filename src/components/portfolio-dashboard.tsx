@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
@@ -16,7 +16,21 @@ import {
     TableHeaderCell,
     TableRow,
 } from '@/components/ui/table';
-import type { PortfolioResult, PortfolioRiskTier } from '@/lib/portfolio';
+import {
+    filterPortfolioResult,
+    type PortfolioResult,
+    type PortfolioRiskTier,
+} from '@/lib/portfolio';
+import {
+    getCachedPortfolio,
+    hydratePortfolioDashboardSelectionFromStorage,
+    invalidateCachedPortfolio,
+    isPortfolioDashboardRiskFilter,
+    readPortfolioDashboardCache,
+    setCachedPortfolio,
+    setPortfolioDashboardSelection,
+    type PortfolioDashboardRiskFilter,
+} from '@/lib/portfolio-dashboard-cache';
 
 function riskBadge(
     tier: PortfolioRiskTier,
@@ -28,46 +42,92 @@ function riskBadge(
 }
 
 export function PortfolioDashboard({ authed }: { authed: boolean }) {
-    const [data, setData] = useState<PortfolioResult | null>(null);
+    const initial = readPortfolioDashboardCache();
+    const [data, setData] = useState<PortfolioResult | null>(
+        () => initial.data,
+    );
     const [error, setError] = useState<string | null>(null);
     const [pending, setPending] = useState(false);
-    const [clientFilter, setClientFilter] = useState('all');
-    const [riskFilter, setRiskFilter] = useState('all');
-    const [ownerFilter, setOwnerFilter] = useState('');
+    const [clientFilter, setClientFilter] = useState(
+        () => initial.clientFilter,
+    );
+    const [riskFilter, setRiskFilter] = useState<PortfolioDashboardRiskFilter>(
+        () => initial.riskFilter,
+    );
+    const [ownerFilter, setOwnerFilter] = useState(() => initial.ownerFilter);
+    const [selectionReady, setSelectionReady] = useState(false);
 
-    const load = async () => {
+    const load = useCallback(async (options?: { refresh?: boolean }) => {
+        if (!options?.refresh) {
+            const cached = getCachedPortfolio();
+            if (cached) {
+                setData(cached);
+                return;
+            }
+        }
+
         setPending(true);
         setError(null);
+        if (options?.refresh) invalidateCachedPortfolio();
         try {
-            const params = new URLSearchParams();
-            if (clientFilter !== 'all') params.set('clientId', clientFilter);
-            if (riskFilter !== 'all') params.set('riskTier', riskFilter);
-            if (ownerFilter.trim()) params.set('owner', ownerFilter.trim());
-            const res = await fetch(`/api/portfolio?${params.toString()}`);
+            const res = await fetch('/api/portfolio');
             if (!res.ok) {
                 setError(
                     res.status === 401
                         ? 'Sign in required'
                         : 'Failed to load portfolio',
                 );
-                setData(null);
+                if (options?.refresh) setData(null);
                 return;
             }
-            setData((await res.json()) as PortfolioResult);
+            const next = (await res.json()) as PortfolioResult;
+            setCachedPortfolio(next);
+            setData(next);
         } catch (err) {
             setError(
                 err instanceof Error ? err.message : 'Failed to load portfolio',
             );
-            setData(null);
+            if (options?.refresh) setData(null);
         } finally {
             setPending(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
-        if (authed) void load();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [authed, clientFilter, riskFilter]);
+        const stored = hydratePortfolioDashboardSelectionFromStorage();
+        if (stored) {
+            // Intentional: hydrate from localStorage only after mount (SSR-safe).
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- post-mount localStorage hydrate
+            setClientFilter(stored.clientFilter);
+            setRiskFilter(stored.riskFilter);
+            setOwnerFilter(stored.ownerFilter);
+        }
+        setSelectionReady(true);
+    }, []);
+
+    useEffect(() => {
+        if (!selectionReady) return;
+        setPortfolioDashboardSelection({
+            clientFilter,
+            riskFilter,
+            ownerFilter,
+        });
+    }, [selectionReady, clientFilter, riskFilter, ownerFilter]);
+
+    useEffect(() => {
+        if (!authed || !selectionReady) return;
+        let cancelled = false;
+
+        void (async () => {
+            await Promise.resolve();
+            if (cancelled) return;
+            await load();
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [authed, selectionReady, load]);
 
     const clients = useMemo(() => {
         const map = new Map<string, string>();
@@ -77,13 +137,25 @@ export function PortfolioDashboard({ authed }: { authed: boolean }) {
         return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
     }, [data]);
 
+    const view = useMemo(
+        () =>
+            data
+                ? filterPortfolioResult(data, {
+                      clientId: clientFilter,
+                      riskTier: riskFilter,
+                      owner: ownerFilter,
+                  })
+                : null,
+        [data, clientFilter, riskFilter, ownerFilter],
+    );
+
     if (!authed) {
         return (
             <p className="text-sm text-muted">Sign in to view the portfolio.</p>
         );
     }
 
-    const summary = data?.summary;
+    const summary = view?.summary;
 
     return (
         <div className="space-y-6">
@@ -107,7 +179,12 @@ export function PortfolioDashboard({ authed }: { authed: boolean }) {
                         <span className="mb-1 block text-muted">Risk</span>
                         <Select
                             value={riskFilter}
-                            onChange={(e) => setRiskFilter(e.target.value)}
+                            onChange={(e) => {
+                                const value = e.target.value;
+                                if (isPortfolioDashboardRiskFilter(value)) {
+                                    setRiskFilter(value);
+                                }
+                            }}
                         >
                             <option value="all">All tiers</option>
                             <option value="risk">Risk</option>
@@ -125,7 +202,9 @@ export function PortfolioDashboard({ authed }: { authed: boolean }) {
                             />
                             <RefreshButton
                                 pending={pending}
-                                onClick={() => load()}
+                                onClick={() => void load({ refresh: true })}
+                                title="Reload portfolio"
+                                aria-label="Reload portfolio from Bitmap"
                             />
                         </div>
                     </label>
@@ -133,7 +212,7 @@ export function PortfolioDashboard({ authed }: { authed: boolean }) {
             </div>
 
             {error ? <Alert variant="error">{error}</Alert> : null}
-            {data?.error ? <Alert variant="error">{data.error}</Alert> : null}
+            {view?.error ? <Alert variant="error">{view.error}</Alert> : null}
 
             {summary ? (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -173,7 +252,7 @@ export function PortfolioDashboard({ authed }: { authed: boolean }) {
                                 : '—'}
                         </p>
                         <CardDescription className="mt-1">
-                            Open sync failures: {data?.syncFailedOpen ?? 0}
+                            Open sync failures: {view?.syncFailedOpen ?? 0}
                         </CardDescription>
                     </Card>
                 </div>
@@ -182,12 +261,13 @@ export function PortfolioDashboard({ authed }: { authed: boolean }) {
             <Card>
                 <CardTitle className="mb-1">Portfolio projects</CardTitle>
                 <CardDescription className="mb-4">
-                    Cross-client health from Bitmap active projects. Open a row
-                    for detail or weekly status.
+                    Cross-client health from Bitmap active projects whose start
+                    and end dates include today. Open a row for detail or weekly
+                    status.
                 </CardDescription>
-                {!data || data.projects.length === 0 ? (
+                {!view || view.projects.length === 0 ? (
                     <p className="text-sm text-muted">
-                        {pending
+                        {pending && !data
                             ? 'Loading…'
                             : 'No projects match the current filters.'}
                     </p>
@@ -205,7 +285,7 @@ export function PortfolioDashboard({ authed }: { authed: boolean }) {
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {data.projects.map((project) => (
+                            {view.projects.map((project) => (
                                 <TableRow key={project.projectId}>
                                     <TableCell>
                                         <div className="flex flex-col">

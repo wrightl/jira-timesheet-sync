@@ -31,4 +31,8 @@ export class SessionsRepository {
   async deleteByToken(token: string): Promise<void> {
     await this.db.delete(sessions).where(eq(sessions.token, token));
   }
+
+  async deleteByUserId(userId: string): Promise<void> {
+    await this.db.delete(sessions).where(eq(sessions.userId, userId));
+  }
 }

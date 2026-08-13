@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   }
 
   const state = createOAuthState();
-  const url = createGoogleOAuthService().buildAuthorizeUrl(state);
+  const url = createGoogleOAuthService().buildAuthoriseUrl(state);
   const response = Response.redirect(url, 302);
   response.headers.append(
     "Set-Cookie",

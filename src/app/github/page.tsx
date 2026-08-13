@@ -14,7 +14,7 @@ export default async function GithubPage() {
       <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">
         <PageHeader
           title="GitHub"
-          description="Cross-repository pull request metrics for your configured GitHub organization."
+          description="Cross-repository pull request metrics for your configured GitHub organisation."
         />
         <GithubDashboard authed />
       </main>

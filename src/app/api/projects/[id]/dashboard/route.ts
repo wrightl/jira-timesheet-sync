@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/auth";
+import { ExcludedClientError } from "@/lib/excluded-clients";
 import { createProjectDashboardService } from "@/services/project-dashboard";
 
 export async function GET(
@@ -20,6 +21,9 @@ export async function GET(
     );
     return Response.json(dashboard);
   } catch (err) {
+    if (err instanceof ExcludedClientError) {
+      return Response.json({ error: err.message }, { status: 404 });
+    }
     const message =
       err instanceof Error ? err.message : "Failed to load project dashboard";
     return Response.json({ error: message }, { status: 502 });

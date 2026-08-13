@@ -31,7 +31,12 @@ import { hashPayload } from "@/lib/webhook-auth";
 import { getEnv } from "@/lib/env";
 import { log } from "@/lib/log";
 
-export type SyncStatus = "pending" | "synced" | "skipped" | "failed";
+export type SyncStatus =
+  | "pending"
+  | "processing"
+  | "synced"
+  | "skipped"
+  | "failed";
 
 /** Format notes sent to Bitmap as HTML: issue key, plus worklog comment when present. */
 export function formatTimesheetComment(
@@ -233,6 +238,19 @@ export class WorklogSyncService {
       return { status: "skipped", skippedReason: "unsupported_or_invalid_event" };
     }
 
+    if (syncId) {
+      const claimed = await this.deps.syncs.claimForProcess(syncId);
+      if (!claimed) {
+        return {
+          status: "failed",
+          error: "process_not_claimed",
+          eventType: event.eventType,
+          jiraWorklogId: event.worklogId,
+          syncId,
+        };
+      }
+    }
+
     let appUserId = await this.deps.attribution.ensureAppUserIdForAuthor(
       event.authorDisplayName,
     );
@@ -266,7 +284,7 @@ export class WorklogSyncService {
             eventType: event.eventType,
             syncId: syncId ?? null,
           });
-          const id = await this.deps.syncs.finalize(syncId, {
+          const id = await this.deps.syncs.finalise(syncId, {
             jiraWorklogId: event.worklogId,
             jiraIssueKey: event.issueKey,
             jiraSpaceId: event.spaceId,
@@ -308,7 +326,7 @@ export class WorklogSyncService {
         appUserId = await this.deps.attribution.ensureAppUserIdForAuthor(
           event.authorDisplayName,
         );
-        const id = await this.deps.syncs.finalize(syncId, {
+        const id = await this.deps.syncs.finalise(syncId, {
           jiraWorklogId: event.worklogId,
           jiraIssueKey: event.issueKey,
           jiraSpaceId: event.spaceId,
@@ -395,7 +413,7 @@ export class WorklogSyncService {
           appUserId = await this.deps.attribution.ensureAppUserIdForAuthor(
             event.authorDisplayName,
           );
-          const id = await this.deps.syncs.finalize(syncId, {
+          const id = await this.deps.syncs.finalise(syncId, {
             jiraWorklogId: event.worklogId,
             jiraIssueKey: event.issueKey,
             jiraSpaceId: event.spaceId,
@@ -422,7 +440,7 @@ export class WorklogSyncService {
         event.authorDisplayName,
       );
 
-      const id = await this.deps.syncs.finalize(syncId, {
+      const id = await this.deps.syncs.finalise(syncId, {
         jiraWorklogId: event.worklogId,
         jiraIssueKey: event.issueKey,
         jiraSpaceId: event.spaceId,
@@ -469,7 +487,7 @@ export class WorklogSyncService {
         appUserId,
       });
       try {
-        const id = await this.deps.syncs.finalize(syncId, {
+        const id = await this.deps.syncs.finalise(syncId, {
           jiraWorklogId: event.worklogId,
           jiraIssueKey: event.issueKey,
           jiraSpaceId: event.spaceId,
@@ -518,7 +536,7 @@ export class WorklogSyncService {
     }
 
     if (!claimed.rawPayload) {
-      await this.deps.syncs.finalize(syncId, {
+      await this.deps.syncs.finalise(syncId, {
         jiraWorklogId: claimed.jiraWorklogId,
         jiraIssueKey: claimed.jiraIssueKey,
         jiraSpaceId: claimed.jiraSpaceId,
@@ -545,7 +563,7 @@ export class WorklogSyncService {
     try {
       payload = JSON.parse(claimed.rawPayload);
     } catch {
-      await this.deps.syncs.finalize(syncId, {
+      await this.deps.syncs.finalise(syncId, {
         jiraWorklogId: claimed.jiraWorklogId,
         jiraIssueKey: claimed.jiraIssueKey,
         jiraSpaceId: claimed.jiraSpaceId,

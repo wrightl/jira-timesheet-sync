@@ -5,6 +5,7 @@ import {
   type NewSpaceProjectMapping,
   type SpaceProjectMapping,
 } from "@/db/schema";
+import { isExcludedClientId } from "@/lib/excluded-clients";
 
 export class SpaceProjectMappingsRepository {
   constructor(private readonly db: Db) {}
@@ -36,10 +37,15 @@ export class SpaceProjectMappingsRepository {
 
   async listEnabledSpaceKeys(): Promise<string[]> {
     const rows = await this.db
-      .select({ jiraSpaceKey: spaceProjectMappings.jiraSpaceKey })
+      .select({
+        jiraSpaceKey: spaceProjectMappings.jiraSpaceKey,
+        clientId: spaceProjectMappings.clientId,
+      })
       .from(spaceProjectMappings)
       .where(eq(spaceProjectMappings.enabled, true));
-    return rows.map((r) => r.jiraSpaceKey);
+    return rows
+      .filter((r) => !isExcludedClientId(r.clientId))
+      .map((r) => r.jiraSpaceKey);
   }
 
   async create(

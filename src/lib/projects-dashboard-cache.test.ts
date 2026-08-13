@@ -5,8 +5,10 @@ import {
   readProjectsDashboardCache,
   resetProjectsDashboardCacheForTests,
   resolveSelectedProjectId,
+  setCachedClients,
   setProjectsDashboardSelection,
 } from "@/lib/projects-dashboard-cache";
+import { EXCLUDED_CLIENT_ID_THECURVE } from "@/lib/excluded-clients";
 
 function createMemoryStorage(): Storage {
   const map = new Map<string, string>();
@@ -125,6 +127,32 @@ describe("projects-dashboard-cache selection persistence", () => {
     expect(snapshot.clientId).toBe("");
     expect(snapshot.projectId).toBe("");
     expect(snapshot.projectStatus).toBe("active");
+  });
+
+  it("drops a persisted TheCurve client selection", () => {
+    localStorage.setItem(
+      PROJECTS_DASHBOARD_SELECTION_KEY,
+      JSON.stringify({
+        clientId: EXCLUDED_CLIENT_ID_THECURVE,
+        projectId: "internal-project",
+        projectStatus: "active",
+      }),
+    );
+
+    const stored = hydrateProjectsDashboardSelectionFromStorage();
+    expect(stored?.clientId).toBe("");
+    expect(stored?.projectId).toBe("");
+    expect(readProjectsDashboardCache().clientId).toBe("");
+  });
+
+  it("strips TheCurve from cached client dropdowns", () => {
+    setCachedClients([
+      { id: EXCLUDED_CLIENT_ID_THECURVE, name: "TheCurve" },
+      { id: "c2", name: "Acme" },
+    ]);
+    expect(readProjectsDashboardCache().clients).toEqual([
+      { id: "c2", name: "Acme" },
+    ]);
   });
 });
 

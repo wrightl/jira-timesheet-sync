@@ -5,7 +5,7 @@ description: >-
   Uses a user-specified ticket key when provided; otherwise picks the
   highest-priority To Do ticket in the active sprint with the cursor label. Use
   when the user says ticket-work, work next Jira ticket, work on PM-123, pick up
-  a PM sprint ticket, or implement the next cursor-labeled ticket.
+  a PM sprint ticket, or implement the next cursor-labelled ticket.
 disable-model-invocation: true
 ---
 

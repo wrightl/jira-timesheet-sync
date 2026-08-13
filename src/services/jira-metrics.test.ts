@@ -111,7 +111,7 @@ describe("jira-metrics helpers", () => {
     expect(agg.defectInjectionRatio).toBe(1);
   });
 
-  it("counts aging WIP from updated age ≥14d", () => {
+  it("counts ageing WIP from updated age ≥14d", () => {
     const now = new Date("2026-08-08T12:00:00.000Z");
     const issues = [
       issue({
@@ -148,8 +148,8 @@ describe("jira-metrics helpers", () => {
     ];
 
     const agg = aggregateJiraIssues(issues, { now });
-    expect(agg.agingWipCount).toBe(1);
-    expect(agg.agingWipOldest?.key).toBe("OLD-1");
-    expect(agg.agingWipOldest?.ageDays).toBeGreaterThanOrEqual(14);
+    expect(agg.ageingWipCount).toBe(1);
+    expect(agg.ageingWipOldest?.key).toBe("OLD-1");
+    expect(agg.ageingWipOldest?.ageDays).toBeGreaterThanOrEqual(14);
   });
 });

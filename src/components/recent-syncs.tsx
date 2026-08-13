@@ -55,7 +55,7 @@ function statusVariant(
 ): "ok" | "warning" | "accent" | "danger" {
   if (status === "synced") return "ok";
   if (status === "skipped") return "warning";
-  if (status === "pending") return "accent";
+  if (status === "pending" || status === "processing") return "accent";
   return "danger";
 }
 
@@ -208,7 +208,9 @@ export function RecentSyncs({
 
   useEffect(() => {
     if (!authed) return;
-    const hasPending = syncs.some((s) => s.status === "pending");
+    const hasPending = syncs.some(
+      (s) => s.status === "pending" || s.status === "processing",
+    );
     if (!hasPending) return;
     const timer = setInterval(() => {
       void fetch(`/api/syncs?${apiQs}`)

@@ -1053,7 +1053,7 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
                                 loading={metricsBusy}
                             />
                             <MetricCard
-                                metric={m.allocationUtilizationPct}
+                                metric={m.allocationUtilisationPct}
                                 loading={metricsBusy}
                             />
                             <MetricCard
@@ -1194,7 +1194,7 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
                                 loading={metricsBusy}
                             />
                             <MetricCard
-                                metric={m.agingWipCount}
+                                metric={m.ageingWipCount}
                                 loading={metricsBusy}
                             />
                             <MetricCard

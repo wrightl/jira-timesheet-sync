@@ -1,10 +1,14 @@
 import type { BitmapApiClient, BitmapProject } from "@/clients/bitmap-http";
-import type {
-  PortfolioProjectRow,
-  PortfolioResult,
-  PortfolioRiskTier,
-  PortfolioSummary,
+import {
+  emptyPortfolioSummary,
+  filterPortfolioResult,
+  isProjectInPortfolioWindow,
+  summarisePortfolio,
+  type PortfolioProjectRow,
+  type PortfolioResult,
+  type PortfolioRiskTier,
 } from "@/lib/portfolio";
+import { withoutExcludedClientProjects } from "@/lib/excluded-clients";
 import {
   DEFAULT_ALERT_THRESHOLDS,
   type AlertThresholds,
@@ -181,30 +185,6 @@ export function scorePortfolioProject(
   };
 }
 
-function summarize(projects: PortfolioProjectRow[]): PortfolioSummary {
-  let riskCount = 0;
-  let watchCount = 0;
-  let okCount = 0;
-  let burnSum = 0;
-  let burnN = 0;
-  for (const p of projects) {
-    if (p.riskTier === "risk") riskCount += 1;
-    else if (p.riskTier === "watch") watchCount += 1;
-    else if (p.riskTier === "ok") okCount += 1;
-    if (p.budgetBurnPct != null) {
-      burnSum += p.budgetBurnPct;
-      burnN += 1;
-    }
-  }
-  return {
-    projectCount: projects.length,
-    riskCount,
-    watchCount,
-    okCount,
-    avgBudgetBurnPct: burnN > 0 ? round1(burnSum / burnN) : null,
-  };
-}
-
 async function listAllActiveProjects(
   client: BitmapApiClient,
 ): Promise<BitmapProject[]> {
@@ -253,37 +233,20 @@ export class PortfolioService {
       if (!tokenOk) {
         return {
           generatedAt,
-          summary: {
-            projectCount: 0,
-            riskCount: 0,
-            watchCount: 0,
-            okCount: 0,
-            avgBudgetBurnPct: null,
-          },
+          summary: emptyPortfolioSummary(),
           projects: [],
           syncFailedOpen,
           error: "Bitmap access token is not configured",
         };
       }
 
-      const raw = await listAllActiveProjects(bitmap);
-      let projects = raw.map((p) => scorePortfolioProject(p, thresholds));
-
-      const clientId = options?.clientId?.trim();
-      if (clientId) {
-        projects = projects.filter((p) => p.clientId === clientId);
-      }
-      const owner = options?.owner?.trim().toLowerCase();
-      if (owner) {
-        projects = projects.filter((p) =>
-          (p.ownerName ?? "").toLowerCase().includes(owner),
-        );
-      }
-      const tier = options?.riskTier;
-      if (tier) {
-        projects = projects.filter((p) => p.riskTier === tier);
-      }
-
+      const raw = withoutExcludedClientProjects(
+        await listAllActiveProjects(bitmap),
+      );
+      const inWindow = raw.filter((p) => isProjectInPortfolioWindow(p));
+      const projects = inWindow.map((p) =>
+        scorePortfolioProject(p, thresholds),
+      );
       projects.sort((a, b) => {
         const rank = (t: PortfolioRiskTier) =>
           t === "risk" ? 0 : t === "watch" ? 1 : t === "ok" ? 2 : 3;
@@ -292,23 +255,24 @@ export class PortfolioService {
         return (b.budgetBurnPct ?? -1) - (a.budgetBurnPct ?? -1);
       });
 
-      return {
-        generatedAt,
-        summary: summarize(projects),
-        projects,
-        syncFailedOpen,
-        error: null,
-      };
+      return filterPortfolioResult(
+        {
+          generatedAt,
+          summary: summarisePortfolio(projects),
+          projects,
+          syncFailedOpen,
+          error: null,
+        },
+        {
+          clientId: options?.clientId,
+          riskTier: options?.riskTier,
+          owner: options?.owner,
+        },
+      );
     } catch (err) {
       return {
         generatedAt,
-        summary: {
-          projectCount: 0,
-          riskCount: 0,
-          watchCount: 0,
-          okCount: 0,
-          avgBudgetBurnPct: null,
-        },
+        summary: emptyPortfolioSummary(),
         projects: [],
         syncFailedOpen,
         error: err instanceof Error ? err.message : String(err),

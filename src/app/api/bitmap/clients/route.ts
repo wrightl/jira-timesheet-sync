@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import type { BitmapClient } from "@/clients/bitmap-http";
 import { requireAuth } from "@/lib/auth";
+import { withoutExcludedClients } from "@/lib/excluded-clients";
 import {
   clientsCacheKey,
   createApiCacheService,
@@ -24,7 +25,7 @@ async function fetchClientsFromBitmap(): Promise<BitmapClient[]> {
     if (page > totalPages) break;
   }
 
-  const withProjects = clients.filter(
+  const withProjects = withoutExcludedClients(clients).filter(
     (c) => c.has_projects == null || c.has_projects === true,
   );
   withProjects.sort((a, b) =>
@@ -48,7 +49,10 @@ export async function GET(request: NextRequest) {
     } else {
       const cached = await cache.getCachedJson<BitmapClient[]>(cacheKey);
       if (cached) {
-        return Response.json({ clients: cached, cached: true });
+        return Response.json({
+          clients: withoutExcludedClients(cached),
+          cached: true,
+        });
       }
     }
 

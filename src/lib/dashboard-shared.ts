@@ -174,7 +174,9 @@ export function statusCountsFromRows(
     if (row.status === "synced") counts.synced = n;
     else if (row.status === "failed") counts.failed = n;
     else if (row.status === "skipped") counts.skipped = n;
-    else if (row.status === "pending") counts.pending = n;
+    else if (row.status === "pending" || row.status === "processing") {
+      counts.pending += n;
+    }
   }
   return counts;
 }

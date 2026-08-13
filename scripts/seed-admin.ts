@@ -1,6 +1,6 @@
 import { getDb } from "../src/db";
 import { UsersRepository } from "../src/repositories/users-repository";
-import { hashPassword, normalizeEmail } from "../src/lib/password";
+import { hashPassword, normaliseEmail } from "../src/lib/password";
 import { loadScriptEnv } from "./lib/bootstrap";
 
 async function seed() {
@@ -21,7 +21,7 @@ async function seed() {
     process.exit(1);
   }
 
-  const email = normalizeEmail(emailRaw);
+  const email = normaliseEmail(emailRaw);
   const passwordHash = await hashPassword(password);
   const users = new UsersRepository(getDb());
 

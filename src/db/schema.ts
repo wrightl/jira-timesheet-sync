@@ -11,6 +11,7 @@ import {
 
 export const syncStatusEnum = pgEnum("sync_status", [
   "pending",
+  "processing",
   "synced",
   "skipped",
   "failed",

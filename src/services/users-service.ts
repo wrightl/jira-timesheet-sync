@@ -3,7 +3,8 @@ import {
   UsersRepository,
   type PublicUser,
 } from "@/repositories/users-repository";
-import { hashPassword, normalizeEmail } from "@/lib/password";
+import { SessionsRepository } from "@/repositories/sessions-repository";
+import { hashPassword, normaliseEmail } from "@/lib/password";
 import type {
   AdminUserCreateInput,
   AdminUserUpdateInput,
@@ -16,7 +17,10 @@ export type UsersServiceError =
   | { code: "bad_request"; message: string };
 
 export class UsersService {
-  constructor(private readonly users: UsersRepository) {}
+  constructor(
+    private readonly users: UsersRepository,
+    private readonly sessions: SessionsRepository,
+  ) {}
 
   list(): Promise<PublicUser[]> {
     return this.users.listPublic();
@@ -57,7 +61,7 @@ export class UsersService {
   async create(
     input: AdminUserCreateInput,
   ): Promise<{ user: PublicUser } | { error: UsersServiceError }> {
-    const email = normalizeEmail(input.email);
+    const email = normaliseEmail(input.email);
     const passwordHash = await hashPassword(input.password);
     try {
       const user = await this.users.create({
@@ -129,6 +133,9 @@ export class UsersService {
     if (!user) {
       return { error: { code: "not_found", message: "User not found" } };
     }
+    if (input.password) {
+      await this.sessions.deleteByUserId(id);
+    }
     return { user };
   }
 
@@ -168,5 +175,8 @@ export class UsersService {
 }
 
 export function createUsersService(db: Db = getDb()) {
-  return new UsersService(new UsersRepository(db));
+  return new UsersService(
+    new UsersRepository(db),
+    new SessionsRepository(db),
+  );
 }

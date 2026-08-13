@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { getDb, type Db } from "@/db";
 import { getEnv } from "@/lib/env";
-import { normalizeEmail } from "@/lib/email";
+import { normaliseEmail } from "@/lib/email";
 import { hashPassword } from "@/lib/password";
 import type { AuthUser } from "@/lib/auth-types";
 import { UsersRepository } from "@/repositories/users-repository";
@@ -31,11 +31,16 @@ export function getGoogleOAuthConfig(): GoogleOAuthConfig | null {
   const clientSecret = nonEmpty(env.GOOGLE_CLIENT_SECRET);
   const baseUrl = nonEmpty(env.APP_BASE_URL);
   if (!clientId || !clientSecret || !baseUrl) return null;
+  const allowedDomain = nonEmpty(env.GOOGLE_ALLOWED_DOMAIN);
+  const nodeEnv = env.NODE_ENV ?? process.env.NODE_ENV;
+  if (nodeEnv === "production" && !allowedDomain) {
+    return null;
+  }
   return {
     clientId,
     clientSecret,
     redirectUri: `${baseUrl.replace(/\/$/, "")}/api/auth/google/callback`,
-    allowedDomain: nonEmpty(env.GOOGLE_ALLOWED_DOMAIN),
+    allowedDomain,
     defaultRole: env.GOOGLE_DEFAULT_ROLE === "exec" ? "exec" : "user",
   };
 }
@@ -51,7 +56,7 @@ export class GoogleOAuthService {
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
-  buildAuthorizeUrl(state: string): string {
+  buildAuthoriseUrl(state: string): string {
     const config = getGoogleOAuthConfig();
     if (!config) throw new Error("Google OAuth is not configured");
     const params = new URLSearchParams({
@@ -123,7 +128,7 @@ export class GoogleOAuthService {
       throw new Error("Google email is not verified");
     }
 
-    const email = normalizeEmail(emailRaw);
+    const email = normaliseEmail(emailRaw);
     if (config.allowedDomain) {
       const domain = email.split("@")[1] ?? "";
       const hd = nonEmpty(profile.hd)?.toLowerCase();
@@ -141,9 +146,15 @@ export class GoogleOAuthService {
     if (!user) {
       user = await this.users.findByEmail(email);
       if (user) {
+        if (!user.mustSetPassword) {
+          throw new Error(
+            "Google account email is already registered with a password",
+          );
+        }
         await this.users.update(user.id, {
           oauthProvider: "google",
           oauthSubject: subject,
+          mustSetPassword: false,
         });
         user = await this.users.findById(user.id);
       } else {

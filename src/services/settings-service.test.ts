@@ -32,6 +32,9 @@ describe("SettingsService.getAccessToken", () => {
         jiraBaseUrl: null,
         jiraEmail: null,
         jiraApiTokenEncrypted: null,
+        slackWebhookUrlEncrypted: null,
+        alertEmail: null,
+        alertThresholdsJson: null,
         updatedAt: new Date(),
       }),
     };

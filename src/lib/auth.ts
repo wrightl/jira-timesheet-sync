@@ -88,7 +88,7 @@ export async function requirePageUser(options?: {
     redirect("/login");
   }
   if (options?.role === "admin" && user!.role !== "admin") {
-    redirect("/my-mappings");
+    redirect(user!.role === "exec" ? "/portfolio" : "/my-mappings");
   }
   return user!;
 }

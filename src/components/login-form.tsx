@@ -10,7 +10,28 @@ import { Card } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 
-export function LoginForm() {
+function readErrorMessage(data: unknown): string {
+  if (!data || typeof data !== "object") return "Login failed";
+  const record = data as Record<string, unknown>;
+  const error = record.error;
+  if (typeof error === "string" && error.trim()) return error;
+  if (error && typeof error === "object") {
+    const nested = error as Record<string, unknown>;
+    if (typeof nested.message === "string" && nested.message.trim()) {
+      return nested.message;
+    }
+  }
+  if (typeof record.message === "string" && record.message.trim()) {
+    return record.message;
+  }
+  return "Login failed";
+}
+
+export function LoginForm({
+  googleEnabled = false,
+}: {
+  googleEnabled?: boolean;
+}) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -24,18 +45,28 @@ export function LoginForm() {
           e.preventDefault();
           setError(null);
           startTransition(async () => {
-            const res = await fetch("/api/auth/login", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ email, password }),
-            });
-            if (!res.ok) {
-              const data = await res.json().catch(() => ({}));
-              setError(data.error ?? "Login failed");
-              return;
+            try {
+              const res = await fetch("/api/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "same-origin",
+                body: JSON.stringify({ email, password }),
+              });
+              const data: unknown = await res.json().catch(() => null);
+              if (!res.ok) {
+                const message = readErrorMessage(data);
+                setError(
+                  message === "Protected deployment"
+                    ? "This preview is protected. Open the site while signed into Vercel, then try again."
+                    : message,
+                );
+                return;
+              }
+              router.push("/");
+              router.refresh();
+            } catch {
+              setError("Login failed");
             }
-            router.push("/");
-            router.refresh();
           });
         }}
       >
@@ -74,6 +105,21 @@ export function LoginForm() {
         <Button type="submit" disabled={pending} className="w-full">
           {pending ? "Signing in…" : "Sign in"}
         </Button>
+        {googleEnabled ? (
+          <>
+            <div className="my-4 flex items-center gap-3 text-xs text-muted">
+              <div className="h-px flex-1 bg-border" />
+              or
+              <div className="h-px flex-1 bg-border" />
+            </div>
+            <a
+              href="/api/auth/google"
+              className="inline-flex h-10 w-full items-center justify-center rounded-md border border-border bg-card text-sm font-medium text-foreground transition-colors hover:bg-background"
+            >
+              Continue with Google
+            </a>
+          </>
+        ) : null}
         <p className="mt-4 text-center text-sm text-muted">
           No account?{" "}
           <Link href="/register" className="text-accent hover:underline">

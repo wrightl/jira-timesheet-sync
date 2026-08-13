@@ -6,7 +6,7 @@
         "dev": "next dev",
         "dev:tunnel": "concurrently -k -n next,ngrok -c cyan,magenta \"next dev\" \"wait-on http://127.0.0.1:3000 && node scripts/ngrok-tunnel.mjs\"",
         "tunnel": "node scripts/ngrok-tunnel.mjs",
-        "build": "next build",
+        "build": "node scripts/migrate-on-build.mjs && next build",
         "start": "next start",
         "lint": "eslint",
         "test": "vitest run --config vitest.config.mts",

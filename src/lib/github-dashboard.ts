@@ -11,12 +11,18 @@ export type GithubDashboardMetric = {
   hint?: string;
 };
 
+export type GithubAuthorWip = {
+  login: string;
+  openCount: number;
+};
+
 export type GithubDashboardResult = {
   configured: boolean;
   org: string | null;
   metrics: GithubDashboardMetric[];
   recentPullRequests: GithubPullSummary[];
   recentRepos: GithubOrgRepoSummary[];
+  authorWip: GithubAuthorWip[];
   error: string | null;
 };
 

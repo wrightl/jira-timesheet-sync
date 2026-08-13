@@ -11,7 +11,7 @@ export class UserSpaceMappingService {
 
   listForViewer(options: {
     viewerId: string;
-    viewerRole: "admin" | "user";
+    viewerRole: "admin" | "user" | "exec";
     filterUserId?: string | null;
     all?: boolean;
   }): Promise<UserSpaceMapping[]> {
@@ -59,7 +59,7 @@ export class UserSpaceMappingService {
   async update(
     id: string,
     input: UserSpaceMappingUpdateInput,
-    actor: { id: string; role: "admin" | "user" },
+    actor: { id: string; role: "admin" | "user" | "exec" },
   ): Promise<
     | { mapping: UserSpaceMapping }
     | { error: "not_found" | "forbidden" }
@@ -76,7 +76,7 @@ export class UserSpaceMappingService {
 
   async delete(
     id: string,
-    actor: { id: string; role: "admin" | "user" },
+    actor: { id: string; role: "admin" | "user" | "exec" },
   ): Promise<{ ok: true } | { error: "not_found" | "forbidden" }> {
     const existing = await this.mappings.findById(id);
     if (!existing) return { error: "not_found" };

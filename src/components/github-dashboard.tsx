@@ -126,6 +126,33 @@ export function GithubDashboard({ authed }: { authed: boolean }) {
         </div>
       ) : null}
 
+      {data?.configured && data.authorWip.length > 0 ? (
+        <Card>
+          <CardTitle className="mb-1">Open PR WIP by author</CardTitle>
+          <CardDescription className="mb-4">
+            Authors with the most open pull requests in the recent sample.
+          </CardDescription>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableHeaderCell>Author</TableHeaderCell>
+                <TableHeaderCell>Open PRs</TableHeaderCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {data.authorWip.map((row) => (
+                <TableRow key={row.login}>
+                  <TableCell className="font-mono text-xs">{row.login}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {row.openCount}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      ) : null}
+
       {data?.configured ? (
         <Card>
           <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
@@ -165,6 +192,7 @@ function PullRequestsTable({ pulls }: { pulls: GithubPullSummary[] }) {
       <TableHead>
         <TableRow>
           <TableHeaderCell>Pull request</TableHeaderCell>
+          <TableHeaderCell>Author</TableHeaderCell>
           <TableHeaderCell>State</TableHeaderCell>
           <TableHeaderCell>Review</TableHeaderCell>
           <TableHeaderCell>Age</TableHeaderCell>
@@ -186,6 +214,9 @@ function PullRequestsTable({ pulls }: { pulls: GithubPullSummary[] }) {
                 </a>
                 <span className="text-muted">{pull.title}</span>
               </div>
+            </TableCell>
+            <TableCell className="font-mono text-xs">
+              {pull.authorLogin ?? "—"}
             </TableCell>
             <TableCell>
               <Badge variant={pull.state === "draft" ? "muted" : "accent"}>

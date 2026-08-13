@@ -116,8 +116,14 @@ describe("GithubDashboardService", () => {
             createdAt: "2026-08-01T00:00:00Z",
             updatedAt: "2026-08-11T00:00:00Z",
             openCommentCount: 2,
+            authorLogin: "lee",
+            firstReviewedAt: "2026-08-02T00:00:00Z",
           },
         ],
+      }),
+      searchMergedPullRequests: async () => ({
+        totalCount: 14,
+        pulls: [],
       }),
       listRecentlyUpdatedRepos: async () => [
         {
@@ -150,6 +156,13 @@ describe("GithubDashboardService", () => {
     expect(
       dashboard.metrics.find((m) => m.key === "needs_review")?.value,
     ).toBe(5);
+    expect(dashboard.metrics.find((m) => m.key === "stale_prs")?.value).toBe(
+      11,
+    );
+    expect(
+      dashboard.metrics.find((m) => m.key === "merge_rate_weekly")?.value,
+    ).toBe(3.3);
+    expect(dashboard.authorWip[0]?.login).toBe("lee");
     expect(dashboard.recentPullRequests).toHaveLength(1);
     expect(dashboard.recentRepos).toHaveLength(1);
   });

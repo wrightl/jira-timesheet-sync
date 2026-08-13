@@ -18,10 +18,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+type UserRole = "admin" | "user" | "exec";
+
 type AppUserRow = {
   id: string;
   email: string;
-  role: "admin" | "user";
+  role: UserRole;
   syncEnabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -30,8 +32,14 @@ type AppUserRow = {
 const emptyForm = {
   email: "",
   password: "",
-  role: "user" as "admin" | "user",
+  role: "user" as UserRole,
 };
+
+function roleBadgeVariant(role: UserRole): "ok" | "warning" | "muted" {
+  if (role === "admin") return "ok";
+  if (role === "exec") return "muted";
+  return "warning";
+}
 
 export function UsersManager({
   authed,
@@ -129,11 +137,12 @@ export function UsersManager({
                 onChange={(e) =>
                   setForm({
                     ...form,
-                    role: e.target.value as "admin" | "user",
+                    role: e.target.value as UserRole,
                   })
                 }
               >
                 <option value="user">User</option>
+                <option value="exec">Exec</option>
                 <option value="admin">Admin</option>
               </Select>
             </Field>
@@ -180,38 +189,47 @@ export function UsersManager({
                     ) : null}
                   </TableCell>
                   <TableCell>
-                    <button
-                      type="button"
-                      disabled={pending || isSelf}
-                      title={
-                        isSelf
-                          ? "You cannot change your own role"
-                          : undefined
-                      }
-                      className="disabled:opacity-60"
-                      onClick={() =>
-                        startTransition(async () => {
-                          setError(null);
-                          const res = await fetch(`/api/users?id=${u.id}`, {
-                            method: "PATCH",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              role: u.role === "admin" ? "user" : "admin",
-                            }),
-                          });
-                          if (!res.ok) {
-                            const data = await res.json().catch(() => ({}));
-                            setError(data.error ?? "Role update failed");
-                            return;
-                          }
-                          load();
-                        })
-                      }
-                    >
-                      <Badge variant={u.role === "admin" ? "ok" : "warning"}>
-                        {u.role === "admin" ? "Admin" : "User"}
+                    <div className="flex items-center gap-2">
+                      <Badge variant={roleBadgeVariant(u.role)}>
+                        {u.role === "admin"
+                          ? "Admin"
+                          : u.role === "exec"
+                            ? "Exec"
+                            : "User"}
                       </Badge>
-                    </button>
+                      <Select
+                        disabled={pending || isSelf}
+                        value={u.role}
+                        title={
+                          isSelf
+                            ? "You cannot change your own role"
+                            : "Change role"
+                        }
+                        onChange={(e) =>
+                          startTransition(async () => {
+                            setError(null);
+                            const res = await fetch(`/api/users?id=${u.id}`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                role: e.target.value as UserRole,
+                              }),
+                            });
+                            if (!res.ok) {
+                              const data = await res.json().catch(() => ({}));
+                              setError(data.error ?? "Role update failed");
+                              return;
+                            }
+                            load();
+                          })
+                        }
+                        className="h-8 w-auto py-0 text-xs"
+                      >
+                        <option value="user">User</option>
+                        <option value="exec">Exec</option>
+                        <option value="admin">Admin</option>
+                      </Select>
+                    </div>
                   </TableCell>
                   <TableCell>
                     <Toggle

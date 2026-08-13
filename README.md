@@ -23,7 +23,7 @@ cp .env.example .env.local
 # ADMIN_EMAIL, ADMIN_PASSWORD
 
 npm install
-npm run db:push   # or npm run db:migrate against Neon
+npm run db:push   # sync schema to Neon / local Postgres (preferred)
 npm run db:seed   # creates/updates the admin user
 npm run dev
 ```
@@ -72,6 +72,11 @@ If a mapped project/budget is inactive, the sync **fails** (no silent fallback).
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Seeded admin credentials (`npm run db:seed`) |
 | `NGROK_AUTHTOKEN` | ngrok auth token for local webhook tunneling |
 | `NGROK_DOMAIN` | Optional reserved ngrok domain |
+| `APP_BASE_URL` | Public app URL (required for Google OAuth redirects) |
+| `CRON_SECRET` | Bearer token for `/api/alerts/run` and `/api/alerts/weekly` |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth SSO |
+| `GOOGLE_ALLOWED_DOMAIN` | Optional hosted-domain restriction |
+| `GOOGLE_DEFAULT_ROLE` | `user` (default) or `exec` for new Google accounts |
 
 Bitmap token resolution: encrypted token in Settings (DB) first; if unset, `INTERNAL_PM_ACCESS_TOKEN` is used as bootstrap. Once a token is saved in Settings, the DB value is the source of truth.
 
@@ -153,9 +158,23 @@ Local tip: leave `LOG_LEVEL` unset (or set `debug`) while using `npm run dev` / 
 | `POST` | `/api/syncs?action=retry&id=` | Session (admin or owner) |
 | `GET` | `/api/health` | None |
 
+## Schema sync
+
+This app applies schema with **`drizzle-kit push`** (see `npm run db:push` and Cloud Agent `scripts/cloud/start.sh`). Vercel builds run the same via `scripts/migrate-on-build.mjs`. Do not use `drizzle-kit migrate` against the existing Neon database unless you have baselined a `__drizzle_migrations` journal — replaying from `0000_init` fails when tables already exist.
+
 ## Project progress dashboard
 
 Authenticated users can open **Projects** (`/projects`) to inspect budget burn, estimate fidelity, and quality signals for a mapped Bitmap project. Live Jira Cloud REST API **v3** enrichment (`/rest/api/3/search/jql`) is used when Jira credentials are configured under **Settings** (or via `JIRA_*` env bootstrap).
+
+## Engineering manager surfaces
+
+- **Portfolio** (`/portfolio`) — cross-client active project rollup (burn, runway, schedule slip, risk tier)
+- **Utilization** (`/utilization`) — people hours from worklog syncs vs weekly capacity; optional **Teams** (`/teams`, admin)
+- **Status pack** (`/status`) — one-click weekly Markdown narrative for a project
+- **GitHub** — review lag, stale PRs, merge rate, WIP by author (in addition to open/draft counts)
+- **Slack alerts** — configure webhook + thresholds under **Settings**; cron `GET /api/alerts/run` (Bearer `CRON_SECRET`), `?weekly=1` for Monday digest
+- **Google SSO** — set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `APP_BASE_URL` (optional `GOOGLE_ALLOWED_DOMAIN`, `GOOGLE_DEFAULT_ROLE=exec|user`)
+- **Exec role** — read-focused portfolio/utilization/status access without sync-admin tools
 
 ## Architecture
 

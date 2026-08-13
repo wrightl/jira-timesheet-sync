@@ -64,12 +64,12 @@ export const registerSchema = z.object({
 export const adminUserCreateSchema = z.object({
   email: z.string().email("Valid email is required"),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  role: z.enum(["admin", "user"]).optional().default("user"),
+  role: z.enum(["admin", "user", "exec"]).optional().default("user"),
 });
 
 export const adminUserUpdateSchema = z
   .object({
-    role: z.enum(["admin", "user"]).optional(),
+    role: z.enum(["admin", "user", "exec"]).optional(),
     password: z
       .string()
       .min(8, "Password must be at least 8 characters")
@@ -107,15 +107,43 @@ export const settingsUpdateSchema = z
     jiraBaseUrl: z.string().optional(),
     jiraEmail: z.string().optional(),
     jiraApiToken: z.string().optional(),
+    slackWebhookUrl: z.string().optional(),
+    alertEmail: z.string().nullable().optional(),
+    alertThresholds: z
+      .object({
+        budgetBurnPctRisk: z.number().optional(),
+        runwayDaysRisk: z.number().optional(),
+        agingWipRisk: z.number().optional(),
+        openBugsRisk: z.number().optional(),
+        syncFailedOpenRisk: z.number().optional(),
+        estimateCoveragePctWatch: z.number().optional(),
+        scheduleSlipDaysRisk: z.number().optional(),
+      })
+      .optional(),
   })
   .refine(
     (data) =>
       data.internalPmAccessToken !== undefined ||
       data.jiraBaseUrl !== undefined ||
       data.jiraEmail !== undefined ||
-      data.jiraApiToken !== undefined,
+      data.jiraApiToken !== undefined ||
+      data.slackWebhookUrl !== undefined ||
+      data.alertEmail !== undefined ||
+      data.alertThresholds !== undefined,
     { message: "At least one settings field is required" },
   );
+
+export const teamCreateSchema = z.object({
+  name: z.string().min(1, "name is required"),
+});
+
+export const teamMemberCreateSchema = z.object({
+  teamId: z.string().uuid(),
+  userMappingId: z.string().uuid().nullable().optional(),
+  appUserId: z.string().uuid().nullable().optional(),
+  displayName: z.string().nullable().optional(),
+  weeklyCapacityHours: z.string().optional(),
+});
 
 export type MappingCreateInput = z.infer<typeof mappingCreateSchema>;
 export type MappingUpdateInput = z.infer<typeof mappingUpdateSchema>;

@@ -31,6 +31,10 @@ type SettingsState = {
   maskedJiraToken: string | null;
   jiraBaseUrl: string | null;
   jiraEmail: string | null;
+  hasSlackBotToken: boolean;
+  slackBotTokenSource: string;
+  maskedSlackBotToken: string | null;
+  supportDeskSpaceKey: string | null;
   alerts?: AlertConfig;
 };
 
@@ -41,6 +45,8 @@ export function SettingsForm({ authed }: { authed: boolean }) {
   const [jiraEmail, setJiraEmail] = useState("");
   const [jiraApiToken, setJiraApiToken] = useState("");
   const [slackWebhookUrl, setSlackWebhookUrl] = useState("");
+  const [slackBotToken, setSlackBotToken] = useState("");
+  const [supportDeskSpaceKey, setSupportDeskSpaceKey] = useState("");
   const [alertEmail, setAlertEmail] = useState("");
   const [burnRisk, setBurnRisk] = useState("90");
   const [runwayRisk, setRunwayRisk] = useState("5");
@@ -64,6 +70,7 @@ export function SettingsForm({ authed }: { authed: boolean }) {
       setSettings(data);
       setJiraBaseUrl(data.jiraBaseUrl ?? "");
       setJiraEmail(data.jiraEmail ?? "");
+      setSupportDeskSpaceKey(data.supportDeskSpaceKey ?? "");
       setAlertEmail(data.alerts?.alertEmail ?? "");
       if (data.alerts?.thresholds) {
         setBurnRisk(String(data.alerts.thresholds.budgetBurnPctRisk));
@@ -375,6 +382,77 @@ export function SettingsForm({ authed }: { authed: boolean }) {
               Dry-run alerts
             </Button>
           </div>
+        </form>
+      </Card>
+
+      <Card>
+        <CardTitle className="mb-2">Support Tickets</CardTitle>
+        <CardDescription className="mb-4">
+          Configure the support desk Jira space and Slack bot token for sending
+          reminders. The bot will send DMs to assignees when tickets have not been
+          updated for 24 hours.
+        </CardDescription>
+        {settings ? (
+          <dl className="mb-4 grid gap-2 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-muted">Support Desk Space Key</dt>
+              <dd>{settings.supportDeskSpaceKey ?? "Not set"}</dd>
+            </div>
+            <div>
+              <dt className="text-muted">Slack Bot Token</dt>
+              <dd>
+                {settings.hasSlackBotToken
+                  ? settings.maskedSlackBotToken
+                  : "Not set"}
+              </dd>
+            </div>
+          </dl>
+        ) : null}
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            startTransition(async () => {
+              setMessage(null);
+              setError(null);
+              const res = await fetch("/api/settings", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  supportDeskSpaceKey: supportDeskSpaceKey || undefined,
+                  slackBotToken: slackBotToken || undefined,
+                }),
+              });
+              if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                setError(data.error ?? "Save failed");
+                return;
+              }
+              setSlackBotToken("");
+              setMessage("Support settings saved");
+              load();
+            });
+          }}
+        >
+          <Input
+            type="text"
+            value={supportDeskSpaceKey}
+            onChange={(e) => setSupportDeskSpaceKey(e.target.value)}
+            placeholder="SUPPORT (Jira space key)"
+          />
+          <Input
+            type="password"
+            value={slackBotToken}
+            onChange={(e) => setSlackBotToken(e.target.value)}
+            placeholder={
+              settings?.hasSlackBotToken
+                ? "Leave blank to keep current bot token"
+                : "xoxb-... (Slack bot token)"
+            }
+          />
+          <Button type="submit" disabled={pending}>
+            {pending ? "Saving…" : "Save support settings"}
+          </Button>
         </form>
       </Card>
 

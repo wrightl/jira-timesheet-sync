@@ -59,6 +59,17 @@ export async function PUT(request: NextRequest) {
       result.alerts = await createAlertService().getAlertConfig();
     }
 
+    if (
+      data.slackBotToken !== undefined ||
+      data.supportDeskSpaceKey !== undefined
+    ) {
+      const saved = await service.saveSupportSettings({
+        slackBotToken: data.slackBotToken,
+        supportDeskSpaceKey: data.supportDeskSpaceKey,
+      });
+      result.maskedSlackBotToken = saved.maskedSlackBotToken;
+    }
+
     return Response.json(result);
   } catch (err) {
     const message =

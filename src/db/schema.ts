@@ -189,6 +189,8 @@ export const settings = pgTable("settings", {
   jiraEmail: text("jira_email"),
   jiraApiTokenEncrypted: text("jira_api_token_encrypted"),
   slackWebhookUrlEncrypted: text("slack_webhook_url_encrypted"),
+  slackBotTokenEncrypted: text("slack_bot_token_encrypted"),
+  supportDeskSpaceKey: text("support_desk_space_key"),
   alertEmail: text("alert_email"),
   alertThresholdsJson: text("alert_thresholds_json"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
@@ -287,6 +289,26 @@ export const teamMembers = pgTable(
   ],
 );
 
+export const supportTicketReminders = pgTable(
+  "support_ticket_reminders",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    jiraIssueKey: text("jira_issue_key").notNull(),
+    reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    assigneeEmail: text("assignee_email"),
+    slackUserId: text("slack_user_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("support_ticket_reminders_issue_key_idx").on(table.jiraIssueKey),
+    index("support_ticket_reminders_sent_at_idx").on(table.reminderSentAt),
+  ],
+);
+
 export type AppUser = typeof users.$inferSelect;
 export type NewAppUser = typeof users.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
@@ -305,3 +327,5 @@ export type Team = typeof teams.$inferSelect;
 export type NewTeam = typeof teams.$inferInsert;
 export type TeamMember = typeof teamMembers.$inferSelect;
 export type NewTeamMember = typeof teamMembers.$inferInsert;
+export type SupportTicketReminder = typeof supportTicketReminders.$inferSelect;
+export type NewSupportTicketReminder = typeof supportTicketReminders.$inferInsert;

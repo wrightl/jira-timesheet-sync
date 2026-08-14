@@ -219,6 +219,25 @@ function IconSettings(props: IconProps) {
     );
 }
 
+function IconTicket(props: IconProps) {
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden
+            {...props}
+        >
+            <path
+                d="M2 9a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3v1a1 1 0 0 1-1 1 2 2 0 0 0 0 4 1 1 0 0 1 1 1v1a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-1a1 1 0 0 1 1-1 2 2 0 0 0 0-4 1 1 0 0 1-1-1V9Z"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+        </svg>
+    );
+}
+
 function IconPanelLeft(props: IconProps) {
     return (
         <svg
@@ -435,6 +454,7 @@ export function AppShell({
         ...(user?.role === 'admin'
             ? [
                   { href: '/teams', label: 'Teams', icon: IconUsers },
+                  { href: '/support-tickets', label: 'Support', icon: IconTicket },
                   { href: '/syncs', label: 'Syncs', icon: IconSync },
                   { href: '/mappings', label: 'Mappings', icon: IconLayers },
                   { href: '/users', label: 'Users', icon: IconUsers },

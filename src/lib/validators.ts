@@ -157,6 +157,8 @@ export const settingsUpdateSchema = z
     jiraEmail: z.string().optional(),
     jiraApiToken: z.string().optional(),
     slackWebhookUrl: optionalSlackWebhookUrl,
+    slackBotToken: z.string().optional(),
+    supportDeskSpaceKey: z.string().optional(),
     alertEmail: z.string().nullable().optional(),
     alertThresholds: z
       .object({
@@ -177,6 +179,8 @@ export const settingsUpdateSchema = z
       data.jiraEmail !== undefined ||
       data.jiraApiToken !== undefined ||
       data.slackWebhookUrl !== undefined ||
+      data.slackBotToken !== undefined ||
+      data.supportDeskSpaceKey !== undefined ||
       data.alertEmail !== undefined ||
       data.alertThresholds !== undefined,
     { message: "At least one settings field is required" },

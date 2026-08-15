@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { MetricHelp } from "@/components/metric-help";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -154,7 +155,8 @@ export function SupportTicketsContent() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
+        <Card className="relative pr-8">
+          <MetricHelp metricId="support.total_tickets" />
           <CardTitle className="mb-2 text-sm text-muted">
             Total Tickets
           </CardTitle>
@@ -163,9 +165,12 @@ export function SupportTicketsContent() {
 
         <Card
           className={
-            slaBreached ? "border-danger/30 bg-danger/5" : undefined
+            slaBreached
+              ? "relative border-danger/30 bg-danger/5 pr-8"
+              : "relative pr-8"
           }
         >
+          <MetricHelp metricId="support.avg_response_time" />
           <CardTitle className="mb-2 text-sm text-muted">
             Avg Response Time
           </CardTitle>
@@ -194,7 +199,8 @@ export function SupportTicketsContent() {
           ) : null}
         </Card>
 
-        <Card>
+        <Card className="relative pr-8">
+          <MetricHelp metricId="support.tickets_by_assignee" />
           <CardTitle className="mb-2 text-sm text-muted">
             Tickets by Assignee
           </CardTitle>

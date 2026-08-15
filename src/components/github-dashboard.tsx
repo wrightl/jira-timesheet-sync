@@ -24,6 +24,7 @@ import type {
   GithubPullSummary,
 } from "@/clients/github-http";
 import { GithubTokenExpiryAlert } from "@/components/github-token-expiry-alert";
+import { MetricHelp } from "@/components/metric-help";
 import {
   EMPTY_GITHUB_DASHBOARD_FILTERS,
   GITHUB_TABLE_PAGE_SIZE,
@@ -181,7 +182,8 @@ export function GithubDashboard({ authed }: { authed: boolean }) {
       {data?.configured && data.metrics.length > 0 ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {data.metrics.map((metric) => (
-            <Card key={metric.key}>
+            <Card key={metric.key} className="relative pr-8">
+              <MetricHelp metricId={metric.key} />
               <div className="mb-2 flex items-start justify-between gap-2">
                 <CardTitle className="text-sm font-medium text-muted">
                   {metric.label}

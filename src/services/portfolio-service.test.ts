@@ -36,6 +36,30 @@ describe("portfolio scoring", () => {
     expect(row.riskTier).toBe("risk");
     expect(row.ownerName).toBe("Lee");
     expect(row.riskReasons.some((r) => r.includes("Budget burn"))).toBe(true);
+    expect(row.remainingEngWeeks).toBe(0.1);
+    expect(row.staffingAsk).toBeTruthy();
+  });
+
+  it("includes staffing ask when remaining work exceeds end-date capacity", () => {
+    const end = new Date();
+    end.setUTCDate(end.getUTCDate() + 7);
+    const endDate = end.toISOString().slice(0, 10);
+    const project: BitmapProject = {
+      id: "p2",
+      name: "Beta",
+      time_budgeted: 200,
+      time_logged: 40,
+      billable_time_remaining: 160,
+      start_date: "2026-07-01",
+      end_date: endDate,
+      healthy: true,
+      unhealthy_checks: 0,
+      client: { id: "c1", name: "Acme" },
+    };
+    const row = scorePortfolioProject(project);
+    expect(row.remainingEngWeeks).toBe(4);
+    expect(row.staffingGapEngWeeks).toBeGreaterThan(0);
+    expect(row.staffingAsk).toMatch(/Need \+/);
   });
 
   it("estimates runway from remaining hours", () => {

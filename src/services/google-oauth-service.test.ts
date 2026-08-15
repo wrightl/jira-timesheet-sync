@@ -48,14 +48,14 @@ describe("GoogleOAuthService", () => {
 
   it("returns null in production when GOOGLE_ALLOWED_DOMAIN is missing", () => {
     delete process.env.GOOGLE_ALLOWED_DOMAIN;
-    process.env.NODE_ENV = "production";
+    Object.assign(process.env, { NODE_ENV: "production" });
     resetEnvCache();
     expect(getGoogleOAuthConfig()).toBeNull();
   });
 
   it("allows omitting GOOGLE_ALLOWED_DOMAIN outside production", () => {
     delete process.env.GOOGLE_ALLOWED_DOMAIN;
-    process.env.NODE_ENV = "test";
+    Object.assign(process.env, { NODE_ENV: "test" });
     resetEnvCache();
     expect(getGoogleOAuthConfig()).toEqual(
       expect.objectContaining({

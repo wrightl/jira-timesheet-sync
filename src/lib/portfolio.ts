@@ -9,11 +9,17 @@ export type PortfolioProjectRow = {
   clientId: string | null;
   clientName: string | null;
   ownerName: string | null;
+  owningTeamIds: string[];
+  owningTeamNames: string[];
   state: string | null;
   budgetBurnPct: number | null;
   billableRemainingHours: number | null;
   runwayDays: number | null;
   scheduleSlipDays: number | null;
+  remainingEngWeeks: number | null;
+  staffingGapEngWeeks: number | null;
+  staffingAsk: string | null;
+  forecastConfidence: "high" | "medium" | "low" | "unavailable";
   unhealthyChecks: number | null;
   healthy: boolean | null;
   riskTier: PortfolioRiskTier;
@@ -40,6 +46,10 @@ export type PortfolioViewFilters = {
   clientId?: string | null;
   riskTier?: PortfolioRiskTier | "all" | null;
   owner?: string | null;
+  /** Restrict to projects owned by this team (client- or project-level ownership). */
+  teamId?: string | null;
+  /** Restrict to projects owned by any of these team ids (e.g. current user's teams). */
+  teamIds?: string[] | null;
 };
 
 /** Minimal project shape needed for the portfolio date window. */
@@ -140,6 +150,17 @@ export function filterPortfolioResult(
   if (owner) {
     projects = projects.filter((p) =>
       (p.ownerName ?? "").toLowerCase().includes(owner),
+    );
+  }
+  const teamId = filters.teamId?.trim();
+  if (teamId && teamId !== "all") {
+    projects = projects.filter((p) => p.owningTeamIds.includes(teamId));
+  }
+  const teamIds = filters.teamIds?.filter((id) => id.trim().length > 0);
+  if (teamIds && teamIds.length > 0) {
+    const allowed = new Set(teamIds);
+    projects = projects.filter((p) =>
+      p.owningTeamIds.some((id) => allowed.has(id)),
     );
   }
   const tier = filters.riskTier;

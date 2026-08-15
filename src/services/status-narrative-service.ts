@@ -60,6 +60,10 @@ export class StatusNarrativeService {
     if (runway.displayValue !== "—") {
       highlights.push(`Billable runway ${runway.displayValue}`);
     }
+    const staffingAsk = dashboard.metrics.staffingAsk;
+    if (staffingAsk.value) {
+      highlights.push(staffingAsk.value);
+    }
     const throughput = dashboard.metrics.throughput30d;
     if (throughput.value != null) {
       highlights.push(`Throughput (30d): ${throughput.displayValue}`);
@@ -71,6 +75,7 @@ export class StatusNarrativeService {
     for (const metric of [
       dashboard.metrics.budgetBurnPct,
       dashboard.metrics.runwayDays,
+      dashboard.metrics.staffingGapEngWeeks,
       dashboard.metrics.ageingWipCount,
       dashboard.metrics.openBugCount,
       dashboard.metrics.scheduleVsForecast,
@@ -117,6 +122,15 @@ export class StatusNarrativeService {
       line(
         "Remaining effort",
         dashboard.metrics.remainingEffortHours.displayValue,
+      ),
+      line("Staffing ask", dashboard.metrics.staffingAsk.displayValue),
+      line(
+        "Staffing gap",
+        dashboard.metrics.staffingGapEngWeeks.displayValue,
+      ),
+      line(
+        "Forecast confidence",
+        dashboard.metrics.forecastConfidence.displayValue,
       ),
       ``,
       `## Risks & blockers`,

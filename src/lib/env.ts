@@ -34,6 +34,8 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((v) => (v === "exec" ? "exec" : v === "user" ? "user" : undefined)),
+  RESEND_API_KEY: optionalString,
+  EMAIL_FROM: optionalString,
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

@@ -198,6 +198,14 @@ export const teamMemberCreateSchema = z.object({
   weeklyCapacityHours: z.string().optional(),
 });
 
+export const teamOwnershipCreateSchema = z.object({
+  teamId: z.string().uuid(),
+  clientId: z.string().min(1, "clientId is required"),
+  clientName: z.string().nullable().optional(),
+  projectId: z.string().nullable().optional(),
+  projectName: z.string().nullable().optional(),
+});
+
 export type MappingCreateInput = z.infer<typeof mappingCreateSchema>;
 export type MappingUpdateInput = z.infer<typeof mappingUpdateSchema>;
 export type UserMappingCreateInput = z.infer<typeof userMappingCreateSchema>;

@@ -10,6 +10,7 @@ type AlertConfig = {
   hasSlackWebhook: boolean;
   maskedSlackWebhook: string | null;
   alertEmail: string | null;
+  emailDeliveryConfigured?: boolean;
   thresholds: {
     budgetBurnPctRisk: number;
     runwayDaysRisk: number;
@@ -263,14 +264,17 @@ export function SettingsForm({ authed }: { authed: boolean }) {
       </Card>
 
       <Card>
-        <CardTitle className="mb-2">Slack alerts</CardTitle>
+        <CardTitle className="mb-2">Slack & email alerts</CardTitle>
         <CardDescription className="mb-4">
-          Incoming webhook for risk exceptions and weekly digests. Cron hits{" "}
+          Incoming Slack webhook and optional email digest for risk exceptions
+          and weekly digests. Cron hits{" "}
           <code className="font-mono text-xs">GET /api/alerts/run</code> with{" "}
           <code className="font-mono text-xs">Authorization: Bearer CRON_SECRET</code>
           . Use <code className="font-mono text-xs">?weekly=1</code> for the
           weekly digest and <code className="font-mono text-xs">?dryRun=1</code>{" "}
-          to preview without posting.
+          to preview without posting. Email delivery needs{" "}
+          <code className="font-mono text-xs">RESEND_API_KEY</code> and{" "}
+          <code className="font-mono text-xs">EMAIL_FROM</code>.
         </CardDescription>
         {settings?.alerts ? (
           <dl className="mb-4 grid gap-2 text-sm sm:grid-cols-2">
@@ -283,8 +287,16 @@ export function SettingsForm({ authed }: { authed: boolean }) {
               </dd>
             </div>
             <div>
-              <dt className="text-muted">Alert email (stored)</dt>
+              <dt className="text-muted">Alert email</dt>
               <dd>{settings.alerts.alertEmail ?? "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-muted">Email delivery</dt>
+              <dd>
+                {settings.alerts.emailDeliveryConfigured
+                  ? "Resend configured"
+                  : "Set RESEND_API_KEY + EMAIL_FROM"}
+              </dd>
             </div>
           </dl>
         ) : null}
@@ -333,7 +345,7 @@ export function SettingsForm({ authed }: { authed: boolean }) {
             type="email"
             value={alertEmail}
             onChange={(e) => setAlertEmail(e.target.value)}
-            placeholder="Ops email (stored for future delivery)"
+            placeholder="Ops email for digests (Resend)"
           />
           <div className="grid gap-3 sm:grid-cols-3">
             <Input

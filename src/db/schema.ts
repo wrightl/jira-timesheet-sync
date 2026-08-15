@@ -309,6 +309,39 @@ export const supportTicketReminders = pgTable(
   ],
 );
 
+/**
+ * Links a team to a Bitmap client (whole-client ownership) and optionally a
+ * specific project. Empty projectId means client-level ownership.
+ */
+export const teamOwnerships = pgTable(
+  "team_ownerships",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    teamId: uuid("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    clientId: text("client_id").notNull(),
+    clientName: text("client_name"),
+    projectId: text("project_id").notNull().default(""),
+    projectName: text("project_name"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("team_ownerships_team_client_project_uidx").on(
+      table.teamId,
+      table.clientId,
+      table.projectId,
+    ),
+    index("team_ownerships_team_id_idx").on(table.teamId),
+    index("team_ownerships_client_id_idx").on(table.clientId),
+  ],
+);
+
 export type AppUser = typeof users.$inferSelect;
 export type NewAppUser = typeof users.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
@@ -329,3 +362,5 @@ export type TeamMember = typeof teamMembers.$inferSelect;
 export type NewTeamMember = typeof teamMembers.$inferInsert;
 export type SupportTicketReminder = typeof supportTicketReminders.$inferSelect;
 export type NewSupportTicketReminder = typeof supportTicketReminders.$inferInsert;
+export type TeamOwnership = typeof teamOwnerships.$inferSelect;
+export type NewTeamOwnership = typeof teamOwnerships.$inferInsert;

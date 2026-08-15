@@ -11,6 +11,10 @@ import {
   isExcludedClient,
 } from "@/lib/excluded-clients";
 import {
+  computeStaffingForecast,
+  staffingGapStatus,
+} from "@/lib/staffing-forecast";
+import {
   createJiraMetricsService,
   type JiraIssueAggregates,
   type JiraMetricsService,
@@ -72,6 +76,10 @@ export type ProjectDashboardResult = {
     billableMixPct: DashboardMetric<number | null>;
     runwayDays: DashboardMetric<number | null>;
     remainingHoursSlip: DashboardMetric<number | null>;
+    remainingEngWeeks: DashboardMetric<number | null>;
+    staffingGapEngWeeks: DashboardMetric<number | null>;
+    staffingAsk: DashboardMetric<string | null>;
+    forecastConfidence: DashboardMetric<string | null>;
     estimateDeltaHours: DashboardMetric<number | null>;
     remainingEffortHours: DashboardMetric<number | null>;
     estimateCoveragePct: DashboardMetric<number | null>;
@@ -733,6 +741,17 @@ export class ProjectDashboardService {
     ).length;
     const healthCheckScore = healthTotal > 0 ? healthFailing : null;
 
+    const staffingRemainingHours =
+      remainingEffort ?? billableRemaining ?? null;
+    const staffing = computeStaffingForecast({
+      remainingHours: staffingRemainingHours,
+      endDate: project.end_date,
+      forecastEndDate: input.forecastEndDate,
+      hasJiraRemainingEffort: Boolean(jiraAgg) || bitmapRemaining != null,
+      estimateCoveragePct: coveragePct,
+      now,
+    });
+
     return {
       budgetBurnPct: {
         id: "budget_burn_pct",
@@ -880,6 +899,78 @@ export class ProjectDashboardService {
               unit: "h",
               detail: "Change in remaining budget hours over ~7 days",
             },
+      remainingEngWeeks:
+        staffing.remainingEngWeeks == null
+          ? unavailableMetric(
+              "remaining_eng_weeks",
+              "Remaining eng-weeks",
+              "bitmap",
+              "No remaining hours on project",
+            )
+          : {
+              id: "remaining_eng_weeks",
+              label: "Remaining eng-weeks",
+              value: staffing.remainingEngWeeks,
+              displayValue: `${staffing.remainingEngWeeks}`,
+              status: "ok",
+              source: remainingSource,
+              unit: "ew",
+              detail:
+                staffing.remainingHours != null
+                  ? `${formatHours(staffing.remainingHours)} ÷ 40h`
+                  : null,
+            },
+      staffingGapEngWeeks:
+        staffing.staffingGapEngWeeks == null
+          ? unavailableMetric(
+              "staffing_gap_eng_weeks",
+              "Staffing gap",
+              "bitmap",
+              staffing.targetDate
+                ? "Need remaining hours to compute gap"
+                : "Need project end or forecast date",
+            )
+          : {
+              id: "staffing_gap_eng_weeks",
+              label: "Staffing gap",
+              value: staffing.staffingGapEngWeeks,
+              displayValue:
+                staffing.staffingGapEngWeeks <= 0
+                  ? "0"
+                  : `+${staffing.staffingGapEngWeeks}`,
+              status: staffingGapStatus(staffing.staffingGapEngWeeks),
+              source: "bitmap",
+              unit: "ew",
+              detail: staffing.targetDate
+                ? `vs 1 FTE capacity through ${staffing.targetDate}`
+                : null,
+            },
+      staffingAsk: {
+        id: "staffing_ask",
+        label: "Staffing ask",
+        value: staffing.staffingAsk,
+        displayValue: staffing.staffingAsk ?? "—",
+        status: staffingGapStatus(staffing.staffingGapEngWeeks),
+        source: "bitmap",
+        detail:
+          staffing.daysToTarget != null
+            ? `${staffing.daysToTarget}d to target`
+            : "No end/forecast date",
+      },
+      forecastConfidence: {
+        id: "forecast_confidence",
+        label: "Forecast confidence",
+        value: staffing.forecastConfidence,
+        displayValue: staffing.forecastConfidence,
+        status:
+          staffing.forecastConfidence === "unavailable"
+            ? "unavailable"
+            : staffing.forecastConfidence === "low"
+              ? "watch"
+              : "ok",
+        source: remainingSource,
+        detail: coverageDetail ?? "Based on estimate coverage / Jira remaining",
+      },
       estimateDeltaHours: {
         id: "estimate_delta_hours",
         label: "Jira vs Bitmap estimate delta",

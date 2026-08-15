@@ -8,11 +8,15 @@ import {
   type PortfolioResult,
   type PortfolioRiskTier,
 } from "@/lib/portfolio";
+import {
+  computeStaffingForecast,
+} from "@/lib/staffing-forecast";
 import { withoutExcludedClientProjects } from "@/lib/excluded-clients";
 import {
   DEFAULT_ALERT_THRESHOLDS,
   type AlertThresholds,
 } from "@/lib/alert-thresholds";
+import { TeamsRepository } from "@/repositories/teams-repository";
 import { WorklogSyncsRepository } from "@/repositories/worklog-syncs-repository";
 import {
   createSettingsService,
@@ -156,11 +160,38 @@ export function scorePortfolioProject(
     elevate("watch");
   }
 
+  const billableRemainingHours =
+    project.billable_time_remaining ?? project.time_remaining ?? null;
+  const forecast = computeStaffingForecast({
+    remainingHours: billableRemainingHours,
+    endDate: project.end_date,
+    forecastEndDate: project.forecast_end_date,
+    hasJiraRemainingEffort:
+      typeof project.jira_budget_remaining_effort === "number",
+  });
+
+  if (
+    forecast.staffingGapEngWeeks != null &&
+    forecast.staffingGapEngWeeks >= 2 &&
+    forecast.staffingAsk
+  ) {
+    riskReasons.push(forecast.staffingAsk);
+    elevate("risk");
+  } else if (
+    forecast.staffingGapEngWeeks != null &&
+    forecast.staffingGapEngWeeks >= 0.5 &&
+    forecast.staffingAsk
+  ) {
+    riskReasons.push(forecast.staffingAsk);
+    elevate("watch");
+  }
+
   if (
     budgetBurnPct == null &&
     runwayDays == null &&
     scheduleSlipDays == null &&
-    unhealthyChecks == null
+    unhealthyChecks == null &&
+    forecast.remainingEngWeeks == null
   ) {
     riskTier = "unavailable";
   }
@@ -172,17 +203,54 @@ export function scorePortfolioProject(
     clientId: project.client?.id ?? null,
     clientName: project.client?.name ?? null,
     ownerName: ownerName(project),
+    owningTeamIds: [],
+    owningTeamNames: [],
     state: project.state ?? null,
     budgetBurnPct,
-    billableRemainingHours:
-      project.billable_time_remaining ?? project.time_remaining ?? null,
+    billableRemainingHours,
     runwayDays,
     scheduleSlipDays,
+    remainingEngWeeks: forecast.remainingEngWeeks,
+    staffingGapEngWeeks: forecast.staffingGapEngWeeks,
+    staffingAsk: forecast.staffingAsk,
+    forecastConfidence: forecast.forecastConfidence,
     unhealthyChecks,
     healthy: typeof project.healthy === "boolean" ? project.healthy : null,
     riskTier,
     riskReasons,
   };
+}
+
+function applyOwnership(
+  projects: PortfolioProjectRow[],
+  ownerships: Array<{
+    teamId: string;
+    teamName: string;
+    clientId: string;
+    projectId: string;
+  }>,
+): PortfolioProjectRow[] {
+  return projects.map((project) => {
+    const matched = ownerships.filter((o) => {
+      if (o.projectId && o.projectId === project.projectId) return true;
+      if (
+        !o.projectId &&
+        project.clientId &&
+        o.clientId === project.clientId
+      ) {
+        return true;
+      }
+      return false;
+    });
+    if (matched.length === 0) return project;
+    const ids = [...new Set(matched.map((m) => m.teamId))];
+    const names = [...new Set(matched.map((m) => m.teamName))];
+    return {
+      ...project,
+      owningTeamIds: ids,
+      owningTeamNames: names,
+    };
+  });
 }
 
 async function listAllActiveProjects(
@@ -206,12 +274,16 @@ export class PortfolioService {
   constructor(
     private readonly settings: SettingsService,
     private readonly syncs: WorklogSyncsRepository,
+    private readonly teams: TeamsRepository,
   ) {}
 
   async getPortfolio(options?: {
     clientId?: string | null;
     riskTier?: PortfolioRiskTier | null;
     owner?: string | null;
+    teamId?: string | null;
+    /** When true, restrict to teams the given app user belongs to. */
+    mineForUserId?: string | null;
     thresholds?: AlertThresholds;
   }): Promise<PortfolioResult> {
     const thresholds = options?.thresholds ?? DEFAULT_ALERT_THRESHOLDS;
@@ -225,6 +297,17 @@ export class PortfolioService {
       }
     } catch {
       syncFailedOpen = 0;
+    }
+
+    let mineTeamIds: string[] | null = null;
+    if (options?.mineForUserId) {
+      try {
+        mineTeamIds = await this.teams.listTeamIdsForAppUser(
+          options.mineForUserId,
+        );
+      } catch {
+        mineTeamIds = [];
+      }
     }
 
     try {
@@ -244,9 +327,17 @@ export class PortfolioService {
         await listAllActiveProjects(bitmap),
       );
       const inWindow = raw.filter((p) => isProjectInPortfolioWindow(p));
-      const projects = inWindow.map((p) =>
+      let projects = inWindow.map((p) =>
         scorePortfolioProject(p, thresholds),
       );
+
+      try {
+        const ownerships = await this.teams.listOwnershipsWithTeamNames();
+        projects = applyOwnership(projects, ownerships);
+      } catch {
+        // Ownership table may not exist yet on older deploys; keep rows unowned.
+      }
+
       projects.sort((a, b) => {
         const rank = (t: PortfolioRiskTier) =>
           t === "risk" ? 0 : t === "watch" ? 1 : t === "ok" ? 2 : 3;
@@ -267,6 +358,8 @@ export class PortfolioService {
           clientId: options?.clientId,
           riskTier: options?.riskTier,
           owner: options?.owner,
+          teamId: options?.teamId,
+          teamIds: mineTeamIds,
         },
       );
     } catch (err) {
@@ -285,5 +378,9 @@ export function createPortfolioService(
   db: Db = getDb(),
   settings: SettingsService = createSettingsService(db),
 ) {
-  return new PortfolioService(settings, new WorklogSyncsRepository(db));
+  return new PortfolioService(
+    settings,
+    new WorklogSyncsRepository(db),
+    new TeamsRepository(db),
+  );
 }

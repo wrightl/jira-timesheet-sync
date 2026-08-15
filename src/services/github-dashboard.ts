@@ -3,10 +3,12 @@ import type {
   GithubOrgRepoSummary,
   GithubPullSummary,
 } from "@/clients/github-http";
-import type {
-  GithubAuthorWip,
-  GithubDashboardMetric,
-  GithubDashboardResult,
+import {
+  githubReviewNavBadgeFromPulls,
+  type GithubAuthorWip,
+  type GithubDashboardMetric,
+  type GithubDashboardResult,
+  type GithubReviewNavBadge,
 } from "@/lib/github-dashboard";
 import {
   createGithubSettingsService,
@@ -17,6 +19,7 @@ export type {
   GithubAuthorWip,
   GithubDashboardMetric,
   GithubDashboardResult,
+  GithubReviewNavBadge,
 } from "@/lib/github-dashboard";
 export { formatPullAge } from "@/lib/github-dashboard";
 
@@ -105,11 +108,18 @@ export class GithubDashboardService {
   constructor(private readonly settings: GithubSettingsService) {}
 
   async getDashboard(userId: string): Promise<GithubDashboardResult> {
-    const configured = await this.settings.createConfiguredClient(userId);
+    const [configured, status] = await Promise.all([
+      this.settings.createConfiguredClient(userId),
+      this.settings.getStatus(userId),
+    ]);
+    const tokenExpiresAt = status.tokenExpiresAt;
+    const githubRepos = status.githubRepos;
     if (!configured) {
       return {
         configured: false,
         org: null,
+        tokenExpiresAt,
+        githubRepos,
         metrics: [],
         recentPullRequests: [],
         recentRepos: [],
@@ -120,11 +130,14 @@ export class GithubDashboardService {
 
     const { client, org } = configured;
     try {
-      return await this.buildDashboard(client, org);
+      const dashboard = await this.buildDashboard(client, org, githubRepos);
+      return { ...dashboard, tokenExpiresAt, githubRepos };
     } catch (err) {
       return {
         configured: true,
         org,
+        tokenExpiresAt,
+        githubRepos,
         metrics: [],
         recentPullRequests: [],
         recentRepos: [],
@@ -134,13 +147,40 @@ export class GithubDashboardService {
     }
   }
 
+  async getReviewNavBadge(userId: string): Promise<GithubReviewNavBadge> {
+    const empty: GithubReviewNavBadge = { count: 0, urgent: false };
+    const [configured, status] = await Promise.all([
+      this.settings.createConfiguredClient(userId),
+      this.settings.getStatus(userId),
+    ]);
+    if (!configured) return empty;
+
+    try {
+      const repos =
+        status.githubRepos.length > 0 ? status.githubRepos : undefined;
+      const recent = await configured.client.searchOpenPullRequests(
+        configured.org,
+        { first: 100, repos },
+      );
+      return githubReviewNavBadgeFromPulls(recent.pulls, new Date(), status.githubRepos);
+    } catch {
+      return empty;
+    }
+  }
+
   private async buildDashboard(
     client: GithubApiClient,
     org: string,
+    githubRepos: string[],
   ): Promise<GithubDashboardResult> {
     const staleCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
       .toISOString()
       .slice(0, 10);
+    const repos = githubRepos.length > 0 ? githubRepos : undefined;
+    const scopeHint =
+      githubRepos.length > 0
+        ? `${githubRepos.length} selected ${githubRepos.length === 1 ? "repository" : "repositories"}`
+        : `Across ${org}`;
 
     const [
       openCount,
@@ -149,15 +189,15 @@ export class GithubDashboardService {
       staleCountSearch,
       merged,
       recent,
-      repos,
+      recentRepos,
     ] = await Promise.all([
-      client.countOpenPullRequests(org),
-      client.countOpenPullRequests(org, "is:draft"),
-      client.countOpenPullRequests(org, "review:required"),
-      client.countOpenPullRequests(org, `updated:<${staleCutoff}`),
-      client.searchMergedPullRequests(org, { first: 20, sinceDays: 30 }),
-      client.searchOpenPullRequests(org, { first: 40 }),
-      client.listRecentlyUpdatedRepos(org, { first: 8 }),
+      client.countOpenPullRequests(org, "", repos),
+      client.countOpenPullRequests(org, "is:draft", repos),
+      client.countOpenPullRequests(org, "review:required", repos),
+      client.countOpenPullRequests(org, `updated:<${staleCutoff}`, repos),
+      client.searchMergedPullRequests(org, { first: 20, sinceDays: 30, repos }),
+      client.searchOpenPullRequests(org, { first: 40, repos }),
+      client.listRecentlyUpdatedRepos(org, { first: 40, repos }),
     ]);
 
     const published = Math.max(openCount - draftCount, 0);
@@ -165,39 +205,44 @@ export class GithubDashboardService {
     const mergeRatePerWeek =
       Math.round((merged.totalCount / (30 / 7)) * 10) / 10;
 
+    const hint = (detail?: string) =>
+      detail ? `${scopeHint} · ${detail}` : scopeHint;
+
     const metrics: GithubDashboardMetric[] = [
       {
         key: "open_prs",
         label: "Open pull requests",
         value: openCount,
         status: metricStatus(openCount, 25, 50),
-        hint: `Across ${org}`,
+        hint: scopeHint,
       },
       {
         key: "draft_prs",
         label: "Draft PRs",
         value: draftCount,
         status: "ok",
+        hint: scopeHint,
       },
       {
         key: "published_prs",
         label: "Published open PRs",
         value: published,
         status: metricStatus(published, 20, 40),
+        hint: scopeHint,
       },
       {
         key: "needs_review",
         label: "PRs needing review",
         value: needsReviewCount,
         status: metricStatus(needsReviewCount, 10, 20),
-        hint: "GitHub review:required",
+        hint: hint("GitHub review:required"),
       },
       {
         key: "stale_prs",
         label: "Stale PRs (7d+)",
         value: staleCountSearch,
         status: metricStatus(staleCountSearch, 5, 12),
-        hint: "No updates in 7+ days",
+        hint: hint("No updates in 7+ days"),
       },
       {
         key: "median_open_age_h",
@@ -207,7 +252,7 @@ export class GithubDashboardService {
           flow.medianOpenAgeHours == null
             ? "unavailable"
             : metricStatus(flow.medianOpenAgeHours, 48, 120),
-        hint: "Sample of recent open PRs",
+        hint: hint("Sample of recent open PRs"),
       },
       {
         key: "median_ttf_review_h",
@@ -217,22 +262,25 @@ export class GithubDashboardService {
           flow.medianTimeToFirstReviewHours == null
             ? "unavailable"
             : metricStatus(flow.medianTimeToFirstReviewHours, 24, 72),
+        hint: scopeHint,
       },
       {
         key: "merge_rate_weekly",
         label: "Merges / week (30d)",
         value: mergeRatePerWeek,
         status: mergeRatePerWeek > 0 ? "ok" : "watch",
-        hint: `${merged.totalCount} merged in 30d`,
+        hint: hint(`${merged.totalCount} merged in 30d`),
       },
     ];
 
     return {
       configured: true,
       org,
+      tokenExpiresAt: null,
+      githubRepos,
       metrics,
-      recentPullRequests: recent.pulls.slice(0, 20),
-      recentRepos: repos,
+      recentPullRequests: recent.pulls,
+      recentRepos,
       authorWip: flow.authorWip,
       error: null,
     };

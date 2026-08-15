@@ -2,14 +2,19 @@ import { and, count, desc, eq, sql } from "drizzle-orm";
 import type { Db } from "@/db";
 import {
   users,
+  userSettings,
   type AppUser,
   type NewAppUser,
 } from "@/db/schema";
 
-export type PublicUser = Pick<
-  AppUser,
-  "id" | "email" | "role" | "syncEnabled" | "createdAt" | "updatedAt"
->;
+export type PublicUser = {
+  id: string;
+  email: string;
+  role: AppUser["role"];
+  syncEnabled: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
 
 /** Columns that exist before migration 0012 (oauth_*). Safe for login. */
 const authUserColumns = {
@@ -18,9 +23,6 @@ const authUserColumns = {
   passwordHash: users.passwordHash,
   role: users.role,
   mustSetPassword: users.mustSetPassword,
-  syncEnabled: users.syncEnabled,
-  githubTokenEncrypted: users.githubTokenEncrypted,
-  githubOrg: users.githubOrg,
   createdAt: users.createdAt,
   updatedAt: users.updatedAt,
 };
@@ -29,7 +31,9 @@ const publicUserColumns = {
   id: users.id,
   email: users.email,
   role: users.role,
-  syncEnabled: users.syncEnabled,
+  syncEnabled: sql<boolean>`coalesce(${userSettings.syncEnabled}, false)`.as(
+    "sync_enabled",
+  ),
   createdAt: users.createdAt,
   updatedAt: users.updatedAt,
 };
@@ -40,9 +44,6 @@ function asAppUser(row: {
   passwordHash: string;
   role: AppUser["role"];
   mustSetPassword: boolean;
-  syncEnabled: boolean;
-  githubTokenEncrypted: string | null;
-  githubOrg: string | null;
   createdAt: Date;
   updatedAt: Date;
 }): AppUser {
@@ -80,6 +81,16 @@ export class UsersRepository {
     return row ? asAppUser(row) : null;
   }
 
+  async findPublicById(id: string): Promise<PublicUser | null> {
+    const rows = await this.db
+      .select(publicUserColumns)
+      .from(users)
+      .leftJoin(userSettings, eq(userSettings.userId, users.id))
+      .where(eq(users.id, id))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
   async findByOAuth(
     provider: string,
     subject: string,
@@ -110,6 +121,7 @@ export class UsersRepository {
     return this.db
       .select(publicUserColumns)
       .from(users)
+      .leftJoin(userSettings, eq(userSettings.userId, users.id))
       .orderBy(desc(users.updatedAt));
   }
 
@@ -117,8 +129,15 @@ export class UsersRepository {
     const [row] = await this.db
       .insert(users)
       .values(values)
-      .returning(publicUserColumns);
-    return row;
+      .returning({
+        id: users.id,
+        email: users.email,
+        role: users.role,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+      });
+    await this.ensureUserSettings(row.id);
+    return { ...row, syncEnabled: false };
   }
 
   async createFull(values: NewAppUser): Promise<AppUser> {
@@ -127,16 +146,22 @@ export class UsersRepository {
       .insert(users)
       .values(values)
       .returning(authUserColumns);
+    await this.ensureUserSettings(row.id);
     return asAppUser(row);
   }
 
   async isSyncEnabled(id: string): Promise<boolean | null> {
     const rows = await this.db
-      .select({ syncEnabled: users.syncEnabled })
+      .select({
+        id: users.id,
+        syncEnabled: userSettings.syncEnabled,
+      })
       .from(users)
+      .leftJoin(userSettings, eq(userSettings.userId, users.id))
       .where(eq(users.id, id))
       .limit(1);
-    return rows[0]?.syncEnabled ?? null;
+    if (!rows[0]) return null;
+    return rows[0].syncEnabled ?? false;
   }
 
   async update(
@@ -148,7 +173,6 @@ export class UsersRepository {
         | "passwordHash"
         | "email"
         | "mustSetPassword"
-        | "syncEnabled"
         | "oauthProvider"
         | "oauthSubject"
       >
@@ -160,8 +184,20 @@ export class UsersRepository {
       .update(users)
       .set({ updatedAt: new Date(), ...values })
       .where(eq(users.id, id))
-      .returning(publicUserColumns);
-    return row ?? null;
+      .returning({
+        id: users.id,
+        email: users.email,
+        role: users.role,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+      });
+    if (!row) return null;
+    const settings = await this.db
+      .select({ syncEnabled: userSettings.syncEnabled })
+      .from(userSettings)
+      .where(eq(userSettings.userId, id))
+      .limit(1);
+    return { ...row, syncEnabled: settings[0]?.syncEnabled ?? false };
   }
 
   async delete(id: string): Promise<boolean> {
@@ -178,5 +214,12 @@ export class UsersRepository {
       .from(users)
       .where(eq(users.role, "admin"));
     return Number(rows[0]?.value ?? 0);
+  }
+
+  private async ensureUserSettings(userId: string): Promise<void> {
+    await this.db
+      .insert(userSettings)
+      .values({ userId })
+      .onConflictDoNothing();
   }
 }

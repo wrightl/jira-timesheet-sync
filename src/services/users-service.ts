@@ -4,6 +4,7 @@ import {
   type PublicUser,
 } from "@/repositories/users-repository";
 import { SessionsRepository } from "@/repositories/sessions-repository";
+import { UserSettingsRepository } from "@/repositories/user-settings-repository";
 import { hashPassword, normaliseEmail } from "@/lib/password";
 import type {
   AdminUserCreateInput,
@@ -20,6 +21,7 @@ export class UsersService {
   constructor(
     private readonly users: UsersRepository,
     private readonly sessions: SessionsRepository,
+    private readonly userSettings: UserSettingsRepository,
   ) {}
 
   list(): Promise<PublicUser[]> {
@@ -29,29 +31,24 @@ export class UsersService {
   async getPublicById(
     id: string,
   ): Promise<{ user: PublicUser } | { error: UsersServiceError }> {
-    const user = await this.users.findById(id);
+    const user = await this.users.findPublicById(id);
     if (!user) {
       return { error: { code: "not_found", message: "User not found" } };
     }
-    return {
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        syncEnabled: user.syncEnabled,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-      },
-    };
+    return { user };
   }
 
   async updateMe(
     id: string,
     input: MeUpdateInput,
   ): Promise<{ user: PublicUser } | { error: UsersServiceError }> {
-    const user = await this.users.update(id, {
+    const updated = await this.userSettings.upsertForUser(id, {
       syncEnabled: input.syncEnabled,
     });
+    if (!updated) {
+      return { error: { code: "not_found", message: "User not found" } };
+    }
+    const user = await this.users.findPublicById(id);
     if (!user) {
       return { error: { code: "not_found", message: "User not found" } };
     }
@@ -117,7 +114,6 @@ export class UsersService {
       role?: "admin" | "user" | "exec";
       passwordHash?: string;
       mustSetPassword?: boolean;
-      syncEnabled?: boolean;
     } = {};
 
     if (input.role) updates.role = input.role;
@@ -125,16 +121,30 @@ export class UsersService {
       updates.passwordHash = await hashPassword(input.password);
       updates.mustSetPassword = false;
     }
-    if (input.syncEnabled !== undefined) {
-      updates.syncEnabled = input.syncEnabled;
+
+    if (Object.keys(updates).length > 0) {
+      const user = await this.users.update(id, updates);
+      if (!user) {
+        return { error: { code: "not_found", message: "User not found" } };
+      }
     }
 
-    const user = await this.users.update(id, updates);
-    if (!user) {
-      return { error: { code: "not_found", message: "User not found" } };
+    if (input.syncEnabled !== undefined) {
+      const saved = await this.userSettings.upsertForUser(id, {
+        syncEnabled: input.syncEnabled,
+      });
+      if (!saved) {
+        return { error: { code: "not_found", message: "User not found" } };
+      }
     }
+
     if (input.password) {
       await this.sessions.deleteByUserId(id);
+    }
+
+    const user = await this.users.findPublicById(id);
+    if (!user) {
+      return { error: { code: "not_found", message: "User not found" } };
     }
     return { user };
   }
@@ -178,5 +188,6 @@ export function createUsersService(db: Db = getDb()) {
   return new UsersService(
     new UsersRepository(db),
     new SessionsRepository(db),
+    new UserSettingsRepository(db),
   );
 }

@@ -29,10 +29,8 @@ export async function GET(request: NextRequest) {
       reminderRepo,
     );
 
-    const [tickets, metrics] = await Promise.all([
-      service.getTickets(),
-      service.getMetrics(),
-    ]);
+    const tickets = await service.getTickets();
+    const metrics = service.metricsFromTickets(tickets);
 
     return Response.json({ tickets, metrics });
   } catch (err) {

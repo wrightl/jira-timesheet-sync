@@ -39,9 +39,6 @@ export const users = pgTable(
     passwordHash: text("password_hash").notNull(),
     role: userRoleEnum("role").notNull().default("user"),
     mustSetPassword: boolean("must_set_password").notNull().default(false),
-    syncEnabled: boolean("sync_enabled").notNull().default(false),
-    githubTokenEncrypted: text("github_token_encrypted"),
-    githubOrg: text("github_org"),
     oauthProvider: text("oauth_provider"),
     oauthSubject: text("oauth_subject"),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -180,6 +177,38 @@ export const apiCache = pgTable(
     index("api_cache_expires_at_idx").on(table.expiresAt),
     index("api_cache_resource_type_idx").on(table.resourceType),
   ],
+);
+
+export const userSettings = pgTable(
+  "user_settings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    githubTokenEncrypted: text("github_token_encrypted"),
+    githubOrg: text("github_org"),
+    githubTokenExpiresAt: timestamp("github_token_expires_at", {
+      withTimezone: true,
+    }),
+    githubExpiryReminder14dSentAt: timestamp(
+      "github_expiry_reminder_14d_sent_at",
+      { withTimezone: true },
+    ),
+    githubExpiryReminder3dSentAt: timestamp(
+      "github_expiry_reminder_3d_sent_at",
+      { withTimezone: true },
+    ),
+    githubReposJson: text("github_repos_json"),
+    syncEnabled: boolean("sync_enabled").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [uniqueIndex("user_settings_user_id_uidx").on(table.userId)],
 );
 
 export const settings = pgTable("settings", {
@@ -344,6 +373,8 @@ export const teamOwnerships = pgTable(
 
 export type AppUser = typeof users.$inferSelect;
 export type NewAppUser = typeof users.$inferInsert;
+export type UserSettings = typeof userSettings.$inferSelect;
+export type NewUserSettings = typeof userSettings.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
 export type SpaceProjectMapping = typeof spaceProjectMappings.$inferSelect;

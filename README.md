@@ -28,14 +28,16 @@ npm run db:seed   # creates/updates the admin user
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000), sign in with the seeded admin (or register a normal user), then configure mappings and the Bitmap token under **Settings** (admin).
+Open [http://localhost:3000](http://localhost:3000), sign in with the seeded admin (or register a normal user), then configure mappings and the Bitmap token under **App Settings** (admin).
 
 ## Auth and roles
 
 | Role | Capabilities |
 |------|----------------|
-| `admin` | Settings, cache, users, global space→client mappings, Jira↔Bitmap user mappings, sync dashboard |
-| `user` | Own space→project/budget mappings (`/my-mappings`); read global spaces to pick from |
+| `admin` | App Settings, cache, users, global space→client mappings, Jira↔Bitmap user mappings, sync dashboard |
+| `user` | Own settings (`/settings`), own space→project/budget mappings (`/my-mappings`); read global spaces to pick from |
+
+System credentials (Bitmap token, Jira, Slack alerts, support desk) live in the `settings` table and are edited on **App Settings** (`/app-settings`, admin only, sidebar). Personal GitHub credentials and timesheet sync live in `user_settings` and are edited on **Settings** (`/settings`, any signed-in user, profile menu).
 
 - Login username is the **email address**
 - Login and register are rate-limited (8 failures per email+IP per 15 minutes)
@@ -61,7 +63,7 @@ If a mapped project/budget is inactive, the sync **fails** (no silent fallback).
 | `DATABASE_URL` | Neon pooled connection string |
 | `DATABASE_URL_UNPOOLED` | Neon direct URL for migrations |
 | `JIRA_WEBHOOK_SECRET` | Shared secret for webhook auth (Jira HMAC secret and/or `X-Webhook-Token`) |
-| `JIRA_BASE_URL` | Optional bootstrap for Jira Cloud site URL (Settings UI preferred) |
+| `JIRA_BASE_URL` | Optional bootstrap for Jira Cloud site URL (App Settings UI preferred) |
 | `JIRA_EMAIL` | Optional bootstrap for Jira API email |
 | `JIRA_API_TOKEN` | Optional bootstrap for Jira API token |
 | `JIRA_STORY_POINTS_FIELD` | Optional custom field id for story points (e.g. `customfield_10016`) |
@@ -74,7 +76,7 @@ If a mapped project/budget is inactive, the sync **fails** (no silent fallback).
 | `NGROK_AUTHTOKEN` | ngrok auth token for local webhook tunneling |
 | `NGROK_DOMAIN` | Optional reserved ngrok domain |
 | `APP_BASE_URL` | Public app URL (required for Google OAuth redirects) |
-| `CRON_SECRET` | Bearer token for `/api/alerts/run` and `/api/alerts/weekly` |
+| `CRON_SECRET` | Bearer token for `/api/alerts/run`, `/api/alerts/weekly`, `/api/support-tickets/reminders`, and `/api/github/token-expiry-reminders` |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth SSO |
 | `GOOGLE_ALLOWED_DOMAIN` | Hosted-domain restriction. **Required in production** when Google OAuth is configured (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `APP_BASE_URL`). Optional in local/test/dev. |
 | `GOOGLE_DEFAULT_ROLE` | `user` (default) or `exec` for new Google accounts |
@@ -84,11 +86,11 @@ If a mapped project/budget is inactive, the sync **fails** (no silent fallback).
 ### Production verify (after deploy)
 
 1. Confirm schema sync via build (`scripts/migrate-on-build.mjs` / `drizzle-kit push`).
-2. Set Slack webhook + thresholds in **Settings**; set `CRON_SECRET` for `/api/alerts/run` and `/api/alerts/weekly`.
-3. Optionally set `GOOGLE_*` + `APP_BASE_URL` for SSO, and `RESEND_API_KEY` + `EMAIL_FROM` plus an alert email in Settings.
+2. Set Slack webhook + thresholds in **App Settings**; set `CRON_SECRET` for `/api/alerts/run`, `/api/alerts/weekly`, `/api/support-tickets/reminders`, and `/api/github/token-expiry-reminders`.
+3. Optionally set `GOOGLE_*` + `APP_BASE_URL` for SSO, and `RESEND_API_KEY` + `EMAIL_FROM` plus an alert email in App Settings.
 4. As admin, call `GET /api/ops/readiness` and clear any `missing` checks.
 
-Bitmap token resolution: encrypted token in Settings (DB) first; if unset, `INTERNAL_PM_ACCESS_TOKEN` is used as bootstrap. Once a token is saved in Settings, the DB value is the source of truth.
+Bitmap token resolution: encrypted token in App Settings (DB) first; if unset, `INTERNAL_PM_ACCESS_TOKEN` is used as bootstrap. Once a token is saved in App Settings, the DB value is the source of truth.
 
 `.env.local` is gitignored. Commit only `.env.example`.
 
@@ -164,25 +166,28 @@ Local tip: leave `LOG_LEVEL` unset (or set `debug`) while using `npm run dev` / 
 | `GET` | `/api/projects/:id/dashboard` | Session (Bitmap + optional Jira project metrics) |
 | `GET/DELETE` | `/api/cache` | Admin |
 | `GET/PUT` | `/api/settings` | Admin (Bitmap token + Jira Cloud credentials) |
+| `GET/PUT` | `/api/user-settings` | Session (own GitHub credentials, repo filter, timesheet sync preference) |
+| `GET` | `/api/github/repos` | Session (org repositories for the Settings picker) |
+| `GET` | `/api/github/token-expiry-reminders` | Bearer `CRON_SECRET` or admin (PAT expiry Slack/email reminders) |
 | `GET` | `/api/syncs` | Session (admins see all; users see own) |
 | `POST` | `/api/syncs?action=retry&id=` | Session (admin or owner) |
 | `GET` | `/api/health` | None |
 
 ## Schema sync
 
-This app applies schema with **`drizzle-kit push`** (see `npm run db:push` and Cloud Agent `scripts/cloud/start.sh`). Vercel builds run the same via `scripts/migrate-on-build.mjs`. Do not use `drizzle-kit migrate` against the existing Neon database unless you have baselined a `__drizzle_migrations` journal — replaying from `0000_init` fails when tables already exist.
+This app applies schema with **`drizzle-kit push`** (see `npm run db:push` and Cloud Agent `scripts/cloud/start.sh`). `db:push` and Vercel builds run `scripts/backfill-user-settings.mjs` first so GitHub/sync values are copied into `user_settings` before those columns are dropped from `users`. Do not use `drizzle-kit migrate` against the existing Neon database unless you have baselined a `__drizzle_migrations` journal — replaying from `0000_init` fails when tables already exist.
 
 ## Project progress dashboard
 
-Authenticated users can open **Projects** (`/projects`) to inspect budget burn, estimate fidelity, and quality signals for a mapped Bitmap project. Live Jira Cloud REST API **v3** enrichment (`/rest/api/3/search/jql`) is used when Jira credentials are configured under **Settings** (or via `JIRA_*` env bootstrap).
+Authenticated users can open **Projects** (`/projects`) to inspect budget burn, estimate fidelity, and quality signals for a mapped Bitmap project. Live Jira Cloud REST API **v3** enrichment (`/rest/api/3/search/jql`) is used when Jira credentials are configured under **App Settings** (or via `JIRA_*` env bootstrap).
 
 ## Engineering manager surfaces
 
 - **Portfolio** (`/portfolio`) — cross-client active project rollup (burn, runway, schedule slip, risk tier)
 - **Utilisation** (`/utilisation`) — billable hours from Bitmap timesheets vs Bitmap `billable_target_hours`; optional **Teams** (`/teams`, admin)
 - **Status pack** (`/status`) — one-click weekly Markdown narrative for a project
-- **GitHub** — review lag, stale PRs, merge rate, WIP by author (in addition to open/draft counts)
-- **Slack / email alerts** — configure webhook + alert email under **Settings**; cron `GET /api/alerts/run` (Bearer `CRON_SECRET`), `?weekly=1` for Monday digest. Email uses Resend when `RESEND_API_KEY` + `EMAIL_FROM` are set.
+- **GitHub** — review lag, stale PRs, merge rate, WIP by author (in addition to open/draft counts). PAT expiry is shown in Settings and on the GitHub dashboard; cron `GET /api/github/token-expiry-reminders` (Bearer `CRON_SECRET`) sends Slack DM + email at 14 days and 3 days before expiry. On **Settings**, pick a subset of org repositories (empty = all) to filter the dashboard.
+- **Slack / email alerts** — configure webhook + alert email under **App Settings**; cron `GET /api/alerts/run` (Bearer `CRON_SECRET`), `?weekly=1` for Monday digest. Email uses Resend when `RESEND_API_KEY` + `EMAIL_FROM` are set.
 - **Portfolio forecast** — staffing ask / eng-week gap on `/portfolio` and project dashboards; team ownership scopes “my risk” filters.
 - **Google SSO** — set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `APP_BASE_URL`, and `GOOGLE_ALLOWED_DOMAIN` (required in production). `GOOGLE_DEFAULT_ROLE=exec|user` is optional. Google will not link onto a password account that has already been claimed (`mustSetPassword` false).
 - **Exec role** — read-focused portfolio/utilisation/status access without sync-admin tools

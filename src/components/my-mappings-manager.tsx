@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { Select } from "@/components/ui/select";
-import { Toggle } from "@/components/ui/toggle";
 import {
   Table,
   TableBody,
@@ -56,7 +55,6 @@ export function MyMappingsManager({ authed }: { authed: boolean }) {
   const [spaceKey, setSpaceKey] = useState("");
   const [projectId, setProjectId] = useState("");
   const [projectBudgetId, setProjectBudgetId] = useState("");
-  const [syncEnabled, setSyncEnabled] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -67,16 +65,13 @@ export function MyMappingsManager({ authed }: { authed: boolean }) {
   const load = () => {
     startTransition(async () => {
       setError(null);
-      const [spacesRes, mineRes, meRes] = await Promise.all([
+      const [spacesRes, mineRes] = await Promise.all([
         fetch("/api/mappings"),
         fetch("/api/user-space-mappings"),
-        fetch("/api/me"),
       ]);
-      if (!spacesRes.ok || !mineRes.ok || !meRes.ok) {
+      if (!spacesRes.ok || !mineRes.ok) {
         setError(
-          spacesRes.status === 401 ||
-            mineRes.status === 401 ||
-            meRes.status === 401
+          spacesRes.status === 401 || mineRes.status === 401
             ? "Sign in required"
             : "Failed to load mappings",
         );
@@ -84,16 +79,10 @@ export function MyMappingsManager({ authed }: { authed: boolean }) {
       }
       const spacesData = await spacesRes.json();
       const mineData = await mineRes.json();
-      const meData = await meRes.json();
       setSpaceMappings(
         (spacesData.mappings ?? []).filter((m: SpaceMapping) => m.enabled),
       );
       setMappings(mineData.mappings ?? []);
-      setSyncEnabled(
-        typeof meData.user?.syncEnabled === "boolean"
-          ? meData.user.syncEnabled
-          : false,
-      );
     });
   };
 
@@ -151,44 +140,6 @@ export function MyMappingsManager({ authed }: { authed: boolean }) {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <CardTitle className="mb-1">Timesheet sync</CardTitle>
-            <p className="text-sm text-muted">
-              When disabled, your Jira worklogs are skipped and not written to
-              Bitmap.
-            </p>
-          </div>
-          <Toggle
-            checked={Boolean(syncEnabled)}
-            disabled={pending || syncEnabled === null}
-            label="Timesheet sync"
-            onCheckedChange={(next) => {
-              startTransition(async () => {
-                setError(null);
-                const res = await fetch("/api/me", {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ syncEnabled: next }),
-                });
-                if (!res.ok) {
-                  const data = await res.json().catch(() => ({}));
-                  setError(data.error ?? "Failed to update sync preference");
-                  return;
-                }
-                const data = await res.json();
-                setSyncEnabled(
-                  typeof data.user?.syncEnabled === "boolean"
-                    ? data.user.syncEnabled
-                    : next,
-                );
-              });
-            }}
-          />
-        </div>
-      </Card>
-
       <Card>
         <form
           onSubmit={(e) => {

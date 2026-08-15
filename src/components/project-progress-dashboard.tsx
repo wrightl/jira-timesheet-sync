@@ -253,10 +253,10 @@ function MetricCard({
             {!loading && unavailable ? (
                 <p className="mt-2 text-xs">
                     <Link
-                        href="/settings"
+                        href="/app-settings"
                         className="text-accent hover:underline"
                     >
-                        Configure Jira in Settings
+                        Configure Jira in App Settings
                     </Link>
                 </p>
             ) : null}
@@ -1013,10 +1013,10 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
                             <Alert className="mt-3" variant="info">
                                 {dashboard.jiraError}.{' '}
                                 <Link
-                                    href="/settings"
+                                    href="/app-settings"
                                     className="text-accent hover:underline"
                                 >
-                                    Open Settings
+                                    Open App Settings
                                 </Link>
                             </Alert>
                         ) : null}

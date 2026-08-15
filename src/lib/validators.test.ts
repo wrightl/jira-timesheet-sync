@@ -4,6 +4,7 @@ import {
   mappingUpdateSchema,
   settingsUpdateSchema,
   githubSettingsUpdateSchema,
+  userSettingsUpdateSchema,
   userMappingCreateSchema,
   userMappingUpdateSchema,
   userSpaceMappingCreateSchema,
@@ -153,6 +154,33 @@ describe("githubSettingsUpdateSchema", () => {
     expect(
       githubSettingsUpdateSchema.parse({ githubOrg: "acme" }),
     ).toEqual({ githubOrg: "acme" });
+  });
+});
+
+describe("userSettingsUpdateSchema", () => {
+  it("requires at least one field", () => {
+    expect(userSettingsUpdateSchema.safeParse({}).success).toBe(false);
+    expect(userSettingsUpdateSchema.parse({ syncEnabled: true })).toEqual({
+      syncEnabled: true,
+    });
+    expect(
+      userSettingsUpdateSchema.parse({ githubOrg: "acme" }),
+    ).toEqual({ githubOrg: "acme" });
+    expect(
+      userSettingsUpdateSchema.parse({ githubRepos: ["acme/app", "acme/app"] }),
+    ).toEqual({ githubRepos: ["acme/app"] });
+  });
+
+  it("rejects malformed or too many githubRepos", () => {
+    expect(
+      userSettingsUpdateSchema.safeParse({ githubRepos: ["not-a-repo"] })
+        .success,
+    ).toBe(false);
+    expect(
+      userSettingsUpdateSchema.safeParse({
+        githubRepos: Array.from({ length: 41 }, (_, i) => `acme/r${i}`),
+      }).success,
+    ).toBe(false);
   });
 });
 

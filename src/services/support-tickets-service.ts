@@ -1,10 +1,28 @@
 import { getDb, type Db } from "@/db";
 import type { JiraApiClient, JiraIssue } from "@/clients/jira-http";
-import type { SlackBotClient } from "@/clients/slack-bot";
 import { createSlackBotClient } from "@/clients/slack-bot";
 import { SettingsService } from "@/services/settings-service";
 import { SupportTicketReminderRepository } from "@/repositories/support-ticket-reminder-repository";
 import { log } from "@/lib/log";
+import { weekdayHoursBetween } from "@/lib/weekday-hours";
+import { jiraIssueBrowseUrl } from "@/lib/jira-issue-url";
+import {
+  changelogHistories,
+  isChangelogTruncated,
+  latestChangelogHistory,
+  type JiraChangelogHistory,
+} from "@/lib/jira-changelog";
+import {
+  pickLatestActivity,
+  type JiraComment,
+} from "@/lib/jira-activity";
+import { responseCycleHours } from "@/lib/support-response-cycles";
+import {
+  metricsFromTickets as computeSupportTicketMetrics,
+  type SupportTicketMetrics,
+} from "@/lib/support-ticket-metrics";
+
+export type { SupportTicketMetrics };
 
 export interface SupportTicket {
   key: string;
@@ -14,13 +32,11 @@ export interface SupportTicket {
   assigneeEmail: string | null;
   created: string | null;
   updated: string | null;
-  priority: string | null;
-}
-
-export interface SupportTicketMetrics {
-  totalCount: number;
-  averageResponseTimeHours: number | null;
-  ticketsByAssignee: Record<string, number>;
+  browseUrl: string | null;
+  lastActivity: string | null;
+  lastActivityAt: string | null;
+  hoursSinceActivity: number | null;
+  responseCycleHours: number[];
 }
 
 export class SupportTicketsService {
@@ -36,53 +52,39 @@ export class SupportTicketsService {
       throw new Error("Support desk space key not configured");
     }
 
-    const jql = `project = "${spaceKey}" ORDER BY updated DESC`;
+    const creds = await this.settingsService.getJiraCredentials();
+    const jql = `project = "${spaceKey}" AND statusCategory != Done ORDER BY updated DESC`;
     const result = await this.jiraClient.searchAllIssues({
       jql,
+      expand: "changelog",
       fields: [
         "summary",
         "status",
         "assignee",
         "created",
         "updated",
-        "priority",
       ],
     });
 
-    return result.map((issue) => this.mapIssueToTicket(issue));
+    const now = new Date();
+    return Promise.all(
+      result.map(async (issue) => {
+        const [histories, comment] = await Promise.all([
+          this.resolveChangelog(issue),
+          this.jiraClient.getLatestComment(issue.key),
+        ]);
+        return this.mapIssueToTicket(issue, {
+          histories,
+          comment,
+          browseBaseUrl: creds.browseBaseUrl,
+          now,
+        });
+      }),
+    );
   }
 
-  async getMetrics(): Promise<SupportTicketMetrics> {
-    const tickets = await this.getTickets();
-    const totalCount = tickets.length;
-
-    let totalResponseTimeHours = 0;
-    let ticketsWithResponseTime = 0;
-    const ticketsByAssignee: Record<string, number> = {};
-
-    for (const ticket of tickets) {
-      if (ticket.created && ticket.updated && ticket.created !== ticket.updated) {
-        const createdTime = new Date(ticket.created).getTime();
-        const updatedTime = new Date(ticket.updated).getTime();
-        const diffHours = (updatedTime - createdTime) / (1000 * 60 * 60);
-        totalResponseTimeHours += diffHours;
-        ticketsWithResponseTime++;
-      }
-
-      const assignee = ticket.assignee ?? "Unassigned";
-      ticketsByAssignee[assignee] = (ticketsByAssignee[assignee] ?? 0) + 1;
-    }
-
-    const averageResponseTimeHours =
-      ticketsWithResponseTime > 0
-        ? totalResponseTimeHours / ticketsWithResponseTime
-        : null;
-
-    return {
-      totalCount,
-      averageResponseTimeHours,
-      ticketsByAssignee,
-    };
+  metricsFromTickets(tickets: SupportTicket[]): SupportTicketMetrics {
+    return computeSupportTicketMetrics(tickets);
   }
 
   async sendStaleTicketReminders(): Promise<{
@@ -173,17 +175,60 @@ export class SupportTicketsService {
     return { sent, skipped, errors };
   }
 
-  private mapIssueToTicket(issue: JiraIssue): SupportTicket {
-    const assignee = issue.fields.assignee as { displayName?: string; emailAddress?: string } | null;
+  private async resolveChangelog(
+    issue: JiraIssue,
+  ): Promise<JiraChangelogHistory[]> {
+    const existing = changelogHistories(issue.changelog);
+    if (existing.length > 0 && !isChangelogTruncated(issue.changelog)) {
+      return existing;
+    }
+    const fetched = await this.jiraClient.getIssueChangelog(issue.key);
+    return fetched.length > 0 ? fetched : existing;
+  }
+
+  private mapIssueToTicket(
+    issue: JiraIssue,
+    extras?: {
+      histories?: JiraChangelogHistory[];
+      comment?: JiraComment | null;
+      browseBaseUrl?: string | null;
+      now?: Date;
+    },
+  ): SupportTicket {
+    const assignee = issue.fields.assignee as {
+      displayName?: string;
+      emailAddress?: string;
+    } | null;
+    const created = issue.fields.created ?? null;
+    const histories =
+      extras?.histories ?? changelogHistories(issue.changelog);
+    const history = latestChangelogHistory({ histories });
+    const activity = pickLatestActivity({
+      history,
+      comment: extras?.comment,
+      created,
+    });
+    const lastActivityAt = activity?.at ?? null;
+    const lastActivity = activity?.summary ?? null;
+    const now = extras?.now ?? new Date();
+    const hoursSinceActivity =
+      lastActivityAt != null
+        ? weekdayHoursBetween(new Date(lastActivityAt), now)
+        : null;
+
     return {
       key: issue.key,
       summary: issue.fields.summary ?? "No summary",
       status: issue.fields.status?.name ?? "Unknown",
       assignee: assignee?.displayName ?? null,
       assigneeEmail: assignee?.emailAddress ?? null,
-      created: issue.fields.created ?? null,
+      created,
       updated: issue.fields.updated ?? null,
-      priority: issue.fields.priority?.name ?? null,
+      browseUrl: jiraIssueBrowseUrl(extras?.browseBaseUrl, issue.key),
+      lastActivity,
+      lastActivityAt,
+      hoursSinceActivity,
+      responseCycleHours: responseCycleHours({ created, histories }),
     };
   }
 }

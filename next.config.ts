@@ -53,6 +53,11 @@ const nextConfig: NextConfig = {
         destination: "/api/utilisation",
         permanent: true,
       },
+      {
+        source: "/my-settings",
+        destination: "/settings",
+        permanent: true,
+      },
     ];
   },
 };

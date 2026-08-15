@@ -13,7 +13,7 @@
         "test:watch": "vitest --config vitest.config.mts",
         "db:generate": "drizzle-kit generate",
         "db:migrate": "drizzle-kit migrate",
-        "db:push": "drizzle-kit push",
+        "db:push": "node scripts/backfill-user-settings.mjs && drizzle-kit push --force",
         "db:studio": "drizzle-kit studio",
         "db:seed": "tsx --env-file=.env.local scripts/seed-admin.ts",
         "db:backfill-authors": "tsx --env-file=.env.local scripts/backfill-sync-authors.ts"

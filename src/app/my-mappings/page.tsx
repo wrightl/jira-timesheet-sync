@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { MyMappingsManager } from "@/components/my-mappings-manager";
 import { PageHeader } from "@/components/ui/page-header";
+import { PageMain } from "@/components/ui/page-main";
 import { requirePageUser } from "@/lib/auth";
 
 export default async function MyMappingsPage() {
@@ -11,13 +12,13 @@ export default async function MyMappingsPage() {
       currentPath="/my-mappings"
       user={{ email: user.email, role: user.role }}
     >
-      <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">
+      <PageMain>
         <PageHeader
           title="My project mappings"
           description="Map each Jira space to a Bitmap project and budget for your timesheets. Your login email must match your Bitmap user email for sync to apply these overrides."
         />
         <MyMappingsManager authed />
-      </main>
+      </PageMain>
     </AppShell>
   );
 }

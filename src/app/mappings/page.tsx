@@ -2,6 +2,7 @@ import { AppShell } from "@/components/app-shell";
 import { MappingsManager } from "@/components/mappings-manager";
 import { UserMappingsManager } from "@/components/user-mappings-manager";
 import { PageHeader } from "@/components/ui/page-header";
+import { PageMain } from "@/components/ui/page-main";
 import { requirePageUser } from "@/lib/auth";
 
 export default async function MappingsPage() {
@@ -12,7 +13,7 @@ export default async function MappingsPage() {
       currentPath="/mappings"
       user={{ email: user.email, role: user.role }}
     >
-      <main className="mx-auto w-full max-w-5xl flex-1 space-y-12 px-6 py-8">
+      <PageMain className="space-y-12">
         <section>
           <PageHeader
             title="Space → client mappings"
@@ -35,7 +36,7 @@ export default async function MappingsPage() {
           />
           <UserMappingsManager authed />
         </section>
-      </main>
+      </PageMain>
     </AppShell>
   );
 }

@@ -11,9 +11,23 @@ import {
   isExcludedClient,
 } from "@/lib/excluded-clients";
 import {
+  HOURS_PER_ENG_WEEK,
   computeStaffingForecast,
   staffingGapStatus,
 } from "@/lib/staffing-forecast";
+import {
+  avgDailyBillableBurnHours,
+  billableRemainingHours,
+  burnStatus,
+  burndownRemainingSlipHours,
+  computeBudgetBurnPct,
+  estimateRunwayDays,
+  pct,
+} from "@/lib/bitmap-project-metrics";
+import {
+  DEFAULT_ALERT_THRESHOLDS,
+  type AlertThresholds,
+} from "@/lib/alert-thresholds";
 import {
   createJiraMetricsService,
   type JiraIssueAggregates,
@@ -112,12 +126,10 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-function pct(numer: number, denom: number): number | null {
-  if (!Number.isFinite(numer) || !Number.isFinite(denom) || denom <= 0) {
-    return null;
-  }
-  return round1((numer / denom) * 100);
-}
+export {
+  avgDailyBillableBurnHours,
+  burndownRemainingSlipHours,
+} from "@/lib/bitmap-project-metrics";
 
 function formatHours(h: number | null): string {
   if (h == null || !Number.isFinite(h)) return "—";
@@ -142,13 +154,6 @@ function dayDiff(a: string | null | undefined, b: string | null | undefined): nu
   const tb = Date.parse(b);
   if (!Number.isFinite(ta) || !Number.isFinite(tb)) return null;
   return Math.round((ta - tb) / (24 * 60 * 60 * 1000));
-}
-
-function burnStatus(burnPct: number | null): MetricStatus {
-  if (burnPct == null) return "unavailable";
-  if (burnPct >= 100) return "risk";
-  if (burnPct >= 85) return "watch";
-  return "ok";
 }
 
 function coverageStatus(pctValue: number | null): MetricStatus {
@@ -287,89 +292,6 @@ export function healthCheckScoreStatus(
   return "ok";
 }
 
-/** Bitmap burndown totals are seconds of remaining budget. */
-function burndownTotalToHours(total: number): number {
-  return total / 3600;
-}
-
-export function avgDailyBillableBurnHours(
-  timesheets: BitmapTimesheetEntry[],
-  burndown: BitmapBurndown | null,
-  now: Date = new Date(),
-): number | null {
-  const windowMs = 14 * 24 * 60 * 60 * 1000;
-  const cutoff = now.getTime() - windowMs;
-  const byDay = new Map<string, number>();
-
-  for (const entry of timesheets) {
-    if (entry.billable === false) continue;
-    const hours = typeof entry.hours === "number" ? entry.hours : 0;
-    if (!Number.isFinite(hours) || hours <= 0) continue;
-    const date = entry.date ? String(entry.date).slice(0, 10) : null;
-    if (!date) continue;
-    const t = Date.parse(date);
-    if (!Number.isFinite(t) || t < cutoff) continue;
-    byDay.set(date, (byDay.get(date) ?? 0) + hours);
-  }
-
-  if (byDay.size > 0) {
-    let sum = 0;
-    for (const h of byDay.values()) sum += h;
-    return round2(sum / byDay.size);
-  }
-
-  const points = (burndown?.burndown ?? [])
-    .map((p) => ({
-      date: String(p.date).slice(0, 10),
-      hours: burndownTotalToHours(Number(p.total)),
-    }))
-    .filter((p) => Number.isFinite(p.hours))
-    .sort((a, b) => a.date.localeCompare(b.date));
-
-  if (points.length < 2) return null;
-  const recent = points.slice(-14);
-  const first = recent[0];
-  const last = recent[recent.length - 1];
-  if (!first || !last) return null;
-  const daySpan = Math.max(
-    1,
-    Math.round(
-      (Date.parse(last.date) - Date.parse(first.date)) / (24 * 60 * 60 * 1000),
-    ),
-  );
-  // Remaining hours dropped → positive burn
-  const burned = first.hours - last.hours;
-  if (!Number.isFinite(burned) || burned <= 0) return null;
-  return round2(burned / daySpan);
-}
-
-export function burndownRemainingSlipHours(
-  burndown: BitmapBurndown | null,
-  lookbackDays = 7,
-): number | null {
-  const points = (burndown?.burndown ?? [])
-    .map((p) => ({
-      date: String(p.date).slice(0, 10),
-      hours: burndownTotalToHours(Number(p.total)),
-    }))
-    .filter((p) => Number.isFinite(p.hours))
-    .sort((a, b) => a.date.localeCompare(b.date));
-
-  if (points.length < 2) return null;
-  const latest = points[points.length - 1];
-  if (!latest) return null;
-  const targetMs =
-    Date.parse(latest.date) - lookbackDays * 24 * 60 * 60 * 1000;
-
-  let prior = points[0];
-  for (const point of points) {
-    if (Date.parse(point.date) <= targetMs) prior = point;
-  }
-  if (!prior || prior.date === latest.date) return null;
-  // Positive = remaining grew (bad slip)
-  return round1(latest.hours - prior.hours);
-}
-
 function formatPaceDelta(delta: number | null): string {
   if (delta == null || !Number.isFinite(delta)) return "—";
   const sign = delta > 0 ? "+" : "";
@@ -434,13 +356,14 @@ export class ProjectDashboardService {
       throw new ExcludedClientError();
     }
 
-    const [budgets, burndown, healthChecks, jiraTickets, timesheets] =
+    const [budgets, burndown, healthChecks, jiraTickets, timesheets, thresholds] =
       await Promise.all([
         this.safe(() => bitmap.listProjectBudgets(projectId), []),
         this.safe(() => bitmap.getProjectBurndown(projectId), null),
         this.safe(() => bitmap.listProjectHealthChecks(projectId), []),
         this.safe(() => bitmap.listProjectJiraTickets(projectId), []),
         this.safe(() => bitmap.listProjectTimesheetEntries(projectId), []),
+        this.settings.getAlertThresholds(),
       ]);
 
     const forecastEndDate =
@@ -486,6 +409,7 @@ export class ProjectDashboardService {
       jiraConfigured,
       jiraError,
       jiraAgg,
+      thresholds,
     });
 
     const overages = this.buildOverages(jiraTickets, jiraAgg);
@@ -534,8 +458,10 @@ export class ProjectDashboardService {
     jiraConfigured: boolean;
     jiraError: string | null;
     jiraAgg: JiraIssueAggregates | null;
+    thresholds?: AlertThresholds;
   }): ProjectDashboardResult["metrics"] {
     const { project, budgets, jiraAgg, jiraConfigured, jiraError } = input;
+    const thresholds = input.thresholds ?? DEFAULT_ALERT_THRESHOLDS;
     const jiraUnavailableDetail =
       jiraError ?? "Configure Jira Cloud API in Settings";
     const now = new Date();
@@ -553,14 +479,8 @@ export class ProjectDashboardService {
         ? project.time_allocated
         : null;
     const usedForBurn = billableUsed ?? timeLogged;
-    const burnPct = pct(usedForBurn ?? 0, budgeted ?? 0);
-
-    const billableRemaining =
-      typeof project.billable_time_remaining === "number"
-        ? project.billable_time_remaining
-        : typeof project.time_remaining === "number"
-          ? project.time_remaining
-          : null;
+    const burnPct = computeBudgetBurnPct(project);
+    const billableRemaining = billableRemainingHours(project);
 
     const lines: BudgetLineBurn[] = budgets.map((b) => {
       const budget = budgetHours(b);
@@ -630,10 +550,12 @@ export class ProjectDashboardService {
       input.burndown,
       now,
     );
-    const runwayDays =
-      billableRemaining != null && dailyBurn != null && dailyBurn > 0
-        ? round1(billableRemaining / dailyBurn)
-        : null;
+    const runwayDays = estimateRunwayDays({
+      project,
+      timesheets: input.timesheets,
+      burndown: input.burndown,
+      now,
+    });
     const remainingHoursSlip = burndownRemainingSlipHours(input.burndown, 7);
 
     const bitmapDelta =
@@ -758,7 +680,7 @@ export class ProjectDashboardService {
         label: "Budget burn",
         value: burnPct,
         displayValue: formatPct(burnPct),
-        status: burnStatus(burnPct),
+        status: burnStatus(burnPct, thresholds.budgetBurnPctRisk),
         source: "bitmap",
         unit: "%",
         detail:
@@ -791,7 +713,7 @@ export class ProjectDashboardService {
           lines.length === 0
             ? "—"
             : `${lines.length} lines · peak ${formatPct(worstLineBurn)}`,
-        status: burnStatus(worstLineBurn),
+        status: burnStatus(worstLineBurn, thresholds.budgetBurnPctRisk),
         source: "bitmap",
         detail: lines.map((l) => `${l.name} ${formatPct(l.burnPct)}`).join(", "),
       },
@@ -867,9 +789,7 @@ export class ProjectDashboardService {
               "runway_days",
               "Runway (days)",
               "bitmap",
-              billableRemaining == null
-                ? "No billable remaining hours"
-                : "Need recent billable burn rate from timesheets or burndown",
+              "No billable remaining hours",
             )
           : {
               id: "runway_days",
@@ -879,7 +799,10 @@ export class ProjectDashboardService {
               status: runwayDaysStatus(runwayDays),
               source: "bitmap",
               unit: "d",
-              detail: `${formatHours(billableRemaining)} remaining ÷ ${formatHours(dailyBurn)}/day`,
+              detail:
+                dailyBurn != null && dailyBurn > 0
+                  ? `${formatHours(billableRemaining)} remaining ÷ ${formatHours(dailyBurn)}/day`
+                  : `${formatHours(billableRemaining)} remaining ÷ recent or lifetime daily burn`,
             },
       remainingHoursSlip:
         remainingHoursSlip == null
@@ -917,7 +840,7 @@ export class ProjectDashboardService {
               unit: "ew",
               detail:
                 staffing.remainingHours != null
-                  ? `${formatHours(staffing.remainingHours)} ÷ 40h`
+                  ? `${formatHours(staffing.remainingHours)} ÷ ${HOURS_PER_ENG_WEEK}h`
                   : null,
             },
       staffingGapEngWeeks:
@@ -1090,7 +1013,7 @@ export class ProjectDashboardService {
               jiraAgg!.openIssueCount,
             ),
             source: "jira",
-            detail: "Stories/tasks/features completed in last 30 days",
+            detail: "Stories/tasks/features completed in last 30 days (status category change date)",
           },
       ageingWipCount: !jiraConfigured || (jiraConfigured && !jiraAgg)
         ? unavailableMetric(
@@ -1127,7 +1050,7 @@ export class ProjectDashboardService {
                 : `${jiraAgg!.cycleTimeMedianDays}d`,
             status: cycleTimeStatus(jiraAgg!.cycleTimeMedianDays),
             source: "jira",
-            detail: "Created → last update for issues done in 30d",
+            detail: "Created → done (status category change) for issues done in 30d",
           },
       healthCheckScore:
         healthTotal === 0

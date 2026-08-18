@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sessionTokenFromRequest } from "@/lib/auth";
 import { SESSION_COOKIE } from "@/lib/password";
 import { createAuthService } from "@/services/auth-service";
 
 export async function POST(request: NextRequest) {
-  const token = request.cookies.get(SESSION_COOKIE)?.value;
+  const token = sessionTokenFromRequest(request);
   await createAuthService().destroySession(token);
 
   const response = NextResponse.json({ ok: true });

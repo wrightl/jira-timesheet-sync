@@ -196,7 +196,7 @@ export class GithubDashboardService {
       client.countOpenPullRequests(org, "review:required", repos),
       client.countOpenPullRequests(org, `updated:<${staleCutoff}`, repos),
       client.searchMergedPullRequests(org, { first: 20, sinceDays: 30, repos }),
-      client.searchOpenPullRequests(org, { first: 40, repos }),
+      client.searchOpenPullRequests(org, { first: 100, repos }),
       client.listRecentlyUpdatedRepos(org, { first: 40, repos }),
     ]);
 
@@ -252,7 +252,7 @@ export class GithubDashboardService {
           flow.medianOpenAgeHours == null
             ? "unavailable"
             : metricStatus(flow.medianOpenAgeHours, 48, 120),
-        hint: hint("Sample of recent open PRs"),
+    hint: hint("Sample of recent open PRs (up to 100)"),
       },
       {
         key: "median_ttf_review_h",

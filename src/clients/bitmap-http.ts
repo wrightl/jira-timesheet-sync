@@ -19,6 +19,14 @@ export interface TimesheetEntryResult {
     timesheetId: string;
 }
 
+export interface BitmapUserWorkingDuration {
+    id?: string;
+    effective_from?: string | null;
+    hours_per_week?: number | null;
+    working_days?: string[] | null;
+    flexible_hours?: boolean | null;
+}
+
 export interface BitmapUser {
     id: string;
     full_name: string;
@@ -26,6 +34,7 @@ export interface BitmapUser {
     job_title?: string | null;
     hours_per_week?: number | null;
     billable_target_hours?: number | null;
+    user_working_durations?: BitmapUserWorkingDuration[] | null;
 }
 
 export interface BitmapClient {

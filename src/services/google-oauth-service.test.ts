@@ -149,4 +149,44 @@ describe("GoogleOAuthService", () => {
     );
     expect(createSession).toHaveBeenCalledWith("u1");
   });
+
+  it("signs in from a verified native ID token", async () => {
+    process.env.GOOGLE_IOS_CLIENT_ID = "ios-client-id";
+    resetEnvCache();
+    const users = {
+      findByOAuth: async () => ({
+        id: "u1",
+        email: "ada@example.com",
+        passwordHash: "hash",
+        role: "user" as const,
+        mustSetPassword: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+    } as unknown as UsersRepository;
+    const createSession = vi.fn(async () => ({
+      token: "session-token",
+      expiresAt: new Date(),
+    }));
+    const verifyIdToken = vi.fn(async () => ({
+      sub: "google-sub",
+      email: "ada@example.com",
+      email_verified: true as const,
+      hd: "example.com",
+    }));
+    const service = new GoogleOAuthService(
+      users,
+      { createSession } as unknown as AuthService,
+      googleFetch({}),
+      verifyIdToken,
+    );
+
+    const result = await service.signInWithIdToken("id-token");
+    expect(result.user.id).toBe("u1");
+    expect(verifyIdToken).toHaveBeenCalledWith("id-token", [
+      "client-id",
+      "ios-client-id",
+    ]);
+    expect(createSession).toHaveBeenCalledWith("u1");
+  });
 });

@@ -233,7 +233,7 @@ export function SupportTicketsContent() {
               <TableHeaderCell>Key</TableHeaderCell>
               <TableHeaderCell>Summary</TableHeaderCell>
               <TableHeaderCell>Status</TableHeaderCell>
-              <TableHeaderCell>Idle (hours)</TableHeaderCell>
+              <TableHeaderCell>Idle (UK hours)</TableHeaderCell>
               <TableHeaderCell>Last activity</TableHeaderCell>
               <TableHeaderCell>Assignee</TableHeaderCell>
               <TableHeaderCell>Updated</TableHeaderCell>

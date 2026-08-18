@@ -28,6 +28,7 @@ const envSchema = z.object({
   APP_BASE_URL: optionalString,
   CRON_SECRET: optionalString,
   GOOGLE_CLIENT_ID: optionalString,
+  GOOGLE_IOS_CLIENT_ID: optionalString,
   GOOGLE_CLIENT_SECRET: optionalString,
   GOOGLE_ALLOWED_DOMAIN: optionalString,
   GOOGLE_DEFAULT_ROLE: z

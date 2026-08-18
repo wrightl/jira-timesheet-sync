@@ -25,6 +25,8 @@ export interface JiraIssueFields {
   timeoriginalestimate?: number | null;
   timeestimate?: number | null;
   timespent?: number | null;
+  statuscategorychangedate?: string | null;
+  resolutiondate?: string | null;
   [customField: string]: unknown;
 }
 
@@ -210,6 +212,8 @@ export class JiraHttpClient implements JiraApiClient {
         "timeoriginalestimate",
         "timeestimate",
         "timespent",
+        "statuscategorychangedate",
+        "resolutiondate",
       ],
     };
     if (params.nextPageToken) {

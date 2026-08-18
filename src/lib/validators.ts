@@ -105,6 +105,10 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
+export const googleNativeAuthSchema = z.object({
+  idToken: z.string().min(1, "idToken is required"),
+});
+
 export const registerSchema = z.object({
   email: z.string().email("Valid email is required"),
   password: z.string().min(8, "Password must be at least 8 characters"),

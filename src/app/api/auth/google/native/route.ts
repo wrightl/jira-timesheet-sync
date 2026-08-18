@@ -11,16 +11,26 @@ import {
   recordAuthFailure,
   requestClientIp,
 } from "@/lib/rate-limit";
-import { loginSchema } from "@/lib/validators";
-import { createAuthService } from "@/services/auth-service";
+import { googleNativeAuthSchema } from "@/lib/validators";
+import {
+  createGoogleOAuthService,
+  isGoogleNativeAuthConfigured,
+} from "@/services/google-oauth-service";
 
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
-  const parsed = await parseJsonBody(request, loginSchema);
+  if (!isGoogleNativeAuthConfigured()) {
+    return NextResponse.json(
+      { error: "Google OAuth is not configured" },
+      { status: 503 },
+    );
+  }
+
+  const parsed = await parseJsonBody(request, googleNativeAuthSchema);
   if ("error" in parsed) return parsed.error;
 
-  const limitKey = authAttemptKey(parsed.data.email, requestClientIp(request));
+  const limitKey = authAttemptKey("google-native", requestClientIp(request));
   if (isAuthRateLimited(limitKey)) {
     return NextResponse.json(
       { error: "Too many attempts. Try again later." },
@@ -32,19 +42,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await createAuthService().login(
-      parsed.data.email,
-      parsed.data.password,
+    const result = await createGoogleOAuthService().signInWithIdToken(
+      parsed.data.idToken,
     );
-
-    if ("error" in result) {
-      recordAuthFailure(limitKey);
-      return NextResponse.json(
-        { error: "Invalid email or password" },
-        { status: 401 },
-      );
-    }
-
     clearAuthFailures(limitKey);
     const response = NextResponse.json({
       user: result.user,
@@ -58,15 +58,15 @@ export async function POST(request: NextRequest) {
     );
     return response;
   } catch (err) {
+    recordAuthFailure(limitKey);
     const message = err instanceof Error ? err.message : String(err);
-    log.error("auth/login", err instanceof Error ? err : new Error(message));
+    log.error(
+      "auth/google/native",
+      err instanceof Error ? err : new Error(message),
+    );
     return NextResponse.json(
-      {
-        error:
-          "Login could not be completed. If this is a preview deploy, ensure database migrations have been applied.",
-        detail: process.env.NODE_ENV === "production" ? undefined : message,
-      },
-      { status: 500 },
+      { error: "Google sign-in failed" },
+      { status: 401 },
     );
   }
 }

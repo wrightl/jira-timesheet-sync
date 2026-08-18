@@ -4,7 +4,7 @@ import { createSlackBotClient } from "@/clients/slack-bot";
 import { SettingsService } from "@/services/settings-service";
 import { SupportTicketReminderRepository } from "@/repositories/support-ticket-reminder-repository";
 import { log } from "@/lib/log";
-import { weekdayHoursBetween } from "@/lib/weekday-hours";
+import { ukBusinessHoursBetween } from "@/lib/uk-business-hours";
 import { jiraIssueBrowseUrl } from "@/lib/jira-issue-url";
 import {
   changelogHistories,
@@ -213,7 +213,7 @@ export class SupportTicketsService {
     const now = extras?.now ?? new Date();
     const hoursSinceActivity =
       lastActivityAt != null
-        ? weekdayHoursBetween(new Date(lastActivityAt), now)
+        ? ukBusinessHoursBetween(new Date(lastActivityAt), now)
         : null;
 
     return {

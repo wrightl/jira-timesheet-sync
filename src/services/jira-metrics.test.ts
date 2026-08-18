@@ -94,6 +94,7 @@ describe("jira-metrics helpers", () => {
           issuetype: { name: "Story" },
           status: { name: "Done", statusCategory: { key: "done" } },
           updated: "2026-08-05T00:00:00.000Z",
+          statuscategorychangedate: "2026-08-05T00:00:00.000Z",
         },
       }),
     ];
@@ -109,6 +110,34 @@ describe("jira-metrics helpers", () => {
     expect(agg.storiesCompletedInWindow).toBe(1);
     expect(agg.bugsCreatedInWindow).toBe(1);
     expect(agg.defectInjectionRatio).toBe(1);
+  });
+
+  it("uses statuscategorychangedate not later updates for throughput", () => {
+    const now = new Date("2026-08-08T12:00:00.000Z");
+    const issues = [
+      issue({
+        key: "OLD-DONE",
+        fields: {
+          issuetype: { name: "Story" },
+          status: { name: "Done", statusCategory: { key: "done" } },
+          created: "2026-01-01T00:00:00.000Z",
+          updated: "2026-08-07T00:00:00.000Z",
+          statuscategorychangedate: "2026-06-01T00:00:00.000Z",
+        },
+      }),
+      issue({
+        key: "NEW-DONE",
+        fields: {
+          issuetype: { name: "Story" },
+          status: { name: "Done", statusCategory: { key: "done" } },
+          created: "2026-07-20T00:00:00.000Z",
+          updated: "2026-08-07T00:00:00.000Z",
+          statuscategorychangedate: "2026-08-02T00:00:00.000Z",
+        },
+      }),
+    ];
+    const agg = aggregateJiraIssues(issues, { now });
+    expect(agg.storiesCompletedInWindow).toBe(1);
   });
 
   it("counts ageing WIP from updated age ≥14d", () => {

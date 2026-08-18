@@ -14,10 +14,23 @@ function forbidden(message = "Forbidden"): Response {
   return Response.json({ error: message }, { status: 403 });
 }
 
+/** Cookie first, then `Authorization: Bearer`. */
+export function sessionTokenFromRequest(
+  request: NextRequest,
+): string | undefined {
+  const cookie = request.cookies.get(SESSION_COOKIE)?.value?.trim();
+  if (cookie) return cookie;
+  const header = request.headers.get("authorization");
+  if (!header) return undefined;
+  const match = /^Bearer\s+(\S+)/i.exec(header.trim());
+  const token = match?.[1]?.trim();
+  return token || undefined;
+}
+
 export async function getSessionUser(
   request: NextRequest,
 ): Promise<AuthUser | null> {
-  const token = request.cookies.get(SESSION_COOKIE)?.value;
+  const token = sessionTokenFromRequest(request);
   if (!token) return null;
   return createAuthService().resolveSessionUser(token);
 }

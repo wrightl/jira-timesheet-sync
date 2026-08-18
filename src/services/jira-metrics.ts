@@ -20,6 +20,8 @@ const DASHBOARD_FIELDS: string[] = [
   "timeoriginalestimate",
   "timeestimate",
   "timespent",
+  "statuscategorychangedate",
+  "resolutiondate",
 ];
 
 export type JiraIssueAggregates = {
@@ -50,7 +52,7 @@ export type JiraIssueAggregates = {
     summary: string | null;
     ageDays: number | null;
   } | null;
-  /** Median calendar days from created → last update for done issues (proxy cycle time). */
+  /** Median calendar days from created → done date for issues completed in the window. */
   cycleTimeMedianDays: number | null;
   issues: JiraIssue[];
 };
@@ -65,6 +67,16 @@ function isDone(issue: JiraIssue): boolean {
   if (category === "done") return true;
   const name = issue.fields.status?.name?.toLowerCase() ?? "";
   return name === "done" || name === "won't fix" || name === "cancelled";
+}
+
+function completionAt(issue: JiraIssue): string | null {
+  if (!isDone(issue)) return null;
+  return (
+    issue.fields.statuscategorychangedate ??
+    issue.fields.resolutiondate ??
+    issue.fields.updated ??
+    null
+  );
 }
 
 function isBug(issue: JiraIssue): boolean {
@@ -190,7 +202,7 @@ export function aggregateJiraIssues(
     (i) =>
       isStoryLike(i) &&
       isDone(i) &&
-      withinDays(i.fields.updated, now, windowDays),
+      withinDays(completionAt(i), now, windowDays),
   ).length;
 
   const estimateCoveragePct =
@@ -224,12 +236,12 @@ export function aggregateJiraIssues(
   const ageingWipOldest = ageingWip[0] ?? null;
 
   const doneCycleDays = issues
-    .filter((i) => isDone(i) && withinDays(i.fields.updated, now, windowDays))
+    .filter((i) => isDone(i) && withinDays(completionAt(i), now, windowDays))
     .map((i) => {
       const created = i.fields.created ? Date.parse(i.fields.created) : NaN;
-      const updated = i.fields.updated ? Date.parse(i.fields.updated) : NaN;
-      if (!Number.isFinite(created) || !Number.isFinite(updated)) return null;
-      return Math.max(0, (updated - created) / (24 * 60 * 60 * 1000));
+      const done = completionAt(i) ? Date.parse(completionAt(i)!) : NaN;
+      if (!Number.isFinite(created) || !Number.isFinite(done)) return null;
+      return Math.max(0, (done - created) / (24 * 60 * 60 * 1000));
     })
     .filter((d): d is number => d != null)
     .sort((a, b) => a - b);

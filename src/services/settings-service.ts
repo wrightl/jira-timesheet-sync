@@ -6,6 +6,7 @@ import {
   type JiraApiClient,
 } from "@/clients/jira-http";
 import { decryptSecret, encryptSecret, maskToken } from "@/lib/crypto";
+import { parseAlertThresholds, type AlertThresholds } from "@/lib/alert-thresholds";
 import { getEnv } from "@/lib/env";
 import { log } from "@/lib/log";
 import { safeHttpsOrigin } from "@/lib/outbound-urls";
@@ -73,6 +74,15 @@ export class SettingsService {
   async isTokenConfigured(): Promise<boolean> {
     const token = await this.getAccessToken();
     return Boolean(token);
+  }
+
+  async getAlertThresholds(): Promise<AlertThresholds> {
+    try {
+      const row = await this.settings.getDefault();
+      return parseAlertThresholds(row?.alertThresholdsJson);
+    } catch {
+      return parseAlertThresholds(null);
+    }
   }
 
   async getJiraCredentials(

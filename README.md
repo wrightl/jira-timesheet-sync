@@ -78,6 +78,7 @@ If a mapped project/budget is inactive, the sync **fails** (no silent fallback).
 | `APP_BASE_URL` | Public app URL (required for Google OAuth redirects) |
 | `CRON_SECRET` | Bearer token for `/api/alerts/run`, `/api/alerts/weekly`, `/api/support-tickets/reminders`, and `/api/github/token-expiry-reminders` |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth SSO |
+| `GOOGLE_IOS_CLIENT_ID` | iOS OAuth client ID for the companion app (optional extra ID-token audience) |
 | `GOOGLE_ALLOWED_DOMAIN` | Hosted-domain restriction. **Required in production** when Google OAuth is configured (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `APP_BASE_URL`). Optional in local/test/dev. |
 | `GOOGLE_DEFAULT_ROLE` | `user` (default) or `exec` for new Google accounts |
 | `RESEND_API_KEY` | Resend API key for alert email digests (optional) |
@@ -130,7 +131,7 @@ On each create/update sync:
 
 `POST /api/webhooks/jira` authenticates, stores a `pending` sync row (including the raw payload), and returns **202** immediately. Bitmap processing continues via Next.js [`after()`](https://nextjs.org/docs/app/api-reference/functions/after). The worker CAS-claims `pending` → `processing` before Bitmap writes. The dashboard shows `pending` / `processing` / `synced` / `skipped` / `failed` and polls while any row is pending or processing.
 
-Admins and owning users can **Retry** failed or skipped events (`POST /api/syncs?action=retry&id=`). Retry uses a compare-and-set claim on `failed`/`skipped` rows. Retry requires a stored raw payload (events accepted after this feature). Stuck `pending` or `processing` rows older than 15 minutes are reclaimed on the next webhook accept.
+Session cookies or `Authorization: Bearer <session_token>` authenticate API routes. The Flutter companion app stores the login `token` and sends Bearer. Admins and owning users can **Retry** failed or skipped events (`POST /api/syncs?action=retry&id=`). Retry uses a compare-and-set claim on `failed`/`skipped` rows. Retry requires a stored raw payload (events accepted after this feature). Stuck `pending` or `processing` rows older than 15 minutes are reclaimed on the next webhook accept.
 
 ## Debugging sync / missing mappings
 
@@ -154,9 +155,12 @@ Local tip: leave `LOG_LEVEL` unset (or set `debug`) while using `npm run dev` / 
 |--------|------|------|
 | `POST` | `/api/webhooks/jira` | `X-Hub-Signature` or `X-Webhook-Token` (returns 202; processes via `after()`) |
 | `POST` | `/api/auth/register` | Public when `ALLOW_PUBLIC_REGISTER=true` |
-| `POST` | `/api/auth/login` | Public |
-| `POST` | `/api/auth/logout` | Session |
-| `GET` | `/api/auth/me` | Session |
+| `POST` | `/api/auth/login` | Public (JSON includes `user`, `token`, `expiresAt`; also sets session cookie) |
+| `POST` | `/api/auth/logout` | Session cookie or `Authorization: Bearer` |
+| `GET` | `/api/auth/me` | Session cookie or Bearer |
+| `GET` | `/api/auth/features` | Public (`googleEnabled`) |
+| `POST` | `/api/auth/google/native` | Public (Google ID token for the iOS/Android companion app) |
+| `GET` | `/api/dashboard` | Session (always user-scoped stats + `jiraBrowseBaseUrl`) |
 | `GET` | `/api/mappings` | Any authenticated (write = admin) |
 | `GET/POST/PATCH/DELETE` | `/api/user-space-mappings` | Session (own rows; admin can manage any) |
 | `GET` | `/api/bitmap/projects` | Session |
@@ -189,8 +193,12 @@ Authenticated users can open **Projects** (`/projects`) to inspect budget burn, 
 - **GitHub** — review lag, stale PRs, merge rate, WIP by author (in addition to open/draft counts). PAT expiry is shown in Settings and on the GitHub dashboard; cron `GET /api/github/token-expiry-reminders` (Bearer `CRON_SECRET`) sends Slack DM + email at 14 days and 3 days before expiry. On **Settings**, pick a subset of org repositories (empty = all) to filter the dashboard.
 - **Slack / email alerts** — configure webhook + alert email under **App Settings**; cron `GET /api/alerts/run` (Bearer `CRON_SECRET`), `?weekly=1` for Monday digest. Email uses Resend when `RESEND_API_KEY` + `EMAIL_FROM` are set.
 - **Portfolio forecast** — staffing ask / eng-week gap on `/portfolio` and project dashboards; team ownership scopes “my risk” filters.
-- **Google SSO** — set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `APP_BASE_URL`, and `GOOGLE_ALLOWED_DOMAIN` (required in production). `GOOGLE_DEFAULT_ROLE=exec|user` is optional. Google will not link onto a password account that has already been claimed (`mustSetPassword` false).
+- **Google SSO** — set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `APP_BASE_URL`, and `GOOGLE_ALLOWED_DOMAIN` (required in production). `GOOGLE_IOS_CLIENT_ID` is the extra ID-token audience for the iOS companion. `GOOGLE_DEFAULT_ROLE=exec|user` is optional. Google will not link onto a password account that has already been claimed (`mustSetPassword` false).
 - **Exec role** — read-focused portfolio/utilisation/status access without sync-admin tools
+
+## iOS companion
+
+A separate Flutter 3.47 app lives in `../jira-timesheet-mobile`. It uses Bearer session tokens (`POST /api/auth/login` JSON `token`, `POST /api/auth/google/native`) and the user/exec APIs listed above. Admin screens stay on the web app.
 
 ## Architecture
 

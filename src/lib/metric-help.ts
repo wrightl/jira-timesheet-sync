@@ -77,7 +77,7 @@ export const ALL_METRIC_HELP_IDS = [
 export type MetricHelpId = (typeof ALL_METRIC_HELP_IDS)[number];
 
 const RISK_TIER_SHARED =
-  "Each in-window project is scored, then counted after the current client, owner, team, and risk filters. A project is in the portfolio when its start date is on or before today and its end date is missing, open-ended, or on or after today. Risk is the highest matching signal: budget burn ≥90% (watch ≥85%); runway ≤5 days (watch ≤10); forecast end minus planned end ≥7 days late (watch if any days late); ≥3 failing Bitmap health checks (watch ≥1), or marked unhealthy; staffing gap ≥2 eng-weeks (watch ≥0.5). If burn, runway, slip, health checks, and remaining eng-weeks are all missing, the project is unavailable and is not counted in Risk, Watch, or Ok.";
+  "Each in-window project is scored, then counted after the current client, owner, team, and risk filters. A project is in the portfolio when its start date is on or before today and its end date is missing, open-ended, or on or after today. Risk is the highest matching signal: budget burn ≥ App Settings budgetBurnPctRisk (default 90%; watch ≥85% when that is below the risk threshold); runway ≤ App Settings runwayDaysRisk (default 5; watch ≤10); forecast end minus planned end ≥ App Settings scheduleSlipDaysRisk (default 7 days late; watch if any days late); ≥3 failing Bitmap health checks (watch ≥1), or marked unhealthy; staffing gap ≥2 eng-weeks (watch ≥0.5). Burn and runway use the same formulas as the project dashboard. If burn, runway, slip, health checks, and remaining eng-weeks are all missing, the project is unavailable and is not counted in Risk, Watch, or Ok.";
 
 export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   "sync.synced": {
@@ -92,8 +92,11 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   "sync.failed": {
     title: "Failed",
     formula:
-      "Count of sync events that are still failed and not resolved. This is an all-time open backlog, not limited to the selected date range.",
-    sources: ["Worklog sync records with open failed status"],
+      "Count of worklog sync events whose status is failed, limited to the date range selected on the dashboard. The card hint also shows how many failed events are still open all-time (unresolved).",
+    sources: [
+      "Worklog sync records in this app’s database",
+      "Dashboard date range (UTC)",
+    ],
   },
   "sync.skipped": {
     title: "Skipped",
@@ -156,9 +159,9 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   "portfolio.avg_burn": {
     title: "Avg burn",
     formula:
-      "Mean of each filtered project’s budget burn %, using only projects that have a burn value, rounded to one decimal place. Per project, burn is time_logged ÷ time_budgeted × 100 when a time budget exists; otherwise billable_time_used ÷ (billable_time_used + billable_time_remaining) × 100. The “Open sync failures” note under the card is a separate all-time count of open failed worklog syncs, not part of the average.",
+      "Mean of each filtered project’s budget burn %, using only projects that have a burn value, rounded to one decimal place. Per project, burn is (billable_time_used if present, otherwise time_logged) ÷ time_budgeted × 100 — the same formula as the project dashboard. The “Open sync failures” note under the card is a separate all-time count of open failed worklog syncs, not part of the average.",
     sources: [
-      "Bitmap project time_logged / time_budgeted (or billable used + remaining)",
+      "Bitmap project billable_time_used / time_logged / time_budgeted",
       "Portfolio filters",
     ],
     unavailable: "Shown as — when no filtered project has a computable burn percentage.",
@@ -169,7 +172,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
       "(billable_time_used if present, otherwise time_logged) ÷ time_budgeted × 100, rounded to one decimal place.",
     sources: ["Bitmap project time budget and logged/billable hours"],
     unavailable: "Shown as — when the project has no time_budgeted (or it is zero).",
-    status: "Risk at ≥100% of budget; watch at ≥85%; otherwise ok.",
+    status: "Risk at ≥ App Settings budgetBurnPctRisk (default 90% of budget); watch at ≥85% when that is below the risk threshold; otherwise ok.",
   },
   billable_runway_hours: {
     title: "Billable runway",
@@ -185,7 +188,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
       "For each Bitmap budget line, used hours ÷ budget hours × 100. Used hours prefer time_used, then billable_time_used. Budget hours prefer the line’s budget field, otherwise time_used + time_remaining. The headline value is the number of lines and the peak (worst) line burn.",
     sources: ["Bitmap project budget lines"],
     unavailable: "Shown as — when the project has no budget lines.",
-    status: "Uses the same burn thresholds as Budget burn, applied to the peak line: risk ≥100%, watch ≥85%.",
+    status: "Uses the same burn thresholds as Budget burn, applied to the peak line: risk ≥ App Settings budgetBurnPctRisk (default 90%), watch ≥85%.",
   },
   schedule_vs_forecast: {
     title: "Schedule vs forecast",
@@ -225,14 +228,14 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   runway_days: {
     title: "Runway (days)",
     formula:
-      "Billable remaining hours ÷ average daily billable burn. Daily burn is the mean billable hours per calendar day in the last 14 days of timesheets (days with no billable time are omitted). If there are no recent billable timesheets, daily burn is inferred from the drop in Bitmap burndown remaining hours.",
+      "Billable remaining hours ÷ daily burn, using the same ladder as Portfolio: mean billable hours per calendar day with billable time in the last 14 days of timesheets; else Bitmap burndown remaining-hours slope; else lifetime logged ÷ days since start; else remaining ÷ 6 hours/day.",
     sources: [
       "Bitmap billable remaining hours",
       "Bitmap timesheet entries (14-day window)",
       "Bitmap burndown history as fallback",
     ],
     unavailable:
-      "Needs remaining billable hours and a positive recent daily burn rate from timesheets or burndown.",
+      "Needs remaining billable hours.",
     status: "Risk at ≤5 days; watch at ≤10 days; otherwise ok.",
   },
   remaining_hours_slip: {
@@ -246,7 +249,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   remaining_eng_weeks: {
     title: "Remaining eng-weeks",
     formula:
-      "Remaining hours ÷ 40 (one eng-week). Remaining hours prefer live Jira remaining estimate when Jira metrics loaded, otherwise Bitmap remaining effort, otherwise billable remaining.",
+      "Remaining hours ÷ 30 (one eng-week: 37.5 contracted hours × 80% utilisation). Remaining hours prefer live Jira remaining estimate when Jira metrics loaded, otherwise Bitmap remaining effort, otherwise billable remaining.",
     sources: [
       "Jira remaining estimates when configured",
       "Bitmap remaining hours / remaining effort",
@@ -258,7 +261,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
     formula:
       "Remaining eng-weeks minus calendar weeks left until the target date, treating 1 FTE as 7 calendar days of capacity. Target date is the planned end date, or the forecast end if there is no planned end. If the target date is today or in the past and work remains, the gap equals remaining eng-weeks. Negative gaps are shown as 0.",
     sources: [
-      "Remaining hours (see Remaining eng-weeks)",
+      "Remaining hours (see Remaining eng-weeks: 30h = 37.5 × 80%)",
       "Bitmap end date or forecast end date",
     ],
     unavailable: "Needs remaining hours and a project end or forecast date.",
@@ -337,7 +340,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   defect_injection_ratio: {
     title: "Defect injection",
     formula:
-      "Bugs created in the last 30 days ÷ story-like issues completed in the last 30 days (stories, tasks, and features, using last-updated as the done date). If no stories completed but bugs were created, the ratio is unavailable; if neither, it is 0.",
+      "Bugs created in the last 30 days ÷ story-like issues completed in the last 30 days (stories, tasks, and features). Completion uses statuscategorychangedate, then resolutiondate, then updated.",
     sources: ["Jira issues in the project’s scoped JQL"],
     unavailable: "Requires Jira metrics; also unavailable when bugs were created but no story-like work completed in 30 days.",
     status: "Risk at ≥1.0 (at least one bug per completed story); watch at ≥0.5.",
@@ -345,7 +348,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   throughput_30d: {
     title: "Throughput (30d)",
     formula:
-      "Count of story-like Jira issues (stories, tasks, features) marked done whose last update was in the last 30 days.",
+      "Count of story-like Jira issues (stories, tasks, features) marked done whose completion date (statuscategorychangedate, else resolutiondate, else updated) was in the last 30 days.",
     sources: ["Jira issues in the project’s scoped JQL"],
     unavailable: "Requires a configured Jira Cloud API and a successful search.",
     status: "Ok if at least one completed; watch if none completed but there are still open issues.",
@@ -361,7 +364,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   cycle_time_median_days: {
     title: "Cycle time (median)",
     formula:
-      "Median calendar days from created to last updated for in-scope issues that were done in the last 30 days (using last update as the completion proxy).",
+      "Median calendar days from created to completion (statuscategorychangedate, else resolutiondate, else updated) for in-scope issues done in the last 30 days.",
     sources: ["Jira issues in the project’s scoped JQL"],
     unavailable:
       "Shown as — when Jira is unavailable or no issues were completed in the last 30 days.",
@@ -398,7 +401,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   needs_review: {
     title: "PRs needing review",
     formula:
-      "GitHub search count of open pull requests with review:required, in the Settings repository scope. Table filters do not apply.",
+      "GitHub search count of open pull requests with review:required, in the Settings repository scope. Table “needs review” uses the same meaning: published PRs whose GraphQL reviewDecision is REVIEW_REQUIRED (drafts and changes-requested are excluded). Table filters do not apply to this card.",
     sources: ["GitHub Search API (review:required)"],
     status: "Watch at ≥10; risk at ≥20.",
   },
@@ -412,7 +415,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   median_open_age_h: {
     title: "Median open age (h)",
     formula:
-      "Median hours from each sampled open PR’s created time to now. The sample is the most recently returned open PRs (up to 40) in the Settings repository scope, not the full org history. Table filters do not apply.",
+      "Median hours from each sampled open PR’s created time to now. The sample is the most recently updated open PRs (up to 100) in the Settings repository scope, not the full org history. Table filters do not apply.",
     sources: ["GitHub open pull request search sample"],
     unavailable: "Shown as — when the sample has no parseable created timestamps.",
     status: "Watch at ≥48 hours; risk at ≥120 hours.",
@@ -420,7 +423,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   median_ttf_review_h: {
     title: "Median time to first review (h)",
     formula:
-      "Median hours from created to firstReviewedAt for sampled open PRs that already have a first review. Same up-to-40 open PR sample as median open age.",
+      "Median hours from created to firstReviewedAt for sampled open PRs that already have a first review. Same up-to-100 open PR sample as median open age.",
     sources: ["GitHub open pull request sample (first review timestamp)"],
     unavailable: "Shown as — when none of the sampled open PRs have a first review time.",
     status: "Watch at ≥24 hours; risk at ≥72 hours.",

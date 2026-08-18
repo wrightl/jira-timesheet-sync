@@ -115,8 +115,12 @@ export function AdminDashboard({
         <KpiCard
           metricId="sync.failed"
           label="Failed"
-          value={stats.openFailed}
-          hint="Open (all time)"
+          value={stats.window.failed}
+          hint={
+            stats.openFailed > 0
+              ? `${rangeHint} · ${stats.openFailed} open`
+              : rangeHint
+          }
         />
         <KpiCard
           metricId="sync.skipped"

@@ -23,7 +23,7 @@ describe("GithubHttpClient.searchOpenPullRequests", () => {
         JSON.stringify({
           data: {
             search: {
-              issueCount: 2,
+            issueCount: 3,
               nodes: [
                 {
                   number: 12,
@@ -51,6 +51,18 @@ describe("GithubHttpClient.searchOpenPullRequests", () => {
                   reviewThreads: { nodes: [] },
                   repository: { nameWithOwner: "acme/app" },
                 },
+                {
+                  number: 8,
+                  title: "No review required",
+                  url: "https://github.com/acme/app/pull/8",
+                  isDraft: false,
+                  createdAt: "2026-08-02T00:00:00Z",
+                  updatedAt: "2026-08-10T00:00:00Z",
+                  reviewDecision: null,
+                  comments: { totalCount: 0 },
+                  reviewThreads: { nodes: [] },
+                  repository: { nameWithOwner: "acme/app" },
+                },
               ],
             },
           },
@@ -64,18 +76,21 @@ describe("GithubHttpClient.searchOpenPullRequests", () => {
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
     const result = await client.searchOpenPullRequests("acme", { first: 20 });
-    expect(result.totalCount).toBe(2);
-    expect(result.pulls[0]).toMatchObject({
-      number: 12,
+    expect(result.totalCount).toBe(3);
+    expect(result.pulls.find((p) => p.number === 12)).toMatchObject({
       state: "published",
       needsReview: true,
       openCommentCount: 4,
       repository: "acme/app",
     });
-    expect(result.pulls[1]).toMatchObject({
+    expect(result.pulls.find((p) => p.number === 9)).toMatchObject({
       state: "draft",
       needsReview: false,
       openCommentCount: 0,
+    });
+    expect(result.pulls.find((p) => p.number === 8)).toMatchObject({
+      state: "published",
+      needsReview: false,
     });
   });
 
@@ -342,7 +357,7 @@ describe("GithubDashboardService", () => {
     );
     expect(countOpenPullRequests).toHaveBeenCalledWith("acme", "", selected);
     expect(searchOpenPullRequests).toHaveBeenCalledWith("acme", {
-      first: 40,
+      first: 100,
       repos: selected,
     });
     expect(searchMergedPullRequests).toHaveBeenCalledWith("acme", {

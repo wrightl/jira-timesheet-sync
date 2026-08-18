@@ -8,9 +8,9 @@ describe("computeStaffingForecast", () => {
   const now = new Date("2026-08-13T12:00:00.000Z");
 
   it("computes eng-week gap vs end date at 1 FTE", () => {
-    // 80h = 2 eng-weeks; 7 days left ≈ 1 eng-week capacity → gap 1
+    // 60h = 2 eng-weeks (30h); 7 days left ≈ 1 eng-week capacity → gap 1
     const forecast = computeStaffingForecast({
-      remainingHours: 80,
+      remainingHours: 60,
       endDate: "2026-08-20",
       now,
       hasJiraRemainingEffort: true,
@@ -21,6 +21,14 @@ describe("computeStaffingForecast", () => {
     expect(forecast.staffingGapEngWeeks).toBe(1);
     expect(forecast.staffingAsk).toBe("Need +1 eng-weeks by 2026-08-20");
     expect(forecast.forecastConfidence).toBe("high");
+  });
+
+  it("uses 30 billable hours per eng-week", () => {
+    const forecast = computeStaffingForecast({
+      remainingHours: 30,
+      now: new Date("2026-08-13T12:00:00.000Z"),
+    });
+    expect(forecast.remainingEngWeeks).toBe(1);
   });
 
   it("reports on track when capacity covers remaining work", () => {
@@ -36,7 +44,7 @@ describe("computeStaffingForecast", () => {
 
   it("treats past end dates with remaining work as full gap", () => {
     const forecast = computeStaffingForecast({
-      remainingHours: 40,
+      remainingHours: 30,
       endDate: "2026-08-01",
       now,
     });

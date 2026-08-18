@@ -95,11 +95,7 @@ function needsReviewFromDecision(
   reviewDecision: string | null,
 ): boolean {
   if (isDraft) return false;
-  return (
-    reviewDecision === null ||
-    reviewDecision === "REVIEW_REQUIRED" ||
-    reviewDecision === "CHANGES_REQUESTED"
-  );
+  return reviewDecision === "REVIEW_REQUIRED";
 }
 
 function openCommentCountFromNode(node: Record<string, unknown>): number {

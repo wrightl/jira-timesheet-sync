@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { GithubDashboard } from "@/components/github-dashboard";
 import { PageHeader } from "@/components/ui/page-header";
+import { PageMain } from "@/components/ui/page-main";
 import { requirePageUser } from "@/lib/auth";
 
 export default async function GithubPage() {
@@ -11,13 +12,13 @@ export default async function GithubPage() {
       currentPath="/github"
       user={{ email: user.email, role: user.role }}
     >
-      <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">
+      <PageMain>
         <PageHeader
           title="GitHub"
-          description="Cross-repository pull request metrics for your configured GitHub organisation."
+          description="Pull request metrics for the GitHub repositories selected in Settings, or the whole organisation if none are selected."
         />
         <GithubDashboard authed />
-      </main>
+      </PageMain>
     </AppShell>
   );
 }

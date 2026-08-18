@@ -1,3 +1,9 @@
+import type {
+  JiraChangelog,
+  JiraChangelogHistory,
+} from "@/lib/jira-changelog";
+import { latestChangelogHistory, changelogHistories } from "@/lib/jira-changelog";
+import type { JiraComment, JiraCommentPage } from "@/lib/jira-activity";
 import { safeHttpsOrigin } from "@/lib/outbound-urls";
 
 export interface JiraStatusCategory {
@@ -19,6 +25,8 @@ export interface JiraIssueFields {
   timeoriginalestimate?: number | null;
   timeestimate?: number | null;
   timespent?: number | null;
+  statuscategorychangedate?: string | null;
+  resolutiondate?: string | null;
   [customField: string]: unknown;
 }
 
@@ -26,6 +34,7 @@ export interface JiraIssue {
   id: string;
   key: string;
   fields: JiraIssueFields;
+  changelog?: JiraChangelog;
 }
 
 export interface JiraSearchResult {
@@ -52,6 +61,7 @@ export interface JiraSearchParams {
   fields?: string[];
   maxResults?: number;
   nextPageToken?: string;
+  expand?: string;
 }
 
 export interface JiraApiClient {
@@ -61,6 +71,11 @@ export interface JiraApiClient {
   ): Promise<JiraIssue[]>;
   listFields(): Promise<JiraField[]>;
   getMyself(): Promise<JiraMyself>;
+  getLatestChangelogEntry(
+    issueKey: string,
+  ): Promise<JiraChangelogHistory | null>;
+  getIssueChangelog(issueKey: string): Promise<JiraChangelogHistory[]>;
+  getLatestComment(issueKey: string): Promise<JiraComment | null>;
 }
 
 export class JiraHttpError extends Error {
@@ -197,10 +212,15 @@ export class JiraHttpClient implements JiraApiClient {
         "timeoriginalestimate",
         "timeestimate",
         "timespent",
+        "statuscategorychangedate",
+        "resolutiondate",
       ],
     };
     if (params.nextPageToken) {
       body.nextPageToken = params.nextPageToken;
+    }
+    if (params.expand) {
+      body.expand = params.expand;
     }
 
     const payload = await this.request<Record<string, unknown>>(
@@ -233,6 +253,7 @@ export class JiraHttpClient implements JiraApiClient {
         jql: params.jql,
         fields: params.fields,
         maxResults: params.maxResults,
+        expand: params.expand,
         nextPageToken,
       });
       all.push(...result.issues);
@@ -257,6 +278,54 @@ export class JiraHttpClient implements JiraApiClient {
       });
     }
     return fields;
+  }
+
+  async getLatestChangelogEntry(
+    issueKey: string,
+  ): Promise<JiraChangelogHistory | null> {
+    const key = encodeURIComponent(issueKey);
+    const first = await this.request<JiraChangelog>(
+      "GET",
+      `/issue/${key}/changelog?maxResults=1&startAt=0`,
+    );
+    const total = first.total ?? 0;
+    if (total <= 0) return null;
+    if (total === 1) return latestChangelogHistory(first);
+
+    const last = await this.request<JiraChangelog>(
+      "GET",
+      `/issue/${key}/changelog?maxResults=1&startAt=${total - 1}`,
+    );
+    return latestChangelogHistory(last);
+  }
+
+  async getIssueChangelog(issueKey: string): Promise<JiraChangelogHistory[]> {
+    const key = encodeURIComponent(issueKey);
+    const all: JiraChangelogHistory[] = [];
+    let startAt = 0;
+    const pageSize = 100;
+    for (let page = 0; page < 50; page++) {
+      const payload = await this.request<JiraChangelog>(
+        "GET",
+        `/issue/${key}/changelog?maxResults=${pageSize}&startAt=${startAt}`,
+      );
+      const entries = changelogHistories(payload);
+      all.push(...entries);
+      const total = payload.total ?? all.length;
+      if (all.length >= total || entries.length === 0) break;
+      startAt += entries.length;
+    }
+    return all;
+  }
+
+  async getLatestComment(issueKey: string): Promise<JiraComment | null> {
+    const key = encodeURIComponent(issueKey);
+    const page = await this.request<JiraCommentPage>(
+      "GET",
+      `/issue/${key}/comment?maxResults=1&orderBy=-created`,
+    );
+    const comments = Array.isArray(page.comments) ? page.comments : [];
+    return comments[0] ?? null;
   }
 
   async getMyself(): Promise<JiraMyself> {

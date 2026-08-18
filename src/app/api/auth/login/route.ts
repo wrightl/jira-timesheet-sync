@@ -46,7 +46,11 @@ export async function POST(request: NextRequest) {
     }
 
     clearAuthFailures(limitKey);
-    const response = NextResponse.json({ user: result.user });
+    const response = NextResponse.json({
+      user: result.user,
+      token: result.token,
+      expiresAt: result.expiresAt.toISOString(),
+    });
     response.cookies.set(
       SESSION_COOKIE,
       result.token,

@@ -2,6 +2,11 @@ import { createHash, randomBytes } from "node:crypto";
 import { getDb, type Db } from "@/db";
 import { getEnv } from "@/lib/env";
 import { normaliseEmail } from "@/lib/email";
+import {
+  profileFromGooglePayload,
+  verifyGoogleIdToken,
+  type GoogleIdTokenProfile,
+} from "@/lib/google-id-token";
 import { hashPassword } from "@/lib/password";
 import type { AuthUser } from "@/lib/auth-types";
 import { UsersRepository } from "@/repositories/users-repository";
@@ -19,29 +24,49 @@ export type GoogleOAuthConfig = {
   defaultRole: "user" | "exec";
 };
 
+export type GoogleAuthSharedConfig = {
+  webClientId: string;
+  iosClientId: string | null;
+  allowedDomain: string | null;
+  defaultRole: "user" | "exec";
+};
+
 function nonEmpty(value: string | null | undefined): string | null {
   if (!value) return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export function getGoogleOAuthConfig(): GoogleOAuthConfig | null {
+export function getGoogleAuthSharedConfig(): GoogleAuthSharedConfig | null {
   const env = getEnv();
-  const clientId = nonEmpty(env.GOOGLE_CLIENT_ID);
-  const clientSecret = nonEmpty(env.GOOGLE_CLIENT_SECRET);
-  const baseUrl = nonEmpty(env.APP_BASE_URL);
-  if (!clientId || !clientSecret || !baseUrl) return null;
+  const webClientId = nonEmpty(env.GOOGLE_CLIENT_ID);
+  if (!webClientId) return null;
   const allowedDomain = nonEmpty(env.GOOGLE_ALLOWED_DOMAIN);
   const nodeEnv = env.NODE_ENV ?? process.env.NODE_ENV;
   if (nodeEnv === "production" && !allowedDomain) {
     return null;
   }
   return {
-    clientId,
-    clientSecret,
-    redirectUri: `${baseUrl.replace(/\/$/, "")}/api/auth/google/callback`,
+    webClientId,
+    iosClientId: nonEmpty(env.GOOGLE_IOS_CLIENT_ID),
     allowedDomain,
     defaultRole: env.GOOGLE_DEFAULT_ROLE === "exec" ? "exec" : "user",
+  };
+}
+
+export function getGoogleOAuthConfig(): GoogleOAuthConfig | null {
+  const shared = getGoogleAuthSharedConfig();
+  if (!shared) return null;
+  const env = getEnv();
+  const clientSecret = nonEmpty(env.GOOGLE_CLIENT_SECRET);
+  const baseUrl = nonEmpty(env.APP_BASE_URL);
+  if (!clientSecret || !baseUrl) return null;
+  return {
+    clientId: shared.webClientId,
+    clientSecret,
+    redirectUri: `${baseUrl.replace(/\/$/, "")}/api/auth/google/callback`,
+    allowedDomain: shared.allowedDomain,
+    defaultRole: shared.defaultRole,
   };
 }
 
@@ -49,11 +74,23 @@ export function isGoogleOAuthConfigured(): boolean {
   return getGoogleOAuthConfig() != null;
 }
 
+export function isGoogleNativeAuthConfigured(): boolean {
+  return getGoogleAuthSharedConfig() != null;
+}
+
+type GoogleProfileInput = {
+  sub?: string;
+  email?: string;
+  email_verified?: boolean | string;
+  hd?: string;
+};
+
 export class GoogleOAuthService {
   constructor(
     private readonly users: UsersRepository,
     private readonly auth: AuthService,
     private readonly fetchImpl: typeof fetch = fetch,
+    private readonly verifyIdToken: typeof verifyGoogleIdToken = verifyGoogleIdToken,
   ) {}
 
   buildAuthoriseUrl(state: string): string {
@@ -73,6 +110,75 @@ export class GoogleOAuthService {
       params.set("hd", config.allowedDomain);
     }
     return `${GOOGLE_AUTH_URL}?${params.toString()}`;
+  }
+
+  async completeGoogleSignIn(
+    profile: GoogleProfileInput | GoogleIdTokenProfile,
+  ): Promise<{
+    user: AuthUser;
+    token: string;
+    expiresAt: Date;
+  }> {
+    const config = getGoogleAuthSharedConfig();
+    if (!config) throw new Error("Google OAuth is not configured");
+
+    const normalised = profileFromGooglePayload({
+      sub: profile.sub,
+      email: profile.email,
+      email_verified: profile.email_verified,
+      hd: "hd" in profile ? profile.hd : undefined,
+    });
+
+    const email = normaliseEmail(normalised.email);
+    if (config.allowedDomain) {
+      const domain = email.split("@")[1] ?? "";
+      const hd = nonEmpty(normalised.hd)?.toLowerCase();
+      if (
+        domain !== config.allowedDomain.toLowerCase() &&
+        hd !== config.allowedDomain.toLowerCase()
+      ) {
+        throw new Error(
+          `Google account must be in the ${config.allowedDomain} domain`,
+        );
+      }
+    }
+
+    let user = await this.users.findByOAuth("google", normalised.sub);
+    if (!user) {
+      user = await this.users.findByEmail(email);
+      if (user) {
+        if (!user.mustSetPassword) {
+          throw new Error(
+            "Google account email is already registered with a password",
+          );
+        }
+        await this.users.update(user.id, {
+          oauthProvider: "google",
+          oauthSubject: normalised.sub,
+          mustSetPassword: false,
+        });
+        user = await this.users.findById(user.id);
+      } else {
+        const randomPassword = randomBytes(32).toString("hex");
+        const passwordHash = await hashPassword(randomPassword);
+        user = await this.users.createFull({
+          email,
+          passwordHash,
+          role: config.defaultRole,
+          mustSetPassword: false,
+          oauthProvider: "google",
+          oauthSubject: normalised.sub,
+        });
+      }
+    }
+
+    if (!user) throw new Error("Failed to resolve Google user");
+
+    const session = await this.auth.createSession(user.id);
+    return {
+      user: { id: user.id, email: user.email, role: user.role },
+      ...session,
+    };
   }
 
   async exchangeCode(code: string): Promise<{
@@ -110,74 +216,22 @@ export class GoogleOAuthService {
       const body = await userRes.text().catch(() => "");
       throw new Error(`Google userinfo failed: ${body.slice(0, 200)}`);
     }
-    const profile = (await userRes.json()) as {
-      sub?: string;
-      email?: string;
-      email_verified?: boolean | string;
-      hd?: string;
-    };
+    const profile = (await userRes.json()) as GoogleProfileInput;
+    return this.completeGoogleSignIn(profile);
+  }
 
-    const subject = nonEmpty(profile.sub);
-    const emailRaw = nonEmpty(profile.email);
-    if (!subject || !emailRaw) {
-      throw new Error("Google profile missing sub/email");
-    }
-    const verified =
-      profile.email_verified === true || profile.email_verified === "true";
-    if (!verified) {
-      throw new Error("Google email is not verified");
-    }
-
-    const email = normaliseEmail(emailRaw);
-    if (config.allowedDomain) {
-      const domain = email.split("@")[1] ?? "";
-      const hd = nonEmpty(profile.hd)?.toLowerCase();
-      if (
-        domain !== config.allowedDomain.toLowerCase() &&
-        hd !== config.allowedDomain.toLowerCase()
-      ) {
-        throw new Error(
-          `Google account must be in the ${config.allowedDomain} domain`,
-        );
-      }
-    }
-
-    let user = await this.users.findByOAuth("google", subject);
-    if (!user) {
-      user = await this.users.findByEmail(email);
-      if (user) {
-        if (!user.mustSetPassword) {
-          throw new Error(
-            "Google account email is already registered with a password",
-          );
-        }
-        await this.users.update(user.id, {
-          oauthProvider: "google",
-          oauthSubject: subject,
-          mustSetPassword: false,
-        });
-        user = await this.users.findById(user.id);
-      } else {
-        const randomPassword = randomBytes(32).toString("hex");
-        const passwordHash = await hashPassword(randomPassword);
-        user = await this.users.createFull({
-          email,
-          passwordHash,
-          role: config.defaultRole,
-          mustSetPassword: false,
-          oauthProvider: "google",
-          oauthSubject: subject,
-        });
-      }
-    }
-
-    if (!user) throw new Error("Failed to resolve Google user");
-
-    const session = await this.auth.createSession(user.id);
-    return {
-      user: { id: user.id, email: user.email, role: user.role },
-      ...session,
-    };
+  async signInWithIdToken(idToken: string): Promise<{
+    user: AuthUser;
+    token: string;
+    expiresAt: Date;
+  }> {
+    const config = getGoogleAuthSharedConfig();
+    if (!config) throw new Error("Google OAuth is not configured");
+    const audiences = [config.webClientId, config.iosClientId].filter(
+      (id): id is string => Boolean(id),
+    );
+    const profile = await this.verifyIdToken(idToken, audiences);
+    return this.completeGoogleSignIn(profile);
   }
 }
 

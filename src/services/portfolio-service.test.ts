@@ -10,7 +10,6 @@ describe("portfolio scoring", () => {
   it("computes budget burn from time fields", () => {
     expect(
       computeBudgetBurnPct({
-        id: "1",
         time_budgeted: 100,
         time_logged: 40,
       }),
@@ -57,19 +56,30 @@ describe("portfolio scoring", () => {
       client: { id: "c1", name: "Acme" },
     };
     const row = scorePortfolioProject(project);
-    expect(row.remainingEngWeeks).toBe(4);
+    expect(row.remainingEngWeeks).toBe(5.3);
     expect(row.staffingGapEngWeeks).toBeGreaterThan(0);
     expect(row.staffingAsk).toMatch(/Need \+/);
   });
 
   it("estimates runway from remaining hours", () => {
     const days = estimateRunwayDays({
-      id: "p1",
-      billable_time_remaining: 30,
-      billable_time_used: 60,
-      start_date: "2026-07-01",
+      project: {
+        billable_time_remaining: 30,
+        billable_time_used: 60,
+        start_date: "2026-07-01",
+      },
     });
     expect(days).not.toBeNull();
     expect(days!).toBeGreaterThan(0);
+  });
+
+  it("prefers billable_time_used over time_logged for burn", () => {
+    expect(
+      computeBudgetBurnPct({
+        time_budgeted: 100,
+        time_logged: 90,
+        billable_time_used: 40,
+      }),
+    ).toBe(40);
   });
 });

@@ -10,8 +10,11 @@ import type { SettingsService } from "@/services/settings-service";
 import {
   UtilisationService,
   isCountableTimesheetEntry,
-  parseBillableTargetHours,
+  parseWeeklyWorkingHours,
+  selectCurrentWorkingDuration,
+  timesheetBillableFlag,
   utilisationStatus,
+  workingHoursForRange,
 } from "@/services/utilisation-service";
 
 const mapping = {
@@ -147,6 +150,16 @@ describe("utilisation helpers", () => {
     expect(isCountableTimesheetEntry({ hours: 8 })).toBe(true);
   });
 
+  it("treats only explicit false as non-billable", () => {
+    expect(timesheetBillableFlag(false)).toBe(false);
+    expect(timesheetBillableFlag("false")).toBe(false);
+    expect(timesheetBillableFlag(0)).toBe(false);
+    expect(timesheetBillableFlag(true)).toBe(true);
+    expect(timesheetBillableFlag("true")).toBe(true);
+    expect(timesheetBillableFlag(undefined)).toBeNull();
+    expect(timesheetBillableFlag(null)).toBeNull();
+  });
+
   it("applies billable-target status bands", () => {
     expect(utilisationStatus(40)).toBe("under");
     expect(utilisationStatus(60)).toBe("watch");
@@ -155,22 +168,35 @@ describe("utilisation helpers", () => {
     expect(utilisationStatus(110)).toBe("risk");
   });
 
-  it("parses Bitmap billable_target_hours with fallbacks", () => {
+  it("parses weekly hours from the latest effective working duration", () => {
+    const asOf = Date.parse("2026-08-15T12:00:00Z");
     expect(
-      parseBillableTargetHours({
-        billable_target_hours: 30,
-        hours_per_week: 37.5,
-      }),
-    ).toBe(30);
+      parseWeeklyWorkingHours(
+        {
+          hours_per_week: 37.5,
+          user_working_durations: [
+            { effective_from: "2020-01-01", hours_per_week: 37.5 },
+            { effective_from: "2026-03-01", hours_per_week: 22.5 },
+            { effective_from: "2027-01-01", hours_per_week: 0 },
+          ],
+        },
+        asOf,
+      ),
+    ).toBe(22.5);
     expect(
-      parseBillableTargetHours({
-        billable_target_hours: null,
-        hours_per_week: 37.5,
-      }),
-    ).toBe(30);
-    expect(parseBillableTargetHours({ hours_per_week: 30 })).toBe(24);
-    expect(parseBillableTargetHours(null)).toBe(30);
-    expect(parseBillableTargetHours(undefined)).toBe(30);
+      selectCurrentWorkingDuration(
+        [
+          { effective_from: "2020-01-01", hours_per_week: 37.5 },
+          { effective_from: "2026-03-01", hours_per_week: 22.5 },
+        ],
+        asOf,
+      )?.hours_per_week,
+    ).toBe(22.5);
+    expect(parseWeeklyWorkingHours({ hours_per_week: 30 }, asOf)).toBe(30);
+    expect(parseWeeklyWorkingHours({ hours_per_week: null }, asOf)).toBe(37.5);
+    expect(parseWeeklyWorkingHours(null, asOf)).toBe(37.5);
+    expect(workingHoursForRange(37.5, 7)).toBe(37.5);
+    expect(workingHoursForRange(37.5, 1)).toBeCloseTo(37.5 / 7);
   });
 });
 
@@ -182,7 +208,7 @@ describe("UtilisationService", () => {
     );
   });
 
-  it("uses Bitmap billable_target_hours for the utilisation denominator", async () => {
+  it("uses contracted working hours for the utilisation denominator", async () => {
     const { service, listUsers } = makeService({
       entries: [
         {
@@ -204,15 +230,79 @@ describe("UtilisationService", () => {
 
     const result = await service.getUtilisation({ rangeDays: 7 });
     expect(listUsers).toHaveBeenCalled();
+    expect(result.users.map((u) => u.id).sort()).toEqual(["bm-ada", "bm-bob"]);
     const ada = result.people.find((p) => p.key === "bm-ada");
     expect(ada).toBeDefined();
-    expect(ada!.weeklyBillableTargetHours).toBe(30);
+    expect(ada!.weeklyWorkingHours).toBe(37.5);
     expect(ada!.billableHours).toBe(18);
     expect(ada!.nonBillableHours).toBe(6);
     expect(ada!.totalHours).toBe(24);
-    expect(ada!.targetHours).toBe(30);
-    expect(ada!.utilisationPct).toBe(60);
-    expect(ada!.status).toBe("watch");
+    expect(ada!.workingHours).toBe(37.5);
+    expect(ada!.utilisationPct).toBe(48);
+    expect(ada!.status).toBe("under");
+  });
+
+  it("uses hours_per_week from the latest user_working_durations row", async () => {
+    const { service } = makeService({
+      users: [
+        {
+          id: "bm-ada",
+          full_name: "Ada Lovelace",
+          email: "ada@example.com",
+          hours_per_week: 37.5,
+          user_working_durations: [
+            { effective_from: "2019-01-01", hours_per_week: 37.5 },
+            { effective_from: "2024-06-01", hours_per_week: 22.5 },
+          ],
+        },
+        defaultUsers[1]!,
+      ],
+      entries: [
+        {
+          user: { id: "bm-ada" },
+          hours: 18,
+          billable: true,
+          state: "approved",
+        },
+      ],
+    });
+
+    const result = await service.getUtilisation({ rangeDays: 7 });
+    const ada = result.people.find((p) => p.key === "bm-ada");
+    expect(ada!.weeklyWorkingHours).toBe(22.5);
+    expect(ada!.workingHours).toBe(22.5);
+    expect(ada!.utilisationPct).toBe(80);
+    expect(ada!.status).toBe("ok");
+  });
+
+  it("sums non-billable hours only from entries with billable false", async () => {
+    const { service } = makeService({
+      entries: [
+        {
+          user: { id: "bm-ada" },
+          hours: 5,
+          billable: false,
+          state: "approved",
+        },
+        {
+          user: { id: "bm-ada" },
+          hours: 3,
+          billable: true,
+          state: "approved",
+        },
+        {
+          user: { id: "bm-ada" },
+          hours: 9,
+          state: "approved",
+        },
+      ],
+    });
+
+    const result = await service.getUtilisation({ rangeDays: 7 });
+    const ada = result.people.find((p) => p.key === "bm-ada");
+    expect(ada!.billableHours).toBe(3);
+    expect(ada!.nonBillableHours).toBe(5);
+    expect(ada!.totalHours).toBe(8);
   });
 
   it("ignores planned and rejected entries", async () => {
@@ -242,7 +332,7 @@ describe("UtilisationService", () => {
     const result = await service.getUtilisation({ rangeDays: 7 });
     const ada = result.people.find((p) => p.key === "bm-ada");
     expect(ada!.billableHours).toBe(6);
-    expect(ada!.utilisationPct).toBe(20);
+    expect(ada!.utilisationPct).toBe(16);
   });
 
   it("filters to team members and passes Bitmap user ids", async () => {
@@ -341,8 +431,61 @@ describe("UtilisationService", () => {
     expect(casey).toBeDefined();
     expect(casey!.displayName).toBe("Casey");
     expect(casey!.billableHours).toBe(12);
-    expect(casey!.weeklyBillableTargetHours).toBe(24);
-    expect(casey!.targetHours).toBe(24);
-    expect(casey!.utilisationPct).toBe(50);
+    expect(casey!.weeklyWorkingHours).toBe(30);
+    expect(casey!.workingHours).toBe(30);
+    expect(casey!.utilisationPct).toBe(40);
+  });
+
+  it("populates the person dropdown and filters timesheets by user", async () => {
+    const { service, listTimesheetEntries } = makeService({
+      entries: [
+        {
+          user: { id: "bm-ada" },
+          hours: 8,
+          billable: true,
+          state: "approved",
+        },
+      ],
+    });
+
+    const result = await service.getUtilisation({
+      rangeDays: 7,
+      userId: "bm-ada",
+    });
+
+    expect(listTimesheetEntries).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userIds: ["bm-ada"],
+      }),
+    );
+    expect(result.users.map((u) => u.displayName).sort()).toEqual([
+      "Ada Lovelace",
+      "Bob Builder",
+    ]);
+    expect(result.people.map((p) => p.key)).toEqual(["bm-ada"]);
+  });
+
+  it("unwraps nested Bitmap user payloads for the person dropdown", async () => {
+    const { service } = makeService({
+      users: [
+        {
+          user: {
+            id: "bm-nested",
+            full_name: "Nested User",
+            hours_per_week: 37.5,
+          },
+        } as unknown as BitmapUser,
+      ],
+      members: [],
+      entries: [],
+    });
+
+    const result = await service.getUtilisation({ rangeDays: 1 });
+    expect(result.users.find((u) => u.id === "bm-nested")).toEqual(
+      expect.objectContaining({
+        id: "bm-nested",
+        displayName: "Nested User",
+      }),
+    );
   });
 });

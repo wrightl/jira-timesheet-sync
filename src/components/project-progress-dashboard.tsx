@@ -11,6 +11,7 @@ import {
     type ReactNode,
 } from 'react';
 import { JiraIssueLink } from '@/components/jira-issue-link';
+import { MetricHelp } from '@/components/metric-help';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
@@ -221,9 +222,14 @@ function MetricCard({
     const unavailable = metric.status === 'unavailable';
     return (
         <Card
-            className={cn(unavailable && 'opacity-70', loading && 'opacity-60')}
+            className={cn(
+                'relative pr-8',
+                unavailable && 'opacity-70',
+                loading && 'opacity-60',
+            )}
             aria-busy={loading || undefined}
         >
+            <MetricHelp metricId={metric.id} />
             <div className="mb-2 flex flex-wrap items-center gap-2">
                 <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted">
                     {metric.label}
@@ -253,10 +259,10 @@ function MetricCard({
             {!loading && unavailable ? (
                 <p className="mt-2 text-xs">
                     <Link
-                        href="/settings"
+                        href="/app-settings"
                         className="text-accent hover:underline"
                     >
-                        Configure Jira in Settings
+                        Configure Jira in App Settings
                     </Link>
                 </p>
             ) : null}
@@ -1013,10 +1019,10 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
                             <Alert className="mt-3" variant="info">
                                 {dashboard.jiraError}.{' '}
                                 <Link
-                                    href="/settings"
+                                    href="/app-settings"
                                     className="text-accent hover:underline"
                                 >
-                                    Open Settings
+                                    Open App Settings
                                 </Link>
                             </Alert>
                         ) : null}

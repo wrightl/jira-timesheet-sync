@@ -219,6 +219,25 @@ function IconSettings(props: IconProps) {
     );
 }
 
+function IconTicket(props: IconProps) {
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden
+            {...props}
+        >
+            <path
+                d="M2 9a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3v1a1 1 0 0 1-1 1 2 2 0 0 0 0 4 1 1 0 0 1 1 1v1a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3v-1a1 1 0 0 1 1-1 2 2 0 0 0 0-4 1 1 0 0 1-1-1V9Z"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+        </svg>
+    );
+}
+
 function IconPanelLeft(props: IconProps) {
     return (
         <svg
@@ -274,11 +293,49 @@ function userInitials(email: string): string {
     return local.slice(0, 2).toUpperCase() || '?';
 }
 
+type NavBadge = {
+    count: number;
+    urgent: boolean;
+};
+
 type NavLink = {
     href: string;
     label: string;
     icon: (props: IconProps) => ReactNode;
+    badge?: NavBadge | null;
 };
+
+function formatNavBadgeCount(count: number): string {
+    return count > 99 ? '99+' : String(count);
+}
+
+function NavCountBadge({
+    badge,
+    collapsed,
+}: {
+    badge: NavBadge;
+    collapsed?: boolean;
+}) {
+    const label =
+        badge.count === 1
+            ? '1 pull request needs review'
+            : `${badge.count} pull requests need review`;
+    const urgentHint = badge.urgent
+        ? ' Stale unreviewed pull requests with no comments.'
+        : '';
+    return (
+        <span
+            className={`inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[10px] font-semibold leading-4 ${
+                badge.urgent
+                    ? 'bg-danger text-white'
+                    : 'bg-accent-muted text-accent'
+            } ${collapsed ? 'absolute -right-2.5 -top-1.5' : 'ml-auto'}`}
+            title={`${label}${urgentHint}`}
+        >
+            {formatNavBadgeCount(badge.count)}
+        </span>
+    );
+}
 
 function NavLinks({
     links,
@@ -296,12 +353,20 @@ function NavLinks({
             {links.map((link) => {
                 const active = currentPath === link.href;
                 const Icon = link.icon;
+                const badge =
+                    link.badge && link.badge.count > 0 ? link.badge : null;
+                const countLabel =
+                    badge == null
+                        ? link.label
+                        : badge.count === 1
+                          ? `${link.label}, 1 pull request needs review`
+                          : `${link.label}, ${badge.count} pull requests need review`;
                 return (
                     <Link
                         key={link.href}
                         href={link.href}
-                        title={link.label}
-                        aria-label={link.label}
+                        title={countLabel}
+                        aria-label={countLabel}
                         aria-current={active ? 'page' : undefined}
                         onClick={onNavigate}
                         className={`flex h-10 items-center gap-2.5 rounded-md px-2.5 text-sm transition-colors ${
@@ -310,14 +375,22 @@ function NavLinks({
                                 : 'text-muted hover:bg-background hover:text-foreground'
                         } ${collapsed ? 'justify-center px-0' : ''}`}
                     >
-                        <Icon
-                            className={`h-4 w-4 shrink-0 ${
-                                active ? 'text-accent' : ''
-                            }`}
-                        />
+                        <span className="relative shrink-0">
+                            <Icon
+                                className={`h-4 w-4 ${
+                                    active ? 'text-accent' : ''
+                                }`}
+                            />
+                            {collapsed && badge ? (
+                                <NavCountBadge badge={badge} collapsed />
+                            ) : null}
+                        </span>
                         <span className={collapsed ? 'sr-only' : 'truncate'}>
                             {link.label}
                         </span>
+                        {!collapsed && badge ? (
+                            <NavCountBadge badge={badge} />
+                        ) : null}
                     </Link>
                 );
             })}
@@ -346,6 +419,9 @@ export function AppShell({
     });
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const [profileOpen, setProfileOpen] = useState(false);
+    const [githubReviewBadge, setGithubReviewBadge] = useState<NavBadge | null>(
+        null,
+    );
     const profileRef = useRef<HTMLDivElement>(null);
     const menuToggleRef = useRef<HTMLButtonElement>(null);
     const mobileNavRef = useRef<HTMLElement>(null);
@@ -425,13 +501,39 @@ export function AppShell({
         };
     }, [profileOpen]);
 
+    useEffect(() => {
+        if (!signedIn) return;
+        let cancelled = false;
+        void fetch('/api/github/review-nav')
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data: unknown) => {
+                if (cancelled || !data || typeof data !== 'object') return;
+                const row = data as { count?: unknown; urgent?: unknown };
+                const count =
+                    typeof row.count === 'number' && Number.isFinite(row.count)
+                        ? Math.max(0, Math.floor(row.count))
+                        : 0;
+                setGithubReviewBadge({
+                    count,
+                    urgent: row.urgent === true,
+                });
+            })
+            .catch(() => {
+                if (!cancelled) setGithubReviewBadge(null);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [signedIn]);
+
     const links: NavLink[] = [
         { href: '/', label: 'Dashboard', icon: IconHome },
         { href: '/portfolio', label: 'Portfolio', icon: IconPortfolio },
         { href: '/projects', label: 'Projects', icon: IconProjects },
         { href: '/utilisation', label: 'Utilisation', icon: IconUtilisation },
         { href: '/status', label: 'Status', icon: IconStatus },
-        { href: '/github', label: 'GitHub', icon: IconGithub },
+        { href: '/github', label: 'GitHub', icon: IconGithub, badge: githubReviewBadge },
+        { href: '/support-tickets', label: 'Support', icon: IconTicket },
         ...(user?.role === 'admin'
             ? [
                   { href: '/teams', label: 'Teams', icon: IconUsers },
@@ -439,14 +541,14 @@ export function AppShell({
                   { href: '/mappings', label: 'Mappings', icon: IconLayers },
                   { href: '/users', label: 'Users', icon: IconUsers },
                   { href: '/cache', label: 'Cache', icon: IconCache },
-                  { href: '/settings', label: 'Settings', icon: IconSettings },
+                  { href: '/app-settings', label: 'App Settings', icon: IconSettings },
               ]
             : []),
     ];
 
     const profileLinks: { href: string; label: string }[] = [
         { href: '/my-mappings', label: 'Mappings' },
-        { href: '/my-settings', label: 'Settings' },
+        { href: '/settings', label: 'Settings' },
     ];
 
     function signOut() {

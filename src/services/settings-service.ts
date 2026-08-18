@@ -6,6 +6,7 @@ import {
   type JiraApiClient,
 } from "@/clients/jira-http";
 import { decryptSecret, encryptSecret, maskToken } from "@/lib/crypto";
+import { parseAlertThresholds, type AlertThresholds } from "@/lib/alert-thresholds";
 import { getEnv } from "@/lib/env";
 import { log } from "@/lib/log";
 import { safeHttpsOrigin } from "@/lib/outbound-urls";
@@ -34,6 +35,10 @@ export type SettingsStatus = {
   maskedJiraToken: string | null;
   jiraBaseUrl: string | null;
   jiraEmail: string | null;
+  hasSlackBotToken: boolean;
+  slackBotTokenSource: TokenSource;
+  maskedSlackBotToken: string | null;
+  supportDeskSpaceKey: string | null;
 };
 
 function nonEmpty(value: string | null | undefined): string | null {
@@ -69,6 +74,15 @@ export class SettingsService {
   async isTokenConfigured(): Promise<boolean> {
     const token = await this.getAccessToken();
     return Boolean(token);
+  }
+
+  async getAlertThresholds(): Promise<AlertThresholds> {
+    try {
+      const row = await this.settings.getDefault();
+      return parseAlertThresholds(row?.alertThresholdsJson);
+    } catch {
+      return parseAlertThresholds(null);
+    }
   }
 
   async getJiraCredentials(
@@ -149,8 +163,10 @@ export class SettingsService {
     const env = getEnv();
     let stored: string | null = null;
     let jiraStored: string | null = null;
+    let slackBotStored: string | null = null;
     let jiraBaseUrl: string | null = null;
     let jiraEmail: string | null = null;
+    let supportDeskSpaceKey: string | null = null;
     const encryptionKey = env.SETTINGS_ENCRYPTION_KEY;
     if (encryptionKey) {
       try {
@@ -162,11 +178,16 @@ export class SettingsService {
         if (row?.jiraApiTokenEncrypted) {
           jiraStored = decryptSecret(row.jiraApiTokenEncrypted, encryptionKey);
         }
+        if (row?.slackBotTokenEncrypted) {
+          slackBotStored = decryptSecret(row.slackBotTokenEncrypted, encryptionKey);
+        }
         jiraBaseUrl = nonEmpty(row?.jiraBaseUrl) ?? nonEmpty(env.JIRA_BASE_URL);
         jiraEmail = nonEmpty(row?.jiraEmail) ?? nonEmpty(env.JIRA_EMAIL);
+        supportDeskSpaceKey = nonEmpty(row?.supportDeskSpaceKey);
       } catch {
         stored = null;
         jiraStored = null;
+        slackBotStored = null;
       }
     } else {
       jiraBaseUrl = nonEmpty(env.JIRA_BASE_URL);
@@ -198,6 +219,10 @@ export class SettingsService {
           : null,
       jiraBaseUrl,
       jiraEmail,
+      hasSlackBotToken: Boolean(slackBotStored),
+      slackBotTokenSource: slackBotStored ? "database" : "none",
+      maskedSlackBotToken: slackBotStored ? maskToken(slackBotStored) : null,
+      supportDeskSpaceKey,
     };
   }
 
@@ -287,6 +312,83 @@ export class SettingsService {
       email: creds.email,
       apiToken: creds.apiToken,
     });
+  }
+
+  async getSupportDeskSpaceKey(): Promise<string | null> {
+    try {
+      const row = await this.settings.getDefault();
+      return nonEmpty(row?.supportDeskSpaceKey);
+    } catch (err) {
+      log.warn("settings", "Failed to read support desk space key", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return null;
+    }
+  }
+
+  async getSlackBotToken(): Promise<string | null> {
+    const encryptionKey = getEnv().SETTINGS_ENCRYPTION_KEY;
+    if (!encryptionKey) return null;
+    
+    try {
+      const row = await this.settings.getDefault();
+      const encrypted = row?.slackBotTokenEncrypted;
+      if (!encrypted) return null;
+      return decryptSecret(encrypted, encryptionKey);
+    } catch (err) {
+      log.warn("settings", "Failed to read Slack bot token", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return null;
+    }
+  }
+
+  async saveSupportSettings(input: {
+    slackBotToken?: string;
+    supportDeskSpaceKey?: string;
+  }): Promise<{ maskedSlackBotToken: string | null }> {
+    const encryptionKey = getEnv().SETTINGS_ENCRYPTION_KEY;
+    if (!encryptionKey) {
+      throw new Error("SETTINGS_ENCRYPTION_KEY is not configured");
+    }
+
+    const existing = await this.settings.getDefault();
+    let encryptedToken: string | null | undefined = undefined;
+    let masked: string | null = null;
+
+    if (input.slackBotToken !== undefined) {
+      const trimmed = input.slackBotToken.trim();
+      if (trimmed.length > 0) {
+        encryptedToken = encryptSecret(trimmed, encryptionKey);
+        masked = maskToken(trimmed);
+      } else {
+        encryptedToken = existing?.slackBotTokenEncrypted ?? null;
+        if (encryptedToken) {
+          try {
+            masked = maskToken(decryptSecret(encryptedToken, encryptionKey));
+          } catch {
+            masked = null;
+          }
+        }
+      }
+    }
+
+    await this.settings.upsertSupportSettings({
+      slackBotTokenEncrypted: encryptedToken,
+      supportDeskSpaceKey: input.supportDeskSpaceKey !== undefined ? nonEmpty(input.supportDeskSpaceKey) : undefined,
+    });
+
+    if (masked === null && existing?.slackBotTokenEncrypted) {
+      try {
+        masked = maskToken(
+          decryptSecret(existing.slackBotTokenEncrypted, encryptionKey),
+        );
+      } catch {
+        masked = null;
+      }
+    }
+
+    return { maskedSlackBotToken: masked };
   }
 }
 

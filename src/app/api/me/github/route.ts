@@ -25,6 +25,7 @@ export async function PUT(request: NextRequest) {
       {
         token: parsed.data.githubToken,
         org: parsed.data.githubOrg,
+        repos: parsed.data.githubRepos,
       },
     );
     return Response.json({ ok: true, ...status });

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { MetricHelp } from '@/components/metric-help';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
@@ -248,7 +249,8 @@ export function PortfolioDashboard({ authed }: { authed: boolean }) {
 
             {summary ? (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                    <Card>
+                    <Card className="relative pr-8">
+                        <MetricHelp metricId="portfolio.active_projects" />
                         <CardTitle className="text-sm text-muted">
                             Active projects
                         </CardTitle>
@@ -256,25 +258,29 @@ export function PortfolioDashboard({ authed }: { authed: boolean }) {
                             {summary.projectCount}
                         </p>
                     </Card>
-                    <Card>
+                    <Card className="relative pr-8">
+                        <MetricHelp metricId="portfolio.risk" />
                         <CardTitle className="text-sm text-muted">Risk</CardTitle>
                         <p className="mt-2 text-3xl font-semibold">
                             {summary.riskCount}
                         </p>
                     </Card>
-                    <Card>
+                    <Card className="relative pr-8">
+                        <MetricHelp metricId="portfolio.watch" />
                         <CardTitle className="text-sm text-muted">Watch</CardTitle>
                         <p className="mt-2 text-3xl font-semibold">
                             {summary.watchCount}
                         </p>
                     </Card>
-                    <Card>
+                    <Card className="relative pr-8">
+                        <MetricHelp metricId="portfolio.ok" />
                         <CardTitle className="text-sm text-muted">Ok</CardTitle>
                         <p className="mt-2 text-3xl font-semibold">
                             {summary.okCount}
                         </p>
                     </Card>
-                    <Card>
+                    <Card className="relative pr-8">
+                        <MetricHelp metricId="portfolio.avg_burn" />
                         <CardTitle className="text-sm text-muted">
                             Avg burn
                         </CardTitle>

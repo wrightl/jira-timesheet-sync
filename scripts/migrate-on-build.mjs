@@ -24,6 +24,16 @@ if (!url) {
   process.exit(0);
 }
 
+console.log("[migrate-on-build] Backfilling user_settings…");
+const backfill = spawnSync("node", ["scripts/backfill-user-settings.mjs"], {
+  stdio: "inherit",
+  env: process.env,
+});
+if (backfill.status !== 0) {
+  console.error("[migrate-on-build] user_settings backfill failed.");
+  process.exit(backfill.status ?? 1);
+}
+
 console.log("[migrate-on-build] Syncing schema with drizzle-kit push…");
 const result = spawnSync("npx", ["drizzle-kit", "push", "--force"], {
   stdio: "inherit",

@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { AppShell } from "@/components/app-shell";
 import { RecentSyncs } from "@/components/recent-syncs";
 import { PageHeader } from "@/components/ui/page-header";
+import { PageMain } from "@/components/ui/page-main";
 import { requirePageUser } from "@/lib/auth";
 import { createSettingsService } from "@/services/settings-service";
 
@@ -20,7 +21,7 @@ export default async function SyncsPage() {
       currentPath="/syncs"
       user={{ email: user.email, role: user.role }}
     >
-      <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">
+      <PageMain>
         <PageHeader
           title="Syncs"
           description="Recent Jira worklog webhook events and their Bitmap sync status. Retry failed or skipped events when a stored payload is available."
@@ -32,7 +33,7 @@ export default async function SyncsPage() {
         >
           <RecentSyncs authed jiraBrowseBaseUrl={jiraBrowseBaseUrl} />
         </Suspense>
-      </main>
+      </PageMain>
     </AppShell>
   );
 }

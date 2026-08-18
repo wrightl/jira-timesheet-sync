@@ -1,51 +1,31 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Toggle } from "@/components/ui/toggle";
+import { GithubTokenExpiryAlert } from "@/components/github-token-expiry-alert";
+import { GithubRepoPicker } from "@/components/github-repo-picker";
+import { formatGithubTokenExpiryLabel } from "@/lib/github-token-expiry";
 
-type AlertConfig = {
-  hasSlackWebhook: boolean;
-  maskedSlackWebhook: string | null;
-  alertEmail: string | null;
-  emailDeliveryConfigured?: boolean;
-  thresholds: {
-    budgetBurnPctRisk: number;
-    runwayDaysRisk: number;
-    ageingWipRisk: number;
-    openBugsRisk: number;
-    syncFailedOpenRisk: number;
-    estimateCoveragePctWatch: number;
-    scheduleSlipDaysRisk: number;
-  };
-};
-
-type SettingsState = {
+type UserSettingsState = {
   hasToken: boolean;
-  tokenSource: string;
   maskedToken: string | null;
-  internalPmBaseUrl: string | null;
-  hasJiraToken: boolean;
-  jiraTokenSource: string;
-  maskedJiraToken: string | null;
-  jiraBaseUrl: string | null;
-  jiraEmail: string | null;
-  alerts?: AlertConfig;
+  githubOrg: string | null;
+  tokenExpiresAt: string | null;
+  githubRepos: string[];
+  configured: boolean;
+  syncEnabled: boolean;
 };
 
 export function SettingsForm({ authed }: { authed: boolean }) {
-  const [settings, setSettings] = useState<SettingsState | null>(null);
+  const [settings, setSettings] = useState<UserSettingsState | null>(null);
   const [token, setToken] = useState("");
-  const [jiraBaseUrl, setJiraBaseUrl] = useState("");
-  const [jiraEmail, setJiraEmail] = useState("");
-  const [jiraApiToken, setJiraApiToken] = useState("");
-  const [slackWebhookUrl, setSlackWebhookUrl] = useState("");
-  const [alertEmail, setAlertEmail] = useState("");
-  const [burnRisk, setBurnRisk] = useState("90");
-  const [runwayRisk, setRunwayRisk] = useState("5");
-  const [syncFailRisk, setSyncFailRisk] = useState("5");
+  const [org, setOrg] = useState("");
+  const [syncEnabled, setSyncEnabled] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -53,7 +33,7 @@ export function SettingsForm({ authed }: { authed: boolean }) {
   const load = () => {
     startTransition(async () => {
       setError(null);
-      const res = await fetch("/api/settings");
+      const res = await fetch("/api/user-settings");
       if (!res.ok) {
         setError(
           res.status === 401 ? "Sign in required" : "Failed to load settings",
@@ -61,16 +41,10 @@ export function SettingsForm({ authed }: { authed: boolean }) {
         setSettings(null);
         return;
       }
-      const data = (await res.json()) as SettingsState;
+      const data = (await res.json()) as UserSettingsState;
       setSettings(data);
-      setJiraBaseUrl(data.jiraBaseUrl ?? "");
-      setJiraEmail(data.jiraEmail ?? "");
-      setAlertEmail(data.alerts?.alertEmail ?? "");
-      if (data.alerts?.thresholds) {
-        setBurnRisk(String(data.alerts.thresholds.budgetBurnPctRisk));
-        setRunwayRisk(String(data.alerts.thresholds.runwayDaysRisk));
-        setSyncFailRisk(String(data.alerts.thresholds.syncFailedOpenRisk));
-      }
+      setOrg(data.githubOrg ?? "");
+      setSyncEnabled(Boolean(data.syncEnabled));
     });
   };
 
@@ -80,29 +54,71 @@ export function SettingsForm({ authed }: { authed: boolean }) {
 
   if (!authed) {
     return (
-      <p className="text-sm text-muted">Sign in to manage the access token.</p>
+      <p className="text-sm text-muted">Sign in to manage your settings.</p>
     );
   }
 
   return (
     <div className="space-y-6">
       <Card>
-        <CardTitle className="mb-2">Internal PM access token</CardTitle>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <CardTitle className="mb-1">Timesheet sync</CardTitle>
+            <CardDescription>
+              When disabled, your Jira worklogs are skipped and not written to
+              Bitmap.
+            </CardDescription>
+          </div>
+          <Toggle
+            checked={syncEnabled}
+            disabled={pending || settings === null}
+            label="Timesheet sync"
+            onCheckedChange={(next) => {
+              startTransition(async () => {
+                setMessage(null);
+                setError(null);
+                const res = await fetch("/api/user-settings", {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ syncEnabled: next }),
+                });
+                if (!res.ok) {
+                  const data = await res.json().catch(() => ({}));
+                  setError(
+                    (data as { error?: string }).error ??
+                      "Failed to update sync preference",
+                  );
+                  return;
+                }
+                const data = (await res.json()) as UserSettingsState;
+                setSyncEnabled(Boolean(data.syncEnabled));
+                setSettings((prev) => (prev ? { ...prev, ...data } : data));
+                setMessage("Sync preference saved");
+              });
+            }}
+          />
+        </div>
+      </Card>
+
+      <Card>
+        <CardTitle className="mb-2">GitHub connection</CardTitle>
         <CardDescription className="mb-4">
-          Token is encrypted at rest. After saving, only a masked value is shown.
-          You can also seed via{" "}
-          <code className="font-mono text-xs">INTERNAL_PM_ACCESS_TOKEN</code> in{" "}
-          <code className="font-mono text-xs">.env.local</code>.
+          Personal access token is encrypted at rest and never shared with other
+          users. Use a classic or fine-grained PAT with{" "}
+          <code className="font-mono text-xs">repo</code> (or org read) scope so
+          private organisation repositories are visible. Leave the token blank to
+          keep the current value.
         </CardDescription>
+        {settings?.hasToken ? (
+          <div className="mb-4">
+            <GithubTokenExpiryAlert tokenExpiresAt={settings.tokenExpiresAt} />
+          </div>
+        ) : null}
         {settings ? (
           <dl className="mb-4 grid gap-2 text-sm sm:grid-cols-2">
             <div>
-              <dt className="text-muted">Status</dt>
+              <dt className="text-muted">Token status</dt>
               <dd>{settings.hasToken ? "Configured" : "Not set"}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">Source</dt>
-              <dd>{settings.tokenSource}</dd>
             </div>
             <div>
               <dt className="text-muted">Masked token</dt>
@@ -111,330 +127,104 @@ export function SettingsForm({ authed }: { authed: boolean }) {
               </dd>
             </div>
             <div>
-              <dt className="text-muted">PM base URL</dt>
+              <dt className="text-muted">Organisation</dt>
               <dd className="font-mono text-xs">
-                {settings.internalPmBaseUrl ?? "—"}
+                {settings.githubOrg ?? "—"}
               </dd>
+            </div>
+            <div>
+              <dt className="text-muted">Token expiry</dt>
+              <dd>
+                {settings.hasToken
+                  ? formatGithubTokenExpiryLabel(settings.tokenExpiresAt)
+                  : "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted">Dashboard ready</dt>
+              <dd>{settings.configured ? "Yes" : "No"}</dd>
             </div>
           </dl>
         ) : null}
 
         <form
-          className="flex flex-col gap-3 sm:flex-row"
+          className="flex flex-col gap-3"
           onSubmit={(e) => {
             e.preventDefault();
             startTransition(async () => {
               setMessage(null);
               setError(null);
-              const res = await fetch("/api/settings", {
+              const res = await fetch("/api/user-settings", {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ internalPmAccessToken: token }),
+                body: JSON.stringify({
+                  githubOrg: org,
+                  githubToken: token || undefined,
+                }),
               });
               if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
-                setError(data.error ?? "Save failed");
+                setError(
+                  (data as { error?: string }).error ?? "Save failed",
+                );
                 return;
               }
               setToken("");
-              setMessage("Bitmap token saved");
+              setMessage("GitHub settings saved");
               load();
             });
           }}
         >
+          <Input
+            type="text"
+            value={org}
+            onChange={(e) => setOrg(e.target.value)}
+            placeholder="Organisation login (e.g. acme-corp)"
+            required
+            autoComplete="off"
+          />
           <Input
             type="password"
             value={token}
             onChange={(e) => setToken(e.target.value)}
-            placeholder="Paste access token"
-            className="flex-1"
-            required
+            placeholder="Paste GitHub personal access token"
+            autoComplete="off"
           />
-          <Button type="submit" disabled={pending} className="shrink-0">
-            {pending ? "Saving…" : "Save token"}
-          </Button>
-        </form>
-        {message ? (
-          <Alert variant="success" className="mt-3">
-            {message}
-          </Alert>
-        ) : null}
-        {error ? (
-          <Alert variant="error" className="mt-3">
-            {error}
-          </Alert>
-        ) : null}
-      </Card>
-
-      <Card>
-        <CardTitle className="mb-2">Jira Cloud API</CardTitle>
-        <CardDescription className="mb-4">
-          Used for project progress metrics (estimates, coverage, bugs). API
-          token is encrypted at rest. Leave the token blank to keep the current
-          value. Bootstrap via{" "}
-          <code className="font-mono text-xs">JIRA_BASE_URL</code>,{" "}
-          <code className="font-mono text-xs">JIRA_EMAIL</code>,{" "}
-          <code className="font-mono text-xs">JIRA_API_TOKEN</code>.
-        </CardDescription>
-        {settings ? (
-          <dl className="mb-4 grid gap-2 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-muted">Token status</dt>
-              <dd>{settings.hasJiraToken ? "Configured" : "Not set"}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">Token source</dt>
-              <dd>{settings.jiraTokenSource}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">Masked token</dt>
-              <dd className="font-mono text-xs">
-                {settings.maskedJiraToken ?? "—"}
-              </dd>
-            </div>
-          </dl>
-        ) : null}
-
-        <form
-          className="flex flex-col gap-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            startTransition(async () => {
-              setMessage(null);
-              setError(null);
-              const res = await fetch("/api/settings", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  jiraBaseUrl,
-                  jiraEmail,
-                  jiraApiToken: jiraApiToken || undefined,
-                }),
-              });
-              if (!res.ok) {
-                const data = await res.json().catch(() => ({}));
-                setError(data.error ?? "Save failed");
-                return;
-              }
-              setJiraApiToken("");
-              setMessage("Jira credentials saved");
-              load();
-            });
-          }}
-        >
-          <Input
-            type="url"
-            value={jiraBaseUrl}
-            onChange={(e) => setJiraBaseUrl(e.target.value)}
-            placeholder="https://your-site.atlassian.net"
-            required
-          />
-          <Input
-            type="email"
-            value={jiraEmail}
-            onChange={(e) => setJiraEmail(e.target.value)}
-            placeholder="Atlassian account email"
-            required
-          />
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <Input
-              type="password"
-              value={jiraApiToken}
-              onChange={(e) => setJiraApiToken(e.target.value)}
-              placeholder={
-                settings?.hasJiraToken
-                  ? "Leave blank to keep current token"
-                  : "Paste Jira API token"
-              }
-              className="flex-1"
-              required={!settings?.hasJiraToken}
-            />
-            <Button type="submit" disabled={pending} className="shrink-0">
-              {pending ? "Saving…" : "Save Jira"}
-            </Button>
-          </div>
-        </form>
-      </Card>
-
-      <Card>
-        <CardTitle className="mb-2">Slack & email alerts</CardTitle>
-        <CardDescription className="mb-4">
-          Incoming Slack webhook and optional email digest for risk exceptions
-          and weekly digests. Cron hits{" "}
-          <code className="font-mono text-xs">GET /api/alerts/run</code> with{" "}
-          <code className="font-mono text-xs">Authorization: Bearer CRON_SECRET</code>
-          . Use <code className="font-mono text-xs">?weekly=1</code> for the
-          weekly digest and <code className="font-mono text-xs">?dryRun=1</code>{" "}
-          to preview without posting. Email delivery needs{" "}
-          <code className="font-mono text-xs">RESEND_API_KEY</code> and{" "}
-          <code className="font-mono text-xs">EMAIL_FROM</code>.
-        </CardDescription>
-        {settings?.alerts ? (
-          <dl className="mb-4 grid gap-2 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-muted">Webhook</dt>
-              <dd>
-                {settings.alerts.hasSlackWebhook
-                  ? settings.alerts.maskedSlackWebhook
-                  : "Not set"}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted">Alert email</dt>
-              <dd>{settings.alerts.alertEmail ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-muted">Email delivery</dt>
-              <dd>
-                {settings.alerts.emailDeliveryConfigured
-                  ? "Resend configured"
-                  : "Set RESEND_API_KEY + EMAIL_FROM"}
-              </dd>
-            </div>
-          </dl>
-        ) : null}
-        <form
-          className="flex flex-col gap-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            startTransition(async () => {
-              setMessage(null);
-              setError(null);
-              const res = await fetch("/api/settings", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  slackWebhookUrl: slackWebhookUrl || undefined,
-                  alertEmail: alertEmail || null,
-                  alertThresholds: {
-                    budgetBurnPctRisk: Number(burnRisk),
-                    runwayDaysRisk: Number(runwayRisk),
-                    syncFailedOpenRisk: Number(syncFailRisk),
-                  },
-                }),
-              });
-              if (!res.ok) {
-                const data = await res.json().catch(() => ({}));
-                setError(data.error ?? "Save failed");
-                return;
-              }
-              setSlackWebhookUrl("");
-              setMessage("Alert settings saved");
-              load();
-            });
-          }}
-        >
-          <Input
-            type="url"
-            value={slackWebhookUrl}
-            onChange={(e) => setSlackWebhookUrl(e.target.value)}
-            placeholder={
-              settings?.alerts?.hasSlackWebhook
-                ? "Leave blank to keep current Slack webhook"
-                : "https://hooks.slack.com/services/..."
-            }
-          />
-          <Input
-            type="email"
-            value={alertEmail}
-            onChange={(e) => setAlertEmail(e.target.value)}
-            placeholder="Ops email for digests (Resend)"
-          />
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Input
-              value={burnRisk}
-              onChange={(e) => setBurnRisk(e.target.value)}
-              placeholder="Burn % risk"
-              aria-label="Budget burn risk threshold"
-            />
-            <Input
-              value={runwayRisk}
-              onChange={(e) => setRunwayRisk(e.target.value)}
-              placeholder="Runway days risk"
-              aria-label="Runway days risk threshold"
-            />
-            <Input
-              value={syncFailRisk}
-              onChange={(e) => setSyncFailRisk(e.target.value)}
-              placeholder="Open sync failures risk"
-              aria-label="Sync failures risk threshold"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-3">
             <Button type="submit" disabled={pending}>
-              {pending ? "Saving…" : "Save alerts"}
+              {pending ? "Saving…" : "Save GitHub settings"}
             </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={pending}
-              onClick={() => {
-                startTransition(async () => {
-                  setMessage(null);
-                  setError(null);
-                  const res = await fetch("/api/alerts/run?dryRun=1");
-                  const data = await res.json().catch(() => ({}));
-                  if (!res.ok) {
-                    setError(data.error ?? "Dry run failed");
-                    return;
-                  }
-                  setMessage(
-                    `Dry run: ${data.alerts?.length ?? 0} alerts\n${data.digestText ?? ""}`,
-                  );
-                });
-              }}
+            <Link
+              href="/github"
+              className="text-sm text-accent underline-offset-2 hover:underline"
             >
-              Dry-run alerts
-            </Button>
+              Open GitHub dashboard
+            </Link>
           </div>
         </form>
       </Card>
 
-      <Card>
-        <CardTitle className="mb-2">Required environment</CardTitle>
-        <ul className="list-inside list-disc space-y-1 text-sm text-muted">
-          <li>
-            <code className="font-mono text-xs text-foreground">
-              DATABASE_URL
-            </code>{" "}
-            — Neon pooled connection
-          </li>
-          <li>
-            <code className="font-mono text-xs text-foreground">
-              JIRA_WEBHOOK_SECRET
-            </code>{" "}
-            — shared secret for{" "}
-            <code className="font-mono text-xs">X-Hub-Signature</code> (Jira
-            webhook secret) or{" "}
-            <code className="font-mono text-xs">X-Webhook-Token</code>
-          </li>
-          <li>
-            <code className="font-mono text-xs text-foreground">
-              SETTINGS_ENCRYPTION_KEY
-            </code>{" "}
-            — encrypts tokens stored via this UI
-          </li>
-          <li>
-            <code className="font-mono text-xs text-foreground">
-              ADMIN_EMAIL
-            </code>{" "}
-            /{" "}
-            <code className="font-mono text-xs text-foreground">
-              ADMIN_PASSWORD
-            </code>{" "}
-            — seed admin via{" "}
-            <code className="font-mono text-xs">npm run db:seed</code>
-          </li>
-          <li>
-            <code className="font-mono text-xs text-foreground">
-              ALLOW_PUBLIC_REGISTER
-            </code>{" "}
-            — set to{" "}
-            <code className="font-mono text-xs">true</code> to allow
-            self-registration (otherwise admins create users)
-          </li>
-        </ul>
-      </Card>
+      <GithubRepoPicker
+        enabled={Boolean(settings?.configured)}
+        selected={settings?.githubRepos ?? []}
+        onSaved={(repos) => {
+          setSettings((prev) => (prev ? { ...prev, githubRepos: repos } : prev));
+          setMessage(
+            repos.length === 0
+              ? "Using all organisation repositories"
+              : "Repository filter saved",
+          );
+        }}
+        onError={(message) => {
+          setError(message);
+          if (message) setMessage(null);
+        }}
+      />
+
+      {message ? (
+        <Alert variant="success">{message}</Alert>
+      ) : null}
+      {error ? <Alert variant="error">{error}</Alert> : null}
     </div>
   );
 }

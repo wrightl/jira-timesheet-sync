@@ -1,4 +1,8 @@
-import type { BitmapApiClient, BitmapProject } from "@/clients/bitmap-http";
+import type {
+  BitmapApiClient,
+  BitmapProject,
+  BitmapTimesheetEntry,
+} from "@/clients/bitmap-http";
 import {
   emptyPortfolioSummary,
   filterPortfolioResult,
@@ -16,6 +20,14 @@ import {
   DEFAULT_ALERT_THRESHOLDS,
   type AlertThresholds,
 } from "@/lib/alert-thresholds";
+import {
+  BUDGET_BURN_WATCH_PCT,
+  RECENT_BURN_WINDOW_DAYS,
+  billableRemainingHours as remainingHoursOnProject,
+  computeBudgetBurnPct,
+  estimateRunwayDays,
+  groupTimesheetsByProjectId,
+} from "@/lib/bitmap-project-metrics";
 import { TeamsRepository } from "@/repositories/teams-repository";
 import { WorklogSyncsRepository } from "@/repositories/worklog-syncs-repository";
 import {
@@ -24,22 +36,10 @@ import {
 } from "@/services/settings-service";
 import { getDb, type Db } from "@/db";
 
-function round1(n: number): number {
-  return Math.round(n * 10) / 10;
-}
-
-function pct(numer: number | null | undefined, denom: number | null | undefined): number | null {
-  if (
-    numer == null ||
-    denom == null ||
-    !Number.isFinite(numer) ||
-    !Number.isFinite(denom) ||
-    denom <= 0
-  ) {
-    return null;
-  }
-  return round1((numer / denom) * 100);
-}
+export {
+  computeBudgetBurnPct,
+  estimateRunwayDays,
+} from "@/lib/bitmap-project-metrics";
 
 function dayDiff(a: string | null | undefined, b: string | null | undefined): number | null {
   if (!a || !b) return null;
@@ -58,51 +58,20 @@ function ownerName(project: BitmapProject): string | null {
   );
 }
 
-export function computeBudgetBurnPct(project: BitmapProject): number | null {
-  const budgeted = project.time_budgeted;
-  const logged = project.time_logged;
-  if (budgeted != null && budgeted > 0 && logged != null) {
-    return pct(logged, budgeted);
-  }
-  const billableUsed = project.billable_time_used;
-  const billableRemaining = project.billable_time_remaining;
-  if (
-    billableUsed != null &&
-    billableRemaining != null &&
-    billableUsed + billableRemaining > 0
-  ) {
-    return pct(billableUsed, billableUsed + billableRemaining);
-  }
-  return null;
-}
-
-export function estimateRunwayDays(project: BitmapProject): number | null {
-  const remaining =
-    project.billable_time_remaining ?? project.time_remaining ?? null;
-  if (remaining == null || !Number.isFinite(remaining) || remaining < 0) {
-    return null;
-  }
-  const logged = project.billable_time_used ?? project.time_logged ?? null;
-  const start = project.start_date ? Date.parse(project.start_date) : NaN;
-  const now = Date.now();
-  if (logged != null && logged > 0 && Number.isFinite(start) && now > start) {
-    const elapsedDays = Math.max(
-      1,
-      (now - start) / (24 * 60 * 60 * 1000),
-    );
-    const daily = logged / elapsedDays;
-    if (daily > 0) return round1(remaining / daily);
-  }
-  // Fallback: assume ~6 billable hours/day
-  return round1(remaining / 6);
-}
-
 export function scorePortfolioProject(
   project: BitmapProject,
   thresholds: AlertThresholds = DEFAULT_ALERT_THRESHOLDS,
+  options?: {
+    timesheets?: BitmapTimesheetEntry[];
+    now?: Date;
+  },
 ): PortfolioProjectRow {
   const budgetBurnPct = computeBudgetBurnPct(project);
-  const runwayDays = estimateRunwayDays(project);
+  const runwayDays = estimateRunwayDays({
+    project,
+    timesheets: options?.timesheets,
+    now: options?.now,
+  });
   const scheduleSlipDays = dayDiff(
     project.forecast_end_date,
     project.end_date,
@@ -123,7 +92,11 @@ export function scorePortfolioProject(
   if (budgetBurnPct != null && budgetBurnPct >= thresholds.budgetBurnPctRisk) {
     riskReasons.push(`Budget burn ${budgetBurnPct}%`);
     elevate("risk");
-  } else if (budgetBurnPct != null && budgetBurnPct >= 85) {
+  } else if (
+    budgetBurnPct != null &&
+    budgetBurnPct >= BUDGET_BURN_WATCH_PCT &&
+    BUDGET_BURN_WATCH_PCT < thresholds.budgetBurnPctRisk
+  ) {
     riskReasons.push(`Budget burn ${budgetBurnPct}%`);
     elevate("watch");
   }
@@ -160,8 +133,7 @@ export function scorePortfolioProject(
     elevate("watch");
   }
 
-  const billableRemainingHours =
-    project.billable_time_remaining ?? project.time_remaining ?? null;
+  const billableRemainingHours = remainingHoursOnProject(project);
   const forecast = computeStaffingForecast({
     remainingHours: billableRemainingHours,
     endDate: project.end_date,
@@ -277,6 +249,25 @@ export class PortfolioService {
     private readonly teams: TeamsRepository,
   ) {}
 
+  private async loadRecentTimesheets(
+    client: BitmapApiClient,
+    now: Date,
+  ): Promise<Map<string, BitmapTimesheetEntry[]>> {
+    const endDate = now.toISOString().slice(0, 10);
+    const start = new Date(
+      now.getTime() - RECENT_BURN_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+    );
+    try {
+      const entries = await client.listTimesheetEntries({
+        startDate: start.toISOString().slice(0, 10),
+        endDate,
+      });
+      return groupTimesheetsByProjectId(entries);
+    } catch {
+      return new Map();
+    }
+  }
+
   async getPortfolio(options?: {
     clientId?: string | null;
     riskTier?: PortfolioRiskTier | null;
@@ -286,8 +277,10 @@ export class PortfolioService {
     mineForUserId?: string | null;
     thresholds?: AlertThresholds;
   }): Promise<PortfolioResult> {
-    const thresholds = options?.thresholds ?? DEFAULT_ALERT_THRESHOLDS;
+    const thresholds =
+      options?.thresholds ?? (await this.settings.getAlertThresholds());
     const generatedAt = new Date().toISOString();
+    const now = new Date();
 
     let syncFailedOpen = 0;
     try {
@@ -326,9 +319,13 @@ export class PortfolioService {
       const raw = withoutExcludedClientProjects(
         await listAllActiveProjects(bitmap),
       );
-      const inWindow = raw.filter((p) => isProjectInPortfolioWindow(p));
+      const inWindow = raw.filter((p) => isProjectInPortfolioWindow(p, now));
+      const timesheetsByProject = await this.loadRecentTimesheets(bitmap, now);
       let projects = inWindow.map((p) =>
-        scorePortfolioProject(p, thresholds),
+        scorePortfolioProject(p, thresholds, {
+          timesheets: timesheetsByProject.get(p.id) ?? [],
+          now,
+        }),
       );
 
       try {

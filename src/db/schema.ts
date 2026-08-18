@@ -39,9 +39,6 @@ export const users = pgTable(
     passwordHash: text("password_hash").notNull(),
     role: userRoleEnum("role").notNull().default("user"),
     mustSetPassword: boolean("must_set_password").notNull().default(false),
-    syncEnabled: boolean("sync_enabled").notNull().default(false),
-    githubTokenEncrypted: text("github_token_encrypted"),
-    githubOrg: text("github_org"),
     oauthProvider: text("oauth_provider"),
     oauthSubject: text("oauth_subject"),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -182,6 +179,38 @@ export const apiCache = pgTable(
   ],
 );
 
+export const userSettings = pgTable(
+  "user_settings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    githubTokenEncrypted: text("github_token_encrypted"),
+    githubOrg: text("github_org"),
+    githubTokenExpiresAt: timestamp("github_token_expires_at", {
+      withTimezone: true,
+    }),
+    githubExpiryReminder14dSentAt: timestamp(
+      "github_expiry_reminder_14d_sent_at",
+      { withTimezone: true },
+    ),
+    githubExpiryReminder3dSentAt: timestamp(
+      "github_expiry_reminder_3d_sent_at",
+      { withTimezone: true },
+    ),
+    githubReposJson: text("github_repos_json"),
+    syncEnabled: boolean("sync_enabled").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [uniqueIndex("user_settings_user_id_uidx").on(table.userId)],
+);
+
 export const settings = pgTable("settings", {
   id: text("id").primaryKey().default("default"),
   internalPmAccessTokenEncrypted: text("internal_pm_access_token_encrypted"),
@@ -189,6 +218,8 @@ export const settings = pgTable("settings", {
   jiraEmail: text("jira_email"),
   jiraApiTokenEncrypted: text("jira_api_token_encrypted"),
   slackWebhookUrlEncrypted: text("slack_webhook_url_encrypted"),
+  slackBotTokenEncrypted: text("slack_bot_token_encrypted"),
+  supportDeskSpaceKey: text("support_desk_space_key"),
   alertEmail: text("alert_email"),
   alertThresholdsJson: text("alert_thresholds_json"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
@@ -287,6 +318,26 @@ export const teamMembers = pgTable(
   ],
 );
 
+export const supportTicketReminders = pgTable(
+  "support_ticket_reminders",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    jiraIssueKey: text("jira_issue_key").notNull(),
+    reminderSentAt: timestamp("reminder_sent_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    assigneeEmail: text("assignee_email"),
+    slackUserId: text("slack_user_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("support_ticket_reminders_issue_key_idx").on(table.jiraIssueKey),
+    index("support_ticket_reminders_sent_at_idx").on(table.reminderSentAt),
+  ],
+);
+
 /**
  * Links a team to a Bitmap client (whole-client ownership) and optionally a
  * specific project. Empty projectId means client-level ownership.
@@ -322,6 +373,8 @@ export const teamOwnerships = pgTable(
 
 export type AppUser = typeof users.$inferSelect;
 export type NewAppUser = typeof users.$inferInsert;
+export type UserSettings = typeof userSettings.$inferSelect;
+export type NewUserSettings = typeof userSettings.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
 export type SpaceProjectMapping = typeof spaceProjectMappings.$inferSelect;
@@ -338,5 +391,7 @@ export type Team = typeof teams.$inferSelect;
 export type NewTeam = typeof teams.$inferInsert;
 export type TeamMember = typeof teamMembers.$inferSelect;
 export type NewTeamMember = typeof teamMembers.$inferInsert;
+export type SupportTicketReminder = typeof supportTicketReminders.$inferSelect;
+export type NewSupportTicketReminder = typeof supportTicketReminders.$inferInsert;
 export type TeamOwnership = typeof teamOwnerships.$inferSelect;
 export type NewTeamOwnership = typeof teamOwnerships.$inferInsert;

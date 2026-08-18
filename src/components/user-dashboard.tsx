@@ -12,6 +12,7 @@ import { formatDateTimeUtc } from "@/lib/format-date";
 import { JiraIssueLink } from "@/components/jira-issue-link";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { KpiCard } from "@/components/kpi-card";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { RefreshButton } from "@/components/ui/refresh-button";
 import { Select } from "@/components/ui/select";
@@ -43,28 +44,6 @@ function volumeLabelStep(bucketCount: number): number {
   if (bucketCount <= 30) return 3;
   if (bucketCount <= 48) return 4;
   return 7;
-}
-
-function KpiCard({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: string | number;
-  hint?: string;
-}) {
-  return (
-    <Card>
-      <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted">
-        {label}
-      </p>
-      <p className="mt-1.5 text-2xl font-semibold tracking-tight text-foreground">
-        {value}
-      </p>
-      {hint ? <p className="mt-1 text-xs text-muted">{hint}</p> : null}
-    </Card>
-  );
 }
 
 export function UserDashboard({
@@ -155,22 +134,35 @@ export function UserDashboard({
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <KpiCard
+          metricId="sync.synced"
           label="Synced"
           value={stats.window.synced}
           hint={rangeHint}
         />
         <KpiCard
+          metricId="sync.failed"
           label="Failed"
-          value={stats.openFailed}
-          hint="Open (yours)"
+          value={stats.window.failed}
+          hint={
+            stats.openFailed > 0
+              ? `${rangeHint} · ${stats.openFailed} open`
+              : rangeHint
+          }
         />
         <KpiCard
+          metricId="sync.skipped"
           label="Skipped"
           value={stats.window.skipped}
           hint={rangeHint}
         />
-        <KpiCard label="Pending" value={stats.openPending} hint="Backlog" />
         <KpiCard
+          metricId="sync.pending"
+          label="Pending"
+          value={stats.openPending}
+          hint="Backlog"
+        />
+        <KpiCard
+          metricId="sync.success_rate"
           label="Success rate"
           value={formatPercent(stats.successRate)}
           hint={rangeHint}

@@ -105,6 +105,10 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
+export const googleNativeAuthSchema = z.object({
+  idToken: z.string().min(1, "idToken is required"),
+});
+
 export const registerSchema = z.object({
   email: z.string().email("Valid email is required"),
   password: z.string().min(8, "Password must be at least 8 characters"),
@@ -139,15 +143,55 @@ export const meUpdateSchema = z.object({
   syncEnabled: z.boolean(),
 });
 
+export const githubRepoNameSchema = z
+  .string()
+  .trim()
+  .regex(/^[^/\s]+\/[^/\s]+$/, "Repository must be owner/name")
+  .max(200);
+
+export const githubReposSchema = z
+  .array(githubRepoNameSchema)
+  .max(40, "Select at most 40 repositories")
+  .transform((repos) => {
+    const seen = new Set<string>();
+    const unique: string[] = [];
+    for (const name of repos) {
+      const key = name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push(name);
+    }
+    return unique;
+  });
+
 export const githubSettingsUpdateSchema = z
   .object({
     githubToken: z.string().optional(),
     githubOrg: z.string().optional(),
+    githubRepos: githubReposSchema.optional(),
   })
   .refine(
     (data) =>
-      data.githubToken !== undefined || data.githubOrg !== undefined,
+      data.githubToken !== undefined ||
+      data.githubOrg !== undefined ||
+      data.githubRepos !== undefined,
     { message: "At least one GitHub settings field is required" },
+  );
+
+export const userSettingsUpdateSchema = z
+  .object({
+    githubToken: z.string().optional(),
+    githubOrg: z.string().optional(),
+    githubRepos: githubReposSchema.optional(),
+    syncEnabled: z.boolean().optional(),
+  })
+  .refine(
+    (data) =>
+      data.githubToken !== undefined ||
+      data.githubOrg !== undefined ||
+      data.githubRepos !== undefined ||
+      data.syncEnabled !== undefined,
+    { message: "At least one settings field is required" },
   );
 
 export const settingsUpdateSchema = z
@@ -157,6 +201,8 @@ export const settingsUpdateSchema = z
     jiraEmail: z.string().optional(),
     jiraApiToken: z.string().optional(),
     slackWebhookUrl: optionalSlackWebhookUrl,
+    slackBotToken: z.string().optional(),
+    supportDeskSpaceKey: z.string().optional(),
     alertEmail: z.string().nullable().optional(),
     alertThresholds: z
       .object({
@@ -177,6 +223,8 @@ export const settingsUpdateSchema = z
       data.jiraEmail !== undefined ||
       data.jiraApiToken !== undefined ||
       data.slackWebhookUrl !== undefined ||
+      data.slackBotToken !== undefined ||
+      data.supportDeskSpaceKey !== undefined ||
       data.alertEmail !== undefined ||
       data.alertThresholds !== undefined,
     { message: "At least one settings field is required" },
@@ -218,4 +266,5 @@ export type MeUpdateInput = z.infer<typeof meUpdateSchema>;
 export type GithubSettingsUpdateInput = z.infer<
   typeof githubSettingsUpdateSchema
 >;
+export type UserSettingsUpdateInput = z.infer<typeof userSettingsUpdateSchema>;
 export type SettingsUpdateInput = z.infer<typeof settingsUpdateSchema>;

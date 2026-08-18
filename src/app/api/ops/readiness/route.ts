@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     hints: {
       schemaSync:
         "Vercel builds run scripts/migrate-on-build.mjs (drizzle-kit push --force).",
-      slackWebhook: "Settings → Slack alerts (encrypted webhook URL).",
+      slackWebhook: "App Settings → Slack alerts (encrypted webhook URL).",
       cronSecret:
         "Set CRON_SECRET and call /api/alerts/run with Authorization: Bearer …",
       googleOAuth:

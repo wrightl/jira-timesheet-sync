@@ -5,6 +5,7 @@ import { AppShell } from '@/components/app-shell';
 import { UserDashboard } from '@/components/user-dashboard';
 import { Alert } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
+import { PageMain } from '@/components/ui/page-main';
 import { getUserFromCookies } from '@/lib/auth';
 import {
     emptyDashboardStats,
@@ -59,7 +60,7 @@ export default async function HomePage({
             currentPath="/"
             user={user ? { email: user.email, role: user.role } : null}
         >
-            <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">
+            <PageMain>
                 {!user ? (
                     <Alert className="mb-6">
                         <Link
@@ -143,7 +144,7 @@ export default async function HomePage({
                         </div>
                     </>
                 )}
-            </main>
+            </PageMain>
         </AppShell>
     );
 }

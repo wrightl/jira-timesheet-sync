@@ -1,7 +1,8 @@
 /**
  * Forecast / staffing helpers for portfolio and project dashboards.
- * Eng-week = 40 hours. Gap is remaining work beyond 1 FTE calendar capacity
- * until the project end (or forecast) date.
+ * Eng-week = 30 billable hours (37.5h week × 80% utilisation).
+ * Gap is remaining work beyond 1 FTE calendar capacity until the project
+ * end (or forecast) date.
  */
 
 export type ForecastConfidence = "high" | "medium" | "low" | "unavailable";
@@ -16,7 +17,8 @@ export type StaffingForecast = {
   forecastConfidence: ForecastConfidence;
 };
 
-const HOURS_PER_ENG_WEEK = 40;
+/** 37.5 contracted hours × 80% utilisation. */
+export const HOURS_PER_ENG_WEEK = 30;
 
 function round1(n: number): number {
   return Math.round(n * 10) / 10;

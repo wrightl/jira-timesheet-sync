@@ -93,4 +93,31 @@ export class SettingsRepository {
         set,
       });
   }
+
+  async upsertSupportSettings(data: {
+    slackBotTokenEncrypted?: string | null;
+    supportDeskSpaceKey?: string | null;
+  }): Promise<void> {
+    const now = new Date();
+    const set: Record<string, unknown> = { updatedAt: now };
+    if (data.slackBotTokenEncrypted !== undefined) {
+      set.slackBotTokenEncrypted = data.slackBotTokenEncrypted;
+    }
+    if (data.supportDeskSpaceKey !== undefined) {
+      set.supportDeskSpaceKey = data.supportDeskSpaceKey;
+    }
+
+    await this.db
+      .insert(settings)
+      .values({
+        id: "default",
+        slackBotTokenEncrypted: data.slackBotTokenEncrypted ?? null,
+        supportDeskSpaceKey: data.supportDeskSpaceKey ?? null,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: settings.id,
+        set,
+      });
+  }
 }

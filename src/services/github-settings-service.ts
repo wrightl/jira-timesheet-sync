@@ -1,17 +1,26 @@
 import { getDb, type Db } from "@/db";
-import {
-  createGithubApiClient,
-  type GithubApiClient,
-} from "@/clients/github-http";
 import { decryptSecret, encryptSecret, maskToken } from "@/lib/crypto";
 import { getEnv } from "@/lib/env";
 import { log } from "@/lib/log";
-import { UserGithubSettingsRepository } from "@/repositories/user-github-settings-repository";
+import {
+  createGithubApiClient,
+  inspectGithubAuthentication,
+  type GithubApiClient,
+  type GithubAuthInspection,
+} from "@/clients/github-http";
+import {
+  parseGithubReposJson,
+  reposMatchingOrg,
+  serializeGithubRepos,
+} from "@/lib/github-search-scope";
+import { UserSettingsRepository } from "@/repositories/user-settings-repository";
 
 export type GithubSettingsStatus = {
   hasToken: boolean;
   maskedToken: string | null;
   githubOrg: string | null;
+  tokenExpiresAt: string | null;
+  githubRepos: string[];
   configured: boolean;
 };
 
@@ -21,17 +30,26 @@ function nonEmpty(value: string | null | undefined): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function expiresAtIso(value: Date | null | undefined): string | null {
+  return value ? value.toISOString() : null;
+}
+
+export type InspectGithubAuth = (options: {
+  token: string;
+}) => Promise<GithubAuthInspection>;
+
 export class GithubSettingsService {
-  constructor(private readonly settings: UserGithubSettingsRepository) {}
+  constructor(
+    private readonly settings: UserSettingsRepository,
+    private readonly inspectAuth: InspectGithubAuth = inspectGithubAuthentication,
+  ) {}
 
   async getCredentials(userId: string): Promise<{
     token: string | null;
     org: string | null;
   }> {
     const encryptionKey = getEnv().SETTINGS_ENCRYPTION_KEY;
-    let row: Awaited<
-      ReturnType<UserGithubSettingsRepository["getByUserId"]>
-    > = null;
+    let row: Awaited<ReturnType<UserSettingsRepository["getByUserId"]>> = null;
     try {
       row = await this.settings.getByUserId(userId);
     } catch (err) {
@@ -64,29 +82,40 @@ export class GithubSettingsService {
     const encryptionKey = getEnv().SETTINGS_ENCRYPTION_KEY;
     let stored: string | null = null;
     let org: string | null = null;
+    let tokenExpiresAt: string | null = null;
+    let githubRepos: string[] = [];
 
     try {
       const row = await this.settings.getByUserId(userId);
       org = nonEmpty(row?.githubOrg);
+      tokenExpiresAt = expiresAtIso(row?.githubTokenExpiresAt ?? null);
+      githubRepos = reposMatchingOrg(
+        org,
+        parseGithubReposJson(row?.githubReposJson),
+      );
       if (row?.githubTokenEncrypted && encryptionKey) {
         stored = decryptSecret(row.githubTokenEncrypted, encryptionKey);
       }
     } catch {
       stored = null;
       org = null;
+      tokenExpiresAt = null;
+      githubRepos = [];
     }
 
     return {
       hasToken: Boolean(stored),
       maskedToken: stored ? maskToken(stored) : null,
       githubOrg: org,
+      tokenExpiresAt,
+      githubRepos,
       configured: Boolean(stored && org),
     };
   }
 
   async saveSettings(
     userId: string,
-    input: { token?: string; org?: string },
+    input: { token?: string; org?: string; repos?: string[] },
   ): Promise<GithubSettingsStatus> {
     const encryptionKey = getEnv().SETTINGS_ENCRYPTION_KEY;
     if (!encryptionKey) {
@@ -94,24 +123,39 @@ export class GithubSettingsService {
     }
 
     const existing = await this.settings.getByUserId(userId);
-    if (!existing) {
-      throw new Error("User not found");
-    }
 
     let encryptedToken: string | null | undefined = undefined;
+    let githubTokenExpiresAt: Date | null | undefined = undefined;
+    let resetReminders = false;
     if (input.token !== undefined) {
       const trimmed = input.token.trim();
       if (trimmed.length > 0) {
         encryptedToken = encryptSecret(trimmed, encryptionKey);
+        resetReminders = true;
+        githubTokenExpiresAt = await this.probeExpiry(trimmed, userId);
       } else {
-        encryptedToken = existing.githubTokenEncrypted;
+        encryptedToken = existing?.githubTokenEncrypted ?? null;
       }
+    }
+
+    const nextOrg =
+      input.org !== undefined ? nonEmpty(input.org) : nonEmpty(existing?.githubOrg);
+    let githubReposJson: string | null | undefined = undefined;
+    if (input.repos !== undefined || input.org !== undefined) {
+      const source =
+        input.repos !== undefined
+          ? input.repos
+          : parseGithubReposJson(existing?.githubReposJson);
+      githubReposJson = serializeGithubRepos(reposMatchingOrg(nextOrg, source));
     }
 
     const updated = await this.settings.upsertForUser(userId, {
       githubTokenEncrypted: encryptedToken,
-      githubOrg:
-        input.org !== undefined ? nonEmpty(input.org) : undefined,
+      githubOrg: input.org !== undefined ? nonEmpty(input.org) : undefined,
+      githubTokenExpiresAt,
+      githubExpiryReminder14dSentAt: resetReminders ? null : undefined,
+      githubExpiryReminder3dSentAt: resetReminders ? null : undefined,
+      githubReposJson,
     });
 
     if (!updated) {
@@ -134,8 +178,36 @@ export class GithubSettingsService {
       hasToken: Boolean(maskedToken),
       maskedToken,
       githubOrg: org,
+      tokenExpiresAt: expiresAtIso(updated.githubTokenExpiresAt),
+      githubRepos: reposMatchingOrg(
+        org,
+        parseGithubReposJson(updated.githubReposJson),
+      ),
       configured: Boolean(maskedToken && org),
     };
+  }
+
+  private async probeExpiry(
+    token: string,
+    userId: string,
+  ): Promise<Date | null> {
+    try {
+      const inspection = await this.inspectAuth({ token });
+      if (!inspection.ok) {
+        log.warn("github-settings", "GitHub token inspection failed", {
+          userId,
+          status: inspection.status,
+        });
+        return null;
+      }
+      return inspection.expiresAt;
+    } catch (err) {
+      log.warn("github-settings", "GitHub token inspection threw", {
+        userId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return null;
+    }
   }
 
   async createConfiguredClient(
@@ -151,5 +223,5 @@ export class GithubSettingsService {
 }
 
 export function createGithubSettingsService(db: Db = getDb()) {
-  return new GithubSettingsService(new UserGithubSettingsRepository(db));
+  return new GithubSettingsService(new UserSettingsRepository(db));
 }

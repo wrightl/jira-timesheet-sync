@@ -31,6 +31,7 @@ export function UtilisationDashboard({ authed }: { authed: boolean }) {
     const [pending, setPending] = useState(false);
     const [rangeDays, setRangeDays] = useState('7');
     const [teamId, setTeamId] = useState('all');
+    const [userId, setUserId] = useState('all');
 
     const load = async () => {
         setPending(true);
@@ -38,6 +39,7 @@ export function UtilisationDashboard({ authed }: { authed: boolean }) {
         try {
             const params = new URLSearchParams({ rangeDays });
             if (teamId !== 'all') params.set('teamId', teamId);
+            if (userId !== 'all') params.set('userId', userId);
             const res = await fetch(`/api/utilisation?${params.toString()}`);
             if (!res.ok) {
                 const body = (await res.json().catch(() => null)) as {
@@ -67,7 +69,7 @@ export function UtilisationDashboard({ authed }: { authed: boolean }) {
     useEffect(() => {
         if (authed) void load();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [authed, rangeDays, teamId]);
+    }, [authed, rangeDays, teamId, userId]);
 
     if (!authed) {
         return (
@@ -86,9 +88,24 @@ export function UtilisationDashboard({ authed }: { authed: boolean }) {
                         value={rangeDays}
                         onChange={(e) => setRangeDays(e.target.value)}
                     >
+                        <option value="1">1 day</option>
                         <option value="7">7 days</option>
                         <option value="14">14 days</option>
                         <option value="30">30 days</option>
+                    </Select>
+                </label>
+                <label className="block text-sm">
+                    <span className="mb-1 block text-muted">Person</span>
+                    <Select
+                        value={userId}
+                        onChange={(e) => setUserId(e.target.value)}
+                    >
+                        <option value="all">All people</option>
+                        {(data?.users ?? []).map((user) => (
+                            <option key={user.id} value={user.id}>
+                                {user.displayName}
+                            </option>
+                        ))}
                     </Select>
                 </label>
                 <label className="block text-sm">
@@ -97,7 +114,7 @@ export function UtilisationDashboard({ authed }: { authed: boolean }) {
                         value={teamId}
                         onChange={(e) => setTeamId(e.target.value)}
                     >
-                        <option value="all">All people</option>
+                        <option value="all">All teams</option>
                         {(data?.teams ?? []).map((team) => (
                             <option key={team.id} value={team.id}>
                                 {team.name}
@@ -113,9 +130,10 @@ export function UtilisationDashboard({ authed }: { authed: boolean }) {
             <Card>
                 <CardTitle className="mb-1">Billable utilisation</CardTitle>
                 <CardDescription className="mb-4">
-                    Billable hours from Bitmap timesheets vs each person&apos;s
-                    Bitmap billable_target_hours. Planned and rejected entries
-                    are excluded.
+                    Billable hours from Bitmap timesheets versus each
+                    person&apos;s contracted working hours in the range
+                    (Bitmap hours_per_week, pro-rated). Planned and rejected
+                    entries are excluded.
                 </CardDescription>
                 {!data || data.people.length === 0 ? (
                     <p className="text-sm text-muted">
@@ -131,7 +149,7 @@ export function UtilisationDashboard({ authed }: { authed: boolean }) {
                                 <TableHeaderCell>Team</TableHeaderCell>
                                 <TableHeaderCell>Billable</TableHeaderCell>
                                 <TableHeaderCell>Non-billable</TableHeaderCell>
-                                <TableHeaderCell>Target</TableHeaderCell>
+                                <TableHeaderCell>Working</TableHeaderCell>
                                 <TableHeaderCell>Utilisation</TableHeaderCell>
                                 <TableHeaderCell>Status</TableHeaderCell>
                             </TableRow>
@@ -159,7 +177,7 @@ export function UtilisationDashboard({ authed }: { authed: boolean }) {
                                         {person.nonBillableHours}h
                                     </TableCell>
                                     <TableCell className="font-mono text-xs">
-                                        {person.targetHours}h
+                                        {person.workingHours}h
                                     </TableCell>
                                     <TableCell className="font-mono text-xs">
                                         {person.utilisationPct != null

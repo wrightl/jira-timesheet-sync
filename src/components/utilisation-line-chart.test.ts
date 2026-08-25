@@ -59,7 +59,6 @@ const series: ChartSeries[] = [
   {
     key: "bm-ada",
     label: "Ada Lovelace",
-    href: "/utilisation/bm-ada?rangeDays=7",
     color: "#0f766e",
     points: points.map((point) => ({
       ...point,
@@ -85,6 +84,7 @@ describe("UtilisationLineChart", () => {
     expect(html).toContain("80%");
     expect(html).toContain("Team average");
     expect(html).toContain("Ada Lovelace");
-    expect(html).toContain("/utilisation/bm-ada?rangeDays=7");
+    expect(html).not.toContain("/utilisation/bm-ada");
+    expect(html).not.toContain("Details");
   });
 });

@@ -98,9 +98,8 @@ export function UtilisationDashboard({ authed }: { authed: boolean }) {
             teamSeries: data.series,
             personSeries: people,
             includeTeamAverage: userId === 'all' && people.length > 1,
-            detailHref: (key) => personHref(key, rangeDays),
         });
-    }, [data, rangeDays, userId]);
+    }, [data, userId]);
 
     const initiallyVisibleKeys = useMemo(() => {
         if (userId !== 'all') return [userId];

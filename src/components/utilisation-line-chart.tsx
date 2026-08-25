@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { cn } from '@/lib/cn';
 import {
@@ -49,7 +48,6 @@ function colorForPerson(index: number): string {
 export type ChartSeries = {
     key: string;
     label: string;
-    href?: string;
     color: string;
     points: UtilisationSeriesPoint[];
 };
@@ -58,7 +56,6 @@ export function utilisationChartSeries(options: {
     teamSeries: UtilisationSeriesPoint[];
     personSeries: UtilisationPersonSeries[];
     includeTeamAverage?: boolean;
-    detailHref?: (key: string) => string;
 }): ChartSeries[] {
     const series: ChartSeries[] = [];
     if (options.includeTeamAverage !== false && options.teamSeries.length > 0) {
@@ -73,7 +70,6 @@ export function utilisationChartSeries(options: {
         series.push({
             key: person.key,
             label: person.displayName,
-            href: options.detailHref?.(person.key),
             color: colorForPerson(index),
             points: person.points,
         });
@@ -279,14 +275,6 @@ export function UtilisationLineChart({
                                     {swatch}
                                     {row.label}
                                 </button>
-                                {row.href ? (
-                                    <Link
-                                        href={row.href}
-                                        className="ml-1 text-xs text-accent hover:underline"
-                                    >
-                                        Details
-                                    </Link>
-                                ) : null}
                             </li>
                         );
                     })}

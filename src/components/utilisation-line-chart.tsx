@@ -212,8 +212,7 @@ export function UtilisationLineChart({
                                 fill={row.color}
                             >
                                 <title>
-                                    {row.label}: {point.utilisationPct ?? '—'}%
-                                    on {point.date}
+                                    {`${row.label}: ${point.utilisationPct ?? '—'}% on ${point.date}`}
                                 </title>
                             </circle>
                         ))}

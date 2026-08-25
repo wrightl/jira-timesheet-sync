@@ -55,7 +55,9 @@ export function UtilisationDashboard({ authed }: { authed: boolean }) {
             const params = new URLSearchParams({ rangeDays });
             if (teamId !== 'all') params.set('teamId', teamId);
             if (userId !== 'all') params.set('userId', userId);
-            const res = await fetch(`/api/utilisation?${params.toString()}`);
+            const res = await fetch(`/api/utilisation?${params.toString()}`, {
+                cache: 'no-store',
+            });
             if (!res.ok) {
                 const body = (await res.json().catch(() => null)) as {
                     error?: string;
@@ -125,7 +127,7 @@ export function UtilisationDashboard({ authed }: { authed: boolean }) {
         );
     }
 
-    const empty = !data || data.people.length === 0;
+    const empty = !data || !data.people || data.people.length === 0;
 
     return (
         <div className="space-y-6">
@@ -223,11 +225,17 @@ export function UtilisationDashboard({ authed }: { authed: boolean }) {
                         TARGET_BILLABLE_UTILISATION_PCT}
                     % target line.
                 </CardDescription>
-                {empty ? (
+                {pending && empty ? (
+                    <p className="text-sm text-muted">Loading…</p>
+                ) : error && empty ? (
                     <p className="text-sm text-muted">
-                        {pending
-                            ? 'Loading…'
-                            : 'No utilisation data in this range. Add team members under Teams or ensure Bitmap timesheets exist.'}
+                        Utilisation could not be loaded. Check Bitmap
+                        credentials under App Settings, then refresh.
+                    </p>
+                ) : empty ? (
+                    <p className="text-sm text-muted">
+                        No utilisation data in this range. Add team members
+                        under Teams or ensure Bitmap timesheets exist.
                     </p>
                 ) : view === 'chart' ? (
                     <UtilisationLineChart

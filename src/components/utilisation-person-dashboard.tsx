@@ -97,6 +97,7 @@ export function UtilisationPersonDashboard({
             const params = new URLSearchParams({ rangeDays: nextRange });
             const res = await fetch(
                 `/api/utilisation/${encodeURIComponent(userId)}?${params.toString()}`,
+                { cache: 'no-store' },
             );
             if (!res.ok) {
                 const body = (await res.json().catch(() => null)) as {
@@ -202,9 +203,13 @@ export function UtilisationPersonDashboard({
 
             {error ? <Alert variant="error">{error}</Alert> : null}
 
-            {!data && !error ? (
+            {pending && !data && !error ? (
+                <p className="text-sm text-muted">Loading…</p>
+            ) : null}
+
+            {!pending && !data && !error ? (
                 <p className="text-sm text-muted">
-                    {pending ? 'Loading…' : 'No utilisation data in this range.'}
+                    No utilisation data in this range.
                 </p>
             ) : null}
 

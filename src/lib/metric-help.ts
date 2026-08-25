@@ -66,12 +66,21 @@ export const SUPPORT_METRIC_IDS = [
   "support.tickets_by_assignee",
 ] as const;
 
+export const UTILISATION_METRIC_IDS = [
+  "utilisation.pct",
+  "utilisation.billable_hours",
+  "utilisation.non_billable_hours",
+  "utilisation.hours_to_target",
+  "utilisation.coverage_pct",
+] as const;
+
 export const ALL_METRIC_HELP_IDS = [
   ...SYNC_METRIC_IDS,
   ...PORTFOLIO_METRIC_IDS,
   ...PROJECT_METRIC_IDS,
   ...GITHUB_METRIC_IDS,
   ...SUPPORT_METRIC_IDS,
+  ...UTILISATION_METRIC_IDS,
 ] as const;
 
 export type MetricHelpId = (typeof ALL_METRIC_HELP_IDS)[number];
@@ -465,6 +474,59 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
       "Support desk Jira assignee field",
       "Visible tickets (Show Triaged toggle)",
     ],
+  },
+  "utilisation.pct": {
+    title: "Utilisation",
+    formula:
+      "Billable timesheet hours ÷ contracted working hours in the selected range × 100. Contracted hours are Bitmap hours_per_week (or the current user_working_durations row) pro-rated by range days / 7. Planned and rejected entries are excluded. Status bands: under <50%, watch 50–79%, ok 80–109%, risk ≥110%.",
+    sources: [
+      "Bitmap timesheet entries (billable flag, hours, state, date)",
+      "Bitmap user hours_per_week / user_working_durations",
+      "Selected utilisation date range",
+    ],
+    unavailable:
+      "Shown as — when contracted working hours for the range are 0.",
+    status: "Target is 80% billable. Watch below 80%; under below 50%; risk at 110%+.",
+  },
+  "utilisation.billable_hours": {
+    title: "Billable hours",
+    formula:
+      "Sum of countable Bitmap timesheet hours whose billable flag is true in the selected range. Planned and rejected entries, and hours on the excluded TheCurve client, are omitted. The hint compares this to 80% of contracted working hours.",
+    sources: [
+      "Bitmap timesheet entries (billable=true)",
+      "Selected utilisation date range",
+    ],
+  },
+  "utilisation.non_billable_hours": {
+    title: "Non-billable hours",
+    formula:
+      "Sum of countable Bitmap timesheet hours whose billable flag is explicitly false. Entries with a missing billable flag are ignored. The hint is non-billable ÷ (billable + non-billable) in the range.",
+    sources: [
+      "Bitmap timesheet entries (billable=false)",
+      "nonbillable_reason when present",
+    ],
+  },
+  "utilisation.hours_to_target": {
+    title: "Hours to target",
+    formula:
+      "80% of contracted working hours in the range, minus billable hours. Positive means more billable hours are needed; negative means the person is above the 80% target.",
+    sources: [
+      "Billable hours from Bitmap timesheets",
+      "Pro-rated Bitmap contracted working hours",
+    ],
+    unavailable:
+      "Shown as — when contracted working hours for the range are 0.",
+  },
+  "utilisation.coverage_pct": {
+    title: "Timesheet coverage",
+    formula:
+      "(Billable + non-billable hours) ÷ contracted working hours in the range × 100. This is logging completeness, not billable utilisation — a person can have high coverage and still miss the 80% billable target if too much time is non-billable.",
+    sources: [
+      "Bitmap timesheet entries",
+      "Pro-rated Bitmap contracted working hours",
+    ],
+    unavailable:
+      "Shown as — when contracted working hours for the range are 0.",
   },
 };
 

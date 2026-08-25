@@ -7,6 +7,7 @@ import {
   PROJECT_METRIC_IDS,
   SUPPORT_METRIC_IDS,
   SYNC_METRIC_IDS,
+  UTILISATION_METRIC_IDS,
   getMetricHelp,
 } from "@/lib/metric-help";
 
@@ -35,6 +36,7 @@ describe("metric help catalog", () => {
     expect(PROJECT_METRIC_IDS).toHaveLength(24);
     expect(GITHUB_METRIC_IDS).toHaveLength(8);
     expect(SUPPORT_METRIC_IDS).toHaveLength(3);
+    expect(UTILISATION_METRIC_IDS).toHaveLength(5);
     expect(Object.keys(METRIC_HELP)).toHaveLength(ALL_METRIC_HELP_IDS.length);
   });
 });

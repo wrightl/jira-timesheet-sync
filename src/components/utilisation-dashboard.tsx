@@ -220,7 +220,9 @@ export function UtilisationDashboard({ authed }: { authed: boolean }) {
                     person&apos;s contracted working hours on weekdays in the
                     range (Bitmap hours_per_week, pro-rated over weekdays;
                     Saturday and Sunday are excluded). Planned and rejected
-                    entries are excluded. The chart uses a dotted{' '}
+                    entries are excluded. Non-billable time logged against
+                    The Curve company projects is included. The chart uses a
+                    dotted{' '}
                     {data?.targetUtilisationPct ??
                         TARGET_BILLABLE_UTILISATION_PCT}
                     % target line.

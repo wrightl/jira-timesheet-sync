@@ -1,4 +1,8 @@
-/** Bitmap internal client that must not appear in app metrics or dropdowns. */
+/**
+ * Bitmap internal client hidden from project/portfolio views and mapping
+ * dropdowns. Utilisation still counts these hours — The Curve is the company
+ * client used to log non-billable time.
+ */
 export const EXCLUDED_CLIENT_ID_THECURVE = "5e8f8b80d9f37277a88e7f10";
 
 export const EXCLUDED_CLIENT_IDS: ReadonlySet<string> = new Set([

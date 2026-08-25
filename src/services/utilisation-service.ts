@@ -5,7 +5,6 @@ import type {
     BitmapUserWorkingDuration,
 } from '@/clients/bitmap-http';
 import { getDb, type Db } from '@/db';
-import { isExcludedClient } from '@/lib/excluded-clients';
 import {
     isUtcWeekendIsoDate,
     utcCalendarDateRange,
@@ -406,7 +405,6 @@ export function aggregateProjectBreakdown(
 
     for (const entry of entries) {
         if (!isCountableTimesheetEntry(entry)) continue;
-        if (isExcludedClient(entry.project?.client)) continue;
         if (isUtcWeekendIsoDate(entry.date)) continue;
         const hours = typeof entry.hours === 'number' ? entry.hours : 0;
         if (!Number.isFinite(hours) || hours <= 0) continue;
@@ -477,7 +475,6 @@ export function aggregateNonBillable(entries: BitmapTimesheetEntry[]): {
 
     for (const entry of entries) {
         if (!isCountableTimesheetEntry(entry)) continue;
-        if (isExcludedClient(entry.project?.client)) continue;
         if (isUtcWeekendIsoDate(entry.date)) continue;
         if (timesheetBillableFlag(entry.billable) !== false) continue;
         const hours = typeof entry.hours === 'number' ? entry.hours : 0;
@@ -819,7 +816,6 @@ export class UtilisationService {
 
         for (const entry of entries) {
             if (!isCountableTimesheetEntry(entry)) continue;
-            if (isExcludedClient(entry.project?.client)) continue;
             if (isUtcWeekendIsoDate(entry.date)) continue;
             const hours = typeof entry.hours === 'number' ? entry.hours : 0;
             if (!Number.isFinite(hours) || hours <= 0) continue;

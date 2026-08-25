@@ -530,16 +530,19 @@ describe("UtilisationService", () => {
     expect(result.people[0]!.billableHours).toBe(10);
   });
 
-  it("excludes hours logged against TheCurve", async () => {
+  it("includes The Curve company hours, including non-billable time", async () => {
     const { service } = makeService({
       entries: [
         {
           user: { id: "bm-ada" },
           hours: 8,
-          billable: true,
+          billable: false,
+          nonbillable_reason: "Internal",
           state: "approved",
+          date: "2026-08-24",
           project: {
             id: "internal",
+            name: "Company ops",
             client: {
               id: "5e8f8b80d9f37277a88e7f10",
               name: "TheCurve",
@@ -551,7 +554,12 @@ describe("UtilisationService", () => {
           hours: 4,
           billable: true,
           state: "approved",
-          project: { id: "client-work", client: { id: "c2", name: "Acme" } },
+          date: "2026-08-25",
+          project: {
+            id: "client-work",
+            name: "Acme App",
+            client: { id: "c2", name: "Acme" },
+          },
         },
       ],
     });
@@ -559,6 +567,22 @@ describe("UtilisationService", () => {
     const result = await service.getUtilisation({ rangeDays: 7 });
     const ada = result.people.find((p) => p.key === "bm-ada");
     expect(ada!.billableHours).toBe(4);
+    expect(ada!.nonBillableHours).toBe(8);
+    expect(ada!.totalHours).toBe(12);
+
+    const detail = await service.getPersonDetail({
+      userId: "bm-ada",
+      rangeDays: 7,
+    });
+    expect(detail.projects.map((p) => p.projectName)).toEqual([
+      "Company ops",
+      "Acme App",
+    ]);
+    expect(detail.nonBillableByProject[0]).toMatchObject({
+      projectName: "Company ops",
+      clientName: "TheCurve",
+      hours: 8,
+    });
   });
 
   it("includes unmapped Bitmap users using their billable_target_hours", async () => {

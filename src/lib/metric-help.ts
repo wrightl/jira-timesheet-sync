@@ -478,7 +478,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   "utilisation.pct": {
     title: "Utilisation",
     formula:
-      "Billable timesheet hours ÷ contracted working hours in the selected range × 100. Contracted hours are Bitmap hours_per_week (or the current user_working_durations row) pro-rated by weekday count / 5. Saturday and Sunday timesheet entries and chart points are omitted. Planned and rejected entries are excluded. Status bands: under <50%, watch 50–79%, ok 80–109%, risk ≥110%.",
+      "Billable timesheet hours ÷ contracted working hours in the selected range × 100. Contracted hours are Bitmap hours_per_week (or the current user_working_durations row) pro-rated by weekday count / 5. Saturday and Sunday timesheet entries and chart points are omitted. Planned and rejected entries are excluded. Hours on The Curve company projects are included (non-billable company time is logged there). Status bands: under <50%, watch 50–79%, ok 80–109%, risk ≥110%.",
     sources: [
       "Bitmap timesheet entries (billable flag, hours, state, date)",
       "Bitmap user hours_per_week / user_working_durations",
@@ -491,7 +491,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   "utilisation.billable_hours": {
     title: "Billable hours",
     formula:
-      "Sum of countable Bitmap timesheet hours whose billable flag is true in the selected range. Planned and rejected entries, weekend-dated entries, and hours on the excluded TheCurve client, are omitted. The hint compares this to 80% of contracted working hours.",
+      "Sum of countable Bitmap timesheet hours whose billable flag is true in the selected range, including The Curve company projects. Planned and rejected entries and weekend-dated entries are omitted. The hint compares this to 80% of contracted working hours.",
     sources: [
       "Bitmap timesheet entries (billable=true)",
       "Selected utilisation date range",
@@ -500,7 +500,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   "utilisation.non_billable_hours": {
     title: "Non-billable hours",
     formula:
-      "Sum of countable Bitmap timesheet hours whose billable flag is explicitly false. Entries with a missing billable flag are ignored. The hint is non-billable ÷ (billable + non-billable) in the range.",
+      "Sum of countable Bitmap timesheet hours whose billable flag is explicitly false, including non-billable time logged against The Curve company projects. Entries with a missing billable flag are ignored. The hint is non-billable ÷ (billable + non-billable) in the range.",
     sources: [
       "Bitmap timesheet entries (billable=false)",
       "nonbillable_reason when present",

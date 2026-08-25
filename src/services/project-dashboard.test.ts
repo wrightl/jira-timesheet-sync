@@ -57,9 +57,10 @@ describe("project-dashboard metric helpers", () => {
   it("averages recent billable timesheet burn by day", () => {
     const now = new Date("2026-08-09T12:00:00.000Z");
     const timesheets: BitmapTimesheetEntry[] = [
-      { date: "2026-08-08", hours: 8, billable: true },
+      { date: "2026-08-06", hours: 8, billable: true },
       { date: "2026-08-07", hours: 4, billable: true },
       { date: "2026-08-07", hours: 2, billable: false },
+      { date: "2026-08-08", hours: 10, billable: true },
       { date: "2026-07-01", hours: 40, billable: true },
     ];
     expect(avgDailyBillableBurnHours(timesheets, null, now)).toBe(6);
@@ -69,8 +70,8 @@ describe("project-dashboard metric helpers", () => {
     const now = new Date("2026-08-09T12:00:00.000Z");
     const burndown: BitmapBurndown = {
       burndown: [
-        { date: "2026-08-01", total: 100 * 3600 },
-        { date: "2026-08-08", total: 86 * 3600 },
+        { date: "2026-08-03", total: 100 * 3600 },
+        { date: "2026-08-07", total: 92 * 3600 },
       ],
     };
     expect(avgDailyBillableBurnHours([], burndown, now)).toBe(2);
@@ -79,12 +80,12 @@ describe("project-dashboard metric helpers", () => {
   it("computes remaining hours slip from burndown", () => {
     const burndown: BitmapBurndown = {
       burndown: [
-        { date: "2026-08-01", total: 100 * 3600 },
-        { date: "2026-08-02", total: 95 * 3600 },
-        { date: "2026-08-09", total: 110 * 3600 },
+        { date: "2026-07-29", total: 95 * 3600 },
+        { date: "2026-08-03", total: 100 * 3600 },
+        { date: "2026-08-07", total: 110 * 3600 },
       ],
     };
-    // ~7d prior to 08-09 is 08-02 (95h) → slip +15h
+    // 7 weekdays prior to Fri 08-07 is Wed 07-29 (95h) → slip +15h
     expect(burndownRemainingSlipHours(burndown, 7)).toBe(15);
   });
 });

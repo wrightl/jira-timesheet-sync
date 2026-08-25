@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { Select } from '@/components/ui/select';
+import { isUtcWeekendIsoDate } from '@/lib/weekday-hours';
 import {
     Table,
     TableBody,
@@ -313,12 +314,17 @@ function BurndownChart({
 }) {
     const points = useMemo(() => {
         if (!burndown) return [];
-        const actual = (burndown.burndown ?? []).map((p) => ({
+        const actual = (burndown.burndown ?? [])
+            .filter((p) => !isUtcWeekendIsoDate(p.date))
+            .map((p) => ({
             date: String(p.date),
             total: Number(p.total),
             series: 'actual' as const,
         }));
-        const forecast = (burndown.forecast ?? []).slice(1).map((p) => ({
+        const forecast = (burndown.forecast ?? [])
+            .slice(1)
+            .filter((p) => !isUtcWeekendIsoDate(p.date))
+            .map((p) => ({
             date: String(p.date),
             total: Number(p.total),
             series: 'forecast' as const,

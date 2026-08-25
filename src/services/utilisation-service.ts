@@ -6,6 +6,12 @@ import type {
 } from '@/clients/bitmap-http';
 import { getDb, type Db } from '@/db';
 import { isExcludedClient } from '@/lib/excluded-clients';
+import {
+    isUtcWeekendIsoDate,
+    utcCalendarDateRange,
+    utcWeekdayDateRange,
+    workingHoursForWeekdays,
+} from '@/lib/weekday-hours';
 import { UserMappingsRepository } from '@/repositories/user-mappings-repository';
 import { TeamsRepository } from '@/repositories/teams-repository';
 import {
@@ -207,31 +213,25 @@ export function parseWeeklyWorkingHours(
     return DEFAULT_HOURS_PER_WEEK;
 }
 
-/** Pro-rate weekly contracted hours across the selected calendar range. */
+/** Pro-rate weekly contracted hours across weekdays in the selected range. */
 export function workingHoursForRange(
     weeklyHours: number,
     rangeDays: number,
+    now: Date = new Date(),
 ): number {
-    return weeklyHours * (rangeDays / 7);
+    return workingHoursForWeekdays(
+        weeklyHours,
+        utcWeekdayDateRange(now, rangeDays).length,
+    );
 }
 
 function toDateString(d: Date): string {
     return d.toISOString().slice(0, 10);
 }
 
+/** Weekdays in the last `rangeDays` calendar days, UTC. */
 export function utcDateRange(endDate: Date, rangeDays: number): string[] {
-    const days = Math.min(Math.max(rangeDays, 1), 90);
-    const endMs = Date.parse(`${toDateString(endDate)}T00:00:00.000Z`);
-    const startMs = endMs - (days - 1) * 24 * 60 * 60 * 1000;
-    const dates: string[] = [];
-    for (let i = 0; i < days; i += 1) {
-        dates.push(
-            new Date(startMs + i * 24 * 60 * 60 * 1000)
-                .toISOString()
-                .slice(0, 10),
-        );
-    }
-    return dates;
+    return utcWeekdayDateRange(endDate, rangeDays);
 }
 
 export function entryDateKey(
@@ -284,9 +284,12 @@ type Acc = {
 function personRowFromAcc(
     key: string,
     row: Acc,
-    rangeDays: number,
+    weekdayCount: number,
 ): UtilisationPersonRow {
-    const workingHours = workingHoursForRange(row.weeklyWorkingHours, rangeDays);
+    const workingHours = workingHoursForWeekdays(
+        row.weeklyWorkingHours,
+        weekdayCount,
+    );
     const totalHours = row.billableHours + row.nonBillableHours;
     const utilisationPct =
         workingHours > 0
@@ -334,6 +337,7 @@ export function buildCumulativeUtilisationSeries(input: {
     series: UtilisationSeriesPoint[];
     personSeries: UtilisationPersonSeries[];
 } {
+    const dates = input.dates.filter((date) => !isUtcWeekendIsoDate(date));
     const running = input.people.map((person) => ({
         ...person,
         cumulative: 0,
@@ -341,13 +345,13 @@ export function buildCumulativeUtilisationSeries(input: {
     }));
     const series: UtilisationSeriesPoint[] = [];
 
-    for (let index = 0; index < input.dates.length; index += 1) {
-        const date = input.dates[index]!;
+    for (let index = 0; index < dates.length; index += 1) {
+        const date = dates[index]!;
         let teamBillable = 0;
         let teamWorking = 0;
         for (const person of running) {
             person.cumulative += person.dailyBillableHours.get(date) ?? 0;
-            const workingHours = workingHoursForRange(
+            const workingHours = workingHoursForWeekdays(
                 person.weeklyWorkingHours,
                 index + 1,
             );
@@ -403,6 +407,7 @@ export function aggregateProjectBreakdown(
     for (const entry of entries) {
         if (!isCountableTimesheetEntry(entry)) continue;
         if (isExcludedClient(entry.project?.client)) continue;
+        if (isUtcWeekendIsoDate(entry.date)) continue;
         const hours = typeof entry.hours === 'number' ? entry.hours : 0;
         if (!Number.isFinite(hours) || hours <= 0) continue;
         const flag = timesheetBillableFlag(entry.billable);
@@ -473,6 +478,7 @@ export function aggregateNonBillable(entries: BitmapTimesheetEntry[]): {
     for (const entry of entries) {
         if (!isCountableTimesheetEntry(entry)) continue;
         if (isExcludedClient(entry.project?.client)) continue;
+        if (isUtcWeekendIsoDate(entry.date)) continue;
         if (timesheetBillableFlag(entry.billable) !== false) continue;
         const hours = typeof entry.hours === 'number' ? entry.hours : 0;
         if (!Number.isFinite(hours) || hours <= 0) continue;
@@ -648,8 +654,10 @@ export class UtilisationService {
         const rangeDays = Math.min(Math.max(options?.rangeDays ?? 7, 1), 90);
         const userId = options?.userId?.trim() || null;
         const endDate = new Date();
-        const dates = utcDateRange(endDate, rangeDays);
-        const startDate = new Date(`${dates[0]}T00:00:00.000Z`);
+        const calendarDates = utcCalendarDateRange(endDate, rangeDays);
+        const dates = utcWeekdayDateRange(endDate, rangeDays);
+        const startKey = calendarDates[0] ?? dates[0];
+        const startDate = new Date(`${startKey}T00:00:00.000Z`);
 
         const tokenOk = await this.settings.isTokenConfigured();
         if (!tokenOk) {
@@ -812,6 +820,7 @@ export class UtilisationService {
         for (const entry of entries) {
             if (!isCountableTimesheetEntry(entry)) continue;
             if (isExcludedClient(entry.project?.client)) continue;
+            if (isUtcWeekendIsoDate(entry.date)) continue;
             const hours = typeof entry.hours === 'number' ? entry.hours : 0;
             if (!Number.isFinite(hours) || hours <= 0) continue;
             const bitmapUserId = entry.user?.id;
@@ -873,7 +882,7 @@ export class UtilisationService {
 
         const people = sortPeople(
             [...byKey.entries()].map(([key, row]) =>
-                personRowFromAcc(key, row, rangeDays),
+                personRowFromAcc(key, row, dates.length),
             ),
         );
         const { series, personSeries } = buildCumulativeUtilisationSeries({
@@ -938,7 +947,7 @@ export class UtilisationService {
                     billableHours: 0,
                     nonBillableHours: 0,
                 },
-                snapshot.rangeDays,
+                snapshot.series.length,
             );
 
         const entries = snapshot.entriesByUser.get(userId) ?? [];

@@ -1,3 +1,5 @@
+import { isUtcWeekend } from "@/lib/weekday-hours";
+
 export const DASHBOARD_RANGES = [
   { value: "24h", label: "Last 24 hours" },
   { value: "7d", label: "Last 7 days" },
@@ -242,6 +244,7 @@ export function buildVolumeBuckets(
         ),
       );
       const key = toUtcHourKey(d);
+      if (isUtcWeekend(d)) continue;
       result.push({
         key,
         label: formatHourLabel(key),
@@ -255,6 +258,7 @@ export function buildVolumeBuckets(
           now.getUTCDate() - i,
         ),
       );
+      if (isUtcWeekend(d)) continue;
       const key = toUtcDateKey(d);
       result.push({
         key,
@@ -326,7 +330,15 @@ export function assembleDashboardStats(parts: {
     volume: buildVolumeBuckets(parts.volumeRows, range, parts.now),
     volumeGranularity: volumeGranularity(range),
     config: parts.config,
-    recentIssues: parts.recentIssueRows.map((row) => ({
+    recentIssues: parts.recentIssueRows
+      .filter((row) => {
+        const created =
+          typeof row.createdAt === "string"
+            ? new Date(row.createdAt)
+            : row.createdAt;
+        return !isUtcWeekend(created);
+      })
+      .map((row) => ({
       id: row.id,
       jiraWorklogId: row.jiraWorklogId,
       jiraIssueKey: row.jiraIssueKey,

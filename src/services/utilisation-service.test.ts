@@ -205,8 +205,12 @@ describe("utilisation helpers", () => {
     expect(parseWeeklyWorkingHours({ hours_per_week: 30 }, asOf)).toBe(30);
     expect(parseWeeklyWorkingHours({ hours_per_week: null }, asOf)).toBe(37.5);
     expect(parseWeeklyWorkingHours(null, asOf)).toBe(37.5);
-    expect(workingHoursForRange(37.5, 7)).toBe(37.5);
-    expect(workingHoursForRange(37.5, 1)).toBeCloseTo(37.5 / 7);
+    const tuesday = new Date("2026-08-25T15:00:00.000Z");
+    expect(workingHoursForRange(37.5, 7, tuesday)).toBe(37.5);
+    expect(workingHoursForRange(37.5, 1, tuesday)).toBe(7.5);
+    expect(
+      workingHoursForRange(37.5, 1, new Date("2026-08-23T15:00:00.000Z")),
+    ).toBe(0);
   });
 
   it("computes hours still needed to hit the billable target", () => {
@@ -218,9 +222,8 @@ describe("utilisation helpers", () => {
     expect(hoursToTarget(10, 0)).toBeNull();
   });
 
-  it("builds a UTC inclusive date range ending today", () => {
+  it("builds a UTC weekday date range ending today", () => {
     expect(utcDateRange(new Date("2026-08-25T15:00:00.000Z"), 3)).toEqual([
-      "2026-08-23",
       "2026-08-24",
       "2026-08-25",
     ]);
@@ -253,9 +256,32 @@ describe("utilisation helpers", () => {
     expect(result.personSeries).toHaveLength(2);
     const adaDay2 = result.personSeries[0]!.points[1];
     expect(adaDay2?.billableHours).toBe(12);
-    expect(adaDay2?.workingHours).toBe(10.7);
+    expect(adaDay2?.workingHours).toBe(15);
     expect(result.series[1]?.billableHours).toBe(15);
-    expect(result.series[1]?.utilisationPct).toBe(70);
+    expect(result.series[1]?.utilisationPct).toBe(50);
+  });
+
+  it("ignores Saturday and Sunday dates in cumulative series", () => {
+    const result = buildCumulativeUtilisationSeries({
+      dates: ["2026-08-21", "2026-08-22", "2026-08-24"],
+      people: [
+        {
+          key: "ada",
+          displayName: "Ada",
+          weeklyWorkingHours: 37.5,
+          dailyBillableHours: new Map([
+            ["2026-08-21", 6],
+            ["2026-08-22", 8],
+            ["2026-08-24", 6],
+          ]),
+        },
+      ],
+    });
+    expect(result.series.map((point) => point.date)).toEqual([
+      "2026-08-21",
+      "2026-08-24",
+    ]);
+    expect(result.series[1]?.billableHours).toBe(12);
   });
 
   it("aggregates project mix and non-billable reasons", () => {
@@ -284,6 +310,13 @@ describe("utilisation helpers", () => {
         billable: true,
         state: "planned",
         project: { id: "p1", name: "Client App" },
+      },
+      {
+        hours: 10,
+        billable: true,
+        state: "approved",
+        date: "2026-08-22",
+        project: { id: "p1", name: "Client App", client: { id: "c1", name: "Acme" } },
       },
     ];
 
@@ -626,14 +659,50 @@ describe("UtilisationService", () => {
       ],
     });
 
+    vi.useFakeTimers({ now: new Date("2026-08-25T15:00:00.000Z") });
     const result = await service.getUtilisation({ rangeDays: 7 });
+    vi.useRealTimers();
     expect(result.targetUtilisationPct).toBe(80);
-    expect(result.series).toHaveLength(7);
+    expect(result.series).toHaveLength(5);
+    expect(
+      result.series.every(
+        (point) => !["2026-08-22", "2026-08-23"].includes(point.date),
+      ),
+    ).toBe(true);
     const ada = result.people.find((p) => p.key === "bm-ada");
     const adaSeries = result.personSeries.find((p) => p.key === "bm-ada");
-    expect(adaSeries?.points).toHaveLength(7);
+    expect(adaSeries?.points).toHaveLength(5);
     expect(adaSeries?.points.at(-1)?.utilisationPct).toBe(ada?.utilisationPct);
     expect(adaSeries?.points.at(-1)?.billableHours).toBe(18);
+  });
+
+  it("omits Saturday and Sunday timesheet hours from utilisation totals", async () => {
+    vi.useFakeTimers({ now: new Date("2026-08-25T15:00:00.000Z") });
+    const { service } = makeService({
+      entries: [
+        {
+          user: { id: "bm-ada" },
+          hours: 6,
+          billable: true,
+          state: "approved",
+          date: "2026-08-24",
+        },
+        {
+          user: { id: "bm-ada" },
+          hours: 8,
+          billable: true,
+          state: "approved",
+          date: "2026-08-22",
+        },
+      ],
+    });
+    const result = await service.getUtilisation({ rangeDays: 7 });
+    vi.useRealTimers();
+    const ada = result.people.find((p) => p.key === "bm-ada");
+    expect(ada?.billableHours).toBe(6);
+    expect(result.series.some((point) => point.date === "2026-08-22")).toBe(
+      false,
+    );
   });
 
   it("returns person detail with project and non-billable breakdowns", async () => {

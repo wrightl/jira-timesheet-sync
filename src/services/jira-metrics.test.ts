@@ -84,7 +84,7 @@ describe("jira-metrics helpers", () => {
             name: "Open",
             statusCategory: { key: "new" },
           },
-          created: "2026-08-01T00:00:00.000Z",
+          created: "2026-07-31T00:00:00.000Z",
           priority: { name: "High" },
         },
       }),
@@ -132,7 +132,7 @@ describe("jira-metrics helpers", () => {
           status: { name: "Done", statusCategory: { key: "done" } },
           created: "2026-07-20T00:00:00.000Z",
           updated: "2026-08-07T00:00:00.000Z",
-          statuscategorychangedate: "2026-08-02T00:00:00.000Z",
+          statuscategorychangedate: "2026-08-03T00:00:00.000Z",
         },
       }),
     ];

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { cn } from '@/lib/cn';
+import { isUtcWeekendIsoDate } from '@/lib/weekday-hours';
 import {
     TARGET_BILLABLE_UTILISATION_PCT,
     TEAM_SERIES_KEY,
@@ -63,7 +64,9 @@ export function utilisationChartSeries(options: {
             key: TEAM_SERIES_KEY,
             label: 'Team average',
             color: 'var(--accent)',
-            points: options.teamSeries,
+            points: options.teamSeries.filter(
+            (point) => !isUtcWeekendIsoDate(point.date),
+        ),
         });
     }
     options.personSeries.forEach((person, index) => {
@@ -71,7 +74,9 @@ export function utilisationChartSeries(options: {
             key: person.key,
             label: person.displayName,
             color: colorForPerson(index),
-            points: person.points,
+            points: person.points.filter(
+                (point) => !isUtcWeekendIsoDate(point.date),
+            ),
         });
     });
     return series;
@@ -88,22 +93,33 @@ export function UtilisationLineChart({
     initiallyVisibleKeys?: string[];
     emptyLabel?: string;
 }) {
+    const weekdaySeries = useMemo(
+        () =>
+            series.map((row) => ({
+                ...row,
+                points: row.points.filter(
+                    (point) => !isUtcWeekendIsoDate(point.date),
+                ),
+            })),
+        [series],
+    );
+
     const defaultVisible = useMemo(() => {
         if (initiallyVisibleKeys && initiallyVisibleKeys.length > 0) {
             return new Set(initiallyVisibleKeys);
         }
-        const keys = series.map((row) => row.key);
+        const keys = weekdaySeries.map((row) => row.key);
         if (keys.length <= 9) return new Set(keys);
         const visible = new Set<string>();
         if (keys.includes(TEAM_SERIES_KEY)) visible.add(TEAM_SERIES_KEY);
         return visible.size > 0 ? visible : new Set(keys.slice(0, 8));
-    }, [initiallyVisibleKeys, series]);
+    }, [initiallyVisibleKeys, weekdaySeries]);
 
     const [visible, setVisible] = useState<Set<string>>(defaultVisible);
     const visibleKeys = visible.size > 0 ? visible : defaultVisible;
 
-    const plotted = series.filter((row) => visibleKeys.has(row.key));
-    const dates = series[0]?.points.map((point) => point.date) ?? [];
+    const plotted = weekdaySeries.filter((row) => visibleKeys.has(row.key));
+    const dates = weekdaySeries[0]?.points.map((point) => point.date) ?? [];
     const values = plotted.flatMap((row) =>
         row.points
             .map((point) => point.utilisationPct)
@@ -247,9 +263,9 @@ export function UtilisationLineChart({
                 cumulative billable hours versus contracted working hours through
                 each day in the range.
             </p>
-            {series.length > 1 ? (
+            {weekdaySeries.length > 1 ? (
                 <ul className="flex flex-wrap gap-2">
-                    {series.map((row) => {
+                    {weekdaySeries.map((row) => {
                         const active = visibleKeys.has(row.key);
                         const swatch = (
                             <span

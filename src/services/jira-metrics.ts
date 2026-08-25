@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { JiraApiClient, JiraIssue } from "@/clients/jira-http";
 import { extractJiraSpaceKeyFromBudgetJql } from "@/lib/jira-budget-jql";
 import { getEnv } from "@/lib/env";
+import { isUtcWeekendIsoDate, weekdayDaysBetween } from "@/lib/weekday-hours";
 import {
   createApiCacheService,
   jiraSearchCacheKey,
@@ -52,7 +53,7 @@ export type JiraIssueAggregates = {
     summary: string | null;
     ageDays: number | null;
   } | null;
-  /** Median calendar days from created → done date for issues completed in the window. */
+  /** Median weekday days from created → done date for issues completed in the window. */
   cycleTimeMedianDays: number | null;
   issues: JiraIssue[];
 };
@@ -98,7 +99,7 @@ function daysSince(iso: string | null | undefined, now: Date): number | null {
   if (!iso) return null;
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return null;
-  return Math.max(0, Math.floor((now.getTime() - t) / (24 * 60 * 60 * 1000)));
+  return Math.max(0, Math.floor(weekdayDaysBetween(new Date(t), now)));
 }
 
 function withinDays(
@@ -106,8 +107,11 @@ function withinDays(
   now: Date,
   windowDays: number,
 ): boolean {
-  const age = daysSince(iso, now);
-  return age != null && age <= windowDays;
+  if (!iso || isUtcWeekendIsoDate(iso)) return false;
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return false;
+  const age = Math.max(0, Math.floor((now.getTime() - t) / (24 * 60 * 60 * 1000)));
+  return age <= windowDays;
 }
 
 export function composeScopedJql(
@@ -241,7 +245,7 @@ export function aggregateJiraIssues(
       const created = i.fields.created ? Date.parse(i.fields.created) : NaN;
       const done = completionAt(i) ? Date.parse(completionAt(i)!) : NaN;
       if (!Number.isFinite(created) || !Number.isFinite(done)) return null;
-      return Math.max(0, (done - created) / (24 * 60 * 60 * 1000));
+      return Math.max(0, weekdayDaysBetween(new Date(created), new Date(done)));
     })
     .filter((d): d is number => d != null)
     .sort((a, b) => a - b);

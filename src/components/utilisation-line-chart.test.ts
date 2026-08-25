@@ -84,7 +84,9 @@ describe("UtilisationLineChart", () => {
     expect(html).toContain("80%");
     expect(html).toContain("Team average");
     expect(html).toContain("Ada Lovelace");
-    expect(html).not.toContain("/utilisation/bm-ada");
-    expect(html).not.toContain("Details");
+    expect(html).not.toContain("22/8");
+    expect(html).not.toContain("23/8");
+    expect(html).toContain("21/8");
+    expect(html).toContain("24/8");
   });
 });

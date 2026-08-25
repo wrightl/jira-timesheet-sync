@@ -217,8 +217,9 @@ export function UtilisationDashboard({ authed }: { authed: boolean }) {
                 <CardTitle className="mb-1">Billable utilisation</CardTitle>
                 <CardDescription className="mb-4">
                     Billable hours from Bitmap timesheets versus each
-                    person&apos;s contracted working hours in the range
-                    (Bitmap hours_per_week, pro-rated). Planned and rejected
+                    person&apos;s contracted working hours on weekdays in the
+                    range (Bitmap hours_per_week, pro-rated over weekdays;
+                    Saturday and Sunday are excluded). Planned and rejected
                     entries are excluded. The chart uses a dotted{' '}
                     {data?.targetUtilisationPct ??
                         TARGET_BILLABLE_UTILISATION_PCT}

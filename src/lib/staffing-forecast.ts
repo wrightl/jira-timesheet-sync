@@ -1,7 +1,9 @@
+import { isoDateKey, utcWeekdayDiffDays } from "@/lib/weekday-hours";
+
 /**
  * Forecast / staffing helpers for portfolio and project dashboards.
  * Eng-week = 30 billable hours (37.5h week × 80% utilisation).
- * Gap is remaining work beyond 1 FTE calendar capacity until the project
+ * Gap is remaining work beyond 1 FTE weekday capacity until the project
  * end (or forecast) date.
  */
 
@@ -33,17 +35,13 @@ function toDateKey(value: string | null | undefined): string | null {
   return new Date(t).toISOString().slice(0, 10);
 }
 
-function calendarDaysUntil(
+function weekdaysUntil(
   targetIso: string | null | undefined,
   now: Date = new Date(),
 ): number | null {
-  const key = toDateKey(targetIso);
+  const key = isoDateKey(targetIso);
   if (!key) return null;
-  const todayKey = now.toISOString().slice(0, 10);
-  const target = Date.parse(`${key}T00:00:00.000Z`);
-  const today = Date.parse(`${todayKey}T00:00:00.000Z`);
-  if (!Number.isFinite(target) || !Number.isFinite(today)) return null;
-  return Math.round((target - today) / (24 * 60 * 60 * 1000));
+  return utcWeekdayDiffDays(key, now);
 }
 
 export function computeStaffingForecast(input: {
@@ -65,11 +63,11 @@ export function computeStaffingForecast(input: {
   const forecastKey = toDateKey(input.forecastEndDate);
   // Prefer contractual end date for the staffing ask; fall back to forecast.
   const targetDate = endKey ?? forecastKey;
-  const daysToTarget = calendarDaysUntil(targetDate, input.now ?? new Date());
+  const daysToTarget = weekdaysUntil(targetDate, input.now ?? new Date());
 
   let staffingGapEngWeeks: number | null = null;
   if (remainingEngWeeks != null && daysToTarget != null && daysToTarget > 0) {
-    const capacityEngWeeksOneFte = daysToTarget / 7;
+    const capacityEngWeeksOneFte = daysToTarget / 5;
     staffingGapEngWeeks = round1(
       Math.max(0, remainingEngWeeks - capacityEngWeeksOneFte),
     );

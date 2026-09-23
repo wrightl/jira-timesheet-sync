@@ -186,7 +186,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   billable_runway_hours: {
     title: "Billable runway",
     formula:
-      "Billable hours still available on the project: billable_time_remaining, or time_remaining if billable remaining is missing.",
+      "Billable hours still available on the project: billable_time_remaining, or time_remaining if billable remaining is missing. Shown as working time (7.5h day, 5-day week), e.g. 47.5h → 1w 1d 2.5h.",
     sources: ["Bitmap project remaining hours"],
     unavailable: "Shown as — when Bitmap does not provide remaining hours.",
     status: "Risk at ≤0 hours remaining; watch below 8 hours; otherwise ok.",
@@ -250,7 +250,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   remaining_hours_slip: {
     title: "Remaining hours slip",
     formula:
-      "Latest Bitmap burndown remaining hours minus remaining hours from about 7 weekdays earlier. Weekend burndown points are omitted. Positive means remaining work grew (scope or estimates increased).",
+      "Latest Bitmap burndown remaining hours minus remaining hours from about 7 weekdays earlier. Weekend burndown points are omitted. Positive means remaining work grew (scope or estimates increased). Shown as working time (7.5h day, 5-day week), e.g. 47.5h → 1w 1d 2.5h.",
     sources: ["Bitmap burndown history"],
     unavailable: "Needs weekday burndown points spanning about 7 weekdays.",
     status: "Risk at ≥16 hours of growth; watch at ≥8 hours; otherwise ok.",
@@ -300,15 +300,15 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   estimate_delta_hours: {
     title: "Jira vs Bitmap estimate delta",
     formula:
-      "When live Jira metrics and Bitmap time_remaining both exist: Jira remaining estimate hours minus Bitmap time_remaining. Otherwise Bitmap’s stored remaining_jira_estimates_delta.hours. Negative means Jira remaining is lower than Bitmap’s remaining budget.",
-    sources: ["Jira remaining estimates", "Bitmap time_remaining / stored delta"],
-    unavailable: "Shown as — when neither a live comparison nor a Bitmap delta is available.",
-    status: "Risk if the live/stored delta is ≤ −8 hours (Jira remaining much lower); watch if negative but above −8.",
+      "Remaining effort on in-scope Jira tickets minus remaining time in the project budget (time_remaining, or billable_time_remaining if that is missing). Live Jira remaining estimates are preferred; otherwise Bitmap jira_budget_remaining_effort. If those cannot be compared, Bitmap’s stored remaining_jira_estimates_delta.hours is used. Positive means required work exceeds remaining budget. Shown as working time (7.5h day, 5-day week), e.g. 47.5h → 1w 1d 2.5h.",
+    sources: ["Jira remaining estimates", "Bitmap time_remaining / remaining effort / stored delta"],
+    unavailable: "Shown as — when remaining Jira effort and remaining budget cannot be compared and no Bitmap delta is stored.",
+    status: "Risk (red) when the delta is greater than 0 (work required exceeds remaining budget). Healthy (green) when the delta is 0 or negative.",
   },
   remaining_effort_hours: {
     title: "Remaining effort",
     formula:
-      "Sum of remaining estimates on open Jira issues in the project’s Jira budget JQL (or project-key fallback) when Jira is configured. Otherwise Bitmap jira_budget_remaining_effort.",
+      "Sum of remaining estimates on open Jira issues in the project’s Jira budget JQL (or project-key fallback) when Jira is configured. Otherwise Bitmap jira_budget_remaining_effort. Shown as working time (7.5h day, 5-day week), e.g. 47.5h → 1w 1d 2.5h.",
     sources: ["Jira remaining estimates", "Bitmap remaining effort as fallback"],
     unavailable: "Shown as — when neither Jira nor Bitmap remaining effort is available.",
     status: "Watch if Jira remaining is more than 8 hours above Bitmap time_remaining.",

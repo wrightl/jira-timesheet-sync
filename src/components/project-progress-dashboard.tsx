@@ -18,6 +18,7 @@ import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { RefreshButton } from '@/components/ui/refresh-button';
 import { Select } from '@/components/ui/select';
 import { isUtcWeekendIsoDate } from '@/lib/weekday-hours';
+import { formatWorkingDuration } from '@/lib/working-duration';
 import {
     Table,
     TableBody,
@@ -247,7 +248,17 @@ function MetricCard({
                 </>
             ) : (
                 <>
-                    <p className="text-2xl font-semibold tracking-tight text-foreground">
+                    <p
+                        className={cn(
+                            'text-2xl font-semibold tracking-tight text-foreground',
+                            metric.id === 'estimate_delta_hours' &&
+                                metric.status === 'ok' &&
+                                'text-ok',
+                            metric.id === 'estimate_delta_hours' &&
+                                metric.status === 'risk' &&
+                                'text-danger',
+                        )}
+                    >
                         {metric.displayValue}
                     </p>
                     {metric.detail ? (
@@ -1184,9 +1195,9 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
-                                                    {row.overageHours == null
-                                                        ? '—'
-                                                        : `${row.overageHours}h`}
+                                                    {formatWorkingDuration(
+                                                        row.overageHours,
+                                                    )}
                                                     {row.unexpected ? (
                                                         <Badge
                                                             variant="warning"

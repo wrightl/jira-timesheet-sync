@@ -6,7 +6,9 @@ import {
   billableMixStatus,
   burndownRemainingSlipHours,
   calendarElapsedPct,
+  computeEstimateDeltaHours,
   defectInjectionStatus,
+  estimateDeltaStatus,
   healthCheckScoreStatus,
   paceStatus,
   remainingHoursSlipStatus,
@@ -52,6 +54,23 @@ describe("project-dashboard metric helpers", () => {
     expect(healthCheckScoreStatus(3)).toBe("risk");
     expect(healthCheckScoreStatus(1)).toBe("watch");
     expect(healthCheckScoreStatus(0)).toBe("ok");
+  });
+
+  it("computes estimate delta as remaining Jira effort minus remaining budget", () => {
+    expect(computeEstimateDeltaHours(60, 12.5)).toBe(47.5);
+    expect(computeEstimateDeltaHours(10, 10)).toBe(0);
+    expect(computeEstimateDeltaHours(8, 16)).toBe(-8);
+    expect(computeEstimateDeltaHours(null, 16, 3)).toBe(3);
+    expect(computeEstimateDeltaHours(null, null)).toBeNull();
+  });
+
+  it("treats a positive estimate delta as risk and zero/negative as healthy", () => {
+    expect(estimateDeltaStatus(0.1)).toBe("risk");
+    expect(estimateDeltaStatus(47.5)).toBe("risk");
+    expect(estimateDeltaStatus(0)).toBe("ok");
+    expect(estimateDeltaStatus(-0.5)).toBe("ok");
+    expect(estimateDeltaStatus(-8)).toBe("ok");
+    expect(estimateDeltaStatus(null)).toBe("unavailable");
   });
 
   it("averages recent billable timesheet burn by day", () => {

@@ -187,7 +187,7 @@ Authenticated users can open **Projects** (`/projects`) to inspect budget burn, 
 
 ## Engineering manager surfaces
 
-- **Portfolio** (`/portfolio`) — cross-client active project rollup (burn, runway, schedule slip, risk tier)
+- **Portfolio** (`/portfolio`) — cross-client active project rollup (burn, runway, staffing, and risk from Jira vs Bitmap estimate delta)
 - **Utilisation** (`/utilisation`) — billable hours from Bitmap timesheets vs Bitmap `billable_target_hours`; optional **Teams** (`/teams`, admin)
 - **Status pack** (`/status`) — one-click weekly Markdown narrative for a project
 - **GitHub** — review lag, stale PRs, merge rate, WIP by author (in addition to open/draft counts). PAT expiry is shown in Settings and on the GitHub dashboard; cron `GET /api/github/token-expiry-reminders` (Bearer `CRON_SECRET`) sends Slack DM + email at 14 days and 3 days before expiry. On **Settings**, pick a subset of org repositories (empty = all) to filter the dashboard.

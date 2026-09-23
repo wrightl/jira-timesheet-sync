@@ -206,6 +206,7 @@ describe("portfolio-dashboard-cache data", () => {
           staffingGapEngWeeks: null,
           staffingAsk: null,
           forecastConfidence: "unavailable",
+          estimateDeltaHours: 0,
           unhealthyChecks: 0,
           healthy: true,
           riskTier: "ok",

@@ -86,7 +86,7 @@ export const ALL_METRIC_HELP_IDS = [
 export type MetricHelpId = (typeof ALL_METRIC_HELP_IDS)[number];
 
 const RISK_TIER_SHARED =
-  "Each in-window project is scored, then counted after the current client, owner, team, and risk filters. A project is in the portfolio when its start date is on or before today and its end date is missing, open-ended, or on or after today. Risk is the highest matching signal: budget burn ≥ App Settings budgetBurnPctRisk (default 90%; watch ≥85% when that is below the risk threshold); runway ≤ App Settings runwayDaysRisk (default 5; watch ≤10); forecast end minus planned end ≥ App Settings scheduleSlipDaysRisk (default 7 weekdays late; watch if any weekdays late); ≥3 failing Bitmap health checks (watch ≥1), or marked unhealthy; staffing gap ≥2 eng-weeks (watch ≥0.5). Burn and runway use the same formulas as the project dashboard. If burn, runway, slip, health checks, and remaining eng-weeks are all missing, the project is unavailable and is not counted in Risk, Watch, or Ok.";
+  "Each in-window project is scored, then counted after the current client, owner, team, and risk filters. A project is in the portfolio when its start date is on or before today and its end date is missing, open-ended, or on or after today. Overall health uses only the Jira vs Bitmap estimate delta (remaining Jira effort minus remaining project budget). Risk when the delta is greater than 0 (required work exceeds remaining budget). Ok when the delta is 0 or negative. Unavailable when the delta cannot be computed. Watch is unused for project health.";
 
 export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   "sync.synced": {
@@ -145,7 +145,8 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
     title: "Risk",
     formula: `Count of filtered in-window projects whose risk tier is risk. ${RISK_TIER_SHARED}`,
     sources: [
-      "Bitmap project budget, dates, health checks, and remaining hours",
+      "Jira remaining estimates / Bitmap remaining effort",
+      "Bitmap time_remaining (or billable_time_remaining / stored delta)",
       "Portfolio filters",
     ],
   },
@@ -153,15 +154,17 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
     title: "Watch",
     formula: `Count of filtered in-window projects whose risk tier is watch. ${RISK_TIER_SHARED}`,
     sources: [
-      "Bitmap project budget, dates, health checks, and remaining hours",
+      "Jira remaining estimates / Bitmap remaining effort",
+      "Bitmap time_remaining (or billable_time_remaining / stored delta)",
       "Portfolio filters",
     ],
   },
   "portfolio.ok": {
     title: "Ok",
-    formula: `Count of filtered in-window projects whose risk tier is ok (no watch or risk signal). ${RISK_TIER_SHARED}`,
+    formula: `Count of filtered in-window projects whose risk tier is ok. ${RISK_TIER_SHARED}`,
     sources: [
-      "Bitmap project budget, dates, health checks, and remaining hours",
+      "Jira remaining estimates / Bitmap remaining effort",
+      "Bitmap time_remaining (or billable_time_remaining / stored delta)",
       "Portfolio filters",
     ],
   },
@@ -303,7 +306,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
       "Remaining effort on in-scope Jira tickets minus remaining time in the project budget (time_remaining, or billable_time_remaining if that is missing). Live Jira remaining estimates are preferred; otherwise Bitmap jira_budget_remaining_effort. If those cannot be compared, Bitmap’s stored remaining_jira_estimates_delta.hours is used. Positive means required work exceeds remaining budget. Shown as working time (7.5h day, 5-day week), e.g. 47.5h → 1w 1d 2.5h.",
     sources: ["Jira remaining estimates", "Bitmap time_remaining / remaining effort / stored delta"],
     unavailable: "Shown as — when remaining Jira effort and remaining budget cannot be compared and no Bitmap delta is stored.",
-    status: "Risk (red) when the delta is greater than 0 (work required exceeds remaining budget). Healthy (green) when the delta is 0 or negative.",
+    status: "Risk (red) when the delta is greater than 0 (work required exceeds remaining budget). Healthy (green) when the delta is 0 or negative. This status is the overall project health used on Portfolio, Projects, Status, and alerts.",
   },
   remaining_effort_hours: {
     title: "Remaining effort",

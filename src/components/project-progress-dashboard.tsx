@@ -993,12 +993,16 @@ export function ProjectProgressDashboard({ authed }: { authed: boolean }) {
                                     variant={
                                         dashboard.project.healthy === false
                                             ? 'danger'
-                                            : 'ok'
+                                            : dashboard.project.healthy === true
+                                              ? 'ok'
+                                              : 'muted'
                                     }
                                 >
                                     {dashboard.project.healthy === false
-                                        ? `Unhealthy (${dashboard.project.unhealthyChecks ?? '?'})`
-                                        : 'Healthy'}
+                                        ? 'Risk'
+                                        : dashboard.project.healthy === true
+                                          ? 'Healthy'
+                                          : 'Health unavailable'}
                                 </Badge>
                                 <Badge
                                     variant={

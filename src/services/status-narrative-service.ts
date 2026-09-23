@@ -69,20 +69,13 @@ export class StatusNarrativeService {
       highlights.push(`Throughput (30d): ${throughput.displayValue}`);
     }
 
+    const estimateDelta = dashboard.metrics.estimateDeltaHours;
     if (row?.riskReasons?.length) {
       risks.push(...row.riskReasons);
-    }
-    for (const metric of [
-      dashboard.metrics.budgetBurnPct,
-      dashboard.metrics.runwayDays,
-      dashboard.metrics.staffingGapEngWeeks,
-      dashboard.metrics.ageingWipCount,
-      dashboard.metrics.openBugCount,
-      dashboard.metrics.scheduleVsForecast,
-    ]) {
-      if (metric.status === "risk" || metric.status === "watch") {
-        risks.push(`${metric.label}: ${metric.displayValue}`);
-      }
+    } else if (estimateDelta.status === "risk") {
+      risks.push(
+        `Jira vs Bitmap estimate delta: ${estimateDelta.displayValue}`,
+      );
     }
 
     const uniqueRisks = [...new Set(risks)].slice(0, 8);
@@ -118,6 +111,10 @@ export class StatusNarrativeService {
       line(
         "Schedule vs forecast",
         dashboard.metrics.scheduleVsForecast.displayValue,
+      ),
+      line(
+        "Jira vs Bitmap estimate delta",
+        estimateDelta.displayValue,
       ),
       line(
         "Remaining effort",

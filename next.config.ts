@@ -54,6 +54,16 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
       {
+        source: "/api/utilization/:userId",
+        destination: "/api/utilisation/:userId",
+        permanent: true,
+      },
+      {
+        source: "/utilization/:userId",
+        destination: "/utilisation/:userId",
+        permanent: true,
+      },
+      {
         source: "/my-settings",
         destination: "/settings",
         permanent: true,

@@ -39,7 +39,7 @@ describe("bitmap project metrics", () => {
       billable_time_used: 400,
     };
     const timesheets = [
-      { date: "2026-08-08", hours: 6, billable: true },
+      { date: "2026-08-06", hours: 6, billable: true },
       { date: "2026-08-07", hours: 6, billable: true },
     ];
     expect(

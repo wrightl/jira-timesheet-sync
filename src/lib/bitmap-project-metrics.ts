@@ -4,6 +4,13 @@ import type {
   BitmapTimesheetEntry,
 } from "@/clients/bitmap-http";
 import { DEFAULT_ALERT_THRESHOLDS } from "@/lib/alert-thresholds";
+import {
+  countUtcWeekdaysBetween,
+  isoDateKey,
+  isUtcWeekendIsoDate,
+  utcAddWeekdays,
+  weekdayDaysBetween,
+} from "@/lib/weekday-hours";
 
 export const BUDGET_BURN_WATCH_PCT = 85;
 export const RUNWAY_FALLBACK_HOURS_PER_DAY = 6;
@@ -86,7 +93,7 @@ export function avgDailyBillableBurnHours(
     const hours = typeof entry.hours === "number" ? entry.hours : 0;
     if (!Number.isFinite(hours) || hours <= 0) continue;
     const date = entry.date ? String(entry.date).slice(0, 10) : null;
-    if (!date) continue;
+    if (!date || isUtcWeekendIsoDate(date)) continue;
     const t = Date.parse(date);
     if (!Number.isFinite(t) || t < cutoff) continue;
     byDay.set(date, (byDay.get(date) ?? 0) + hours);
@@ -103,7 +110,7 @@ export function avgDailyBillableBurnHours(
       date: String(p.date).slice(0, 10),
       hours: burndownTotalToHours(Number(p.total)),
     }))
-    .filter((p) => Number.isFinite(p.hours))
+    .filter((p) => Number.isFinite(p.hours) && !isUtcWeekendIsoDate(p.date))
     .sort((a, b) => a.date.localeCompare(b.date));
 
   if (points.length < 2) return null;
@@ -113,9 +120,7 @@ export function avgDailyBillableBurnHours(
   if (!first || !last) return null;
   const daySpan = Math.max(
     1,
-    Math.round(
-      (Date.parse(last.date) - Date.parse(first.date)) / (24 * 60 * 60 * 1000),
-    ),
+    countUtcWeekdaysBetween(first.date, last.date, { exclusiveStart: true }),
   );
   const burned = first.hours - last.hours;
   if (!Number.isFinite(burned) || burned <= 0) return null;
@@ -133,7 +138,7 @@ export function lifetimeDailyBurnHours(
   }
   const elapsedDays = Math.max(
     1,
-    (now.getTime() - start) / (24 * 60 * 60 * 1000),
+    weekdayDaysBetween(new Date(start), now),
   );
   const daily = logged / elapsedDays;
   return daily > 0 ? daily : null;
@@ -174,18 +179,19 @@ export function burndownRemainingSlipHours(
       date: String(p.date).slice(0, 10),
       hours: burndownTotalToHours(Number(p.total)),
     }))
-    .filter((p) => Number.isFinite(p.hours))
+    .filter((p) => Number.isFinite(p.hours) && !isUtcWeekendIsoDate(p.date))
     .sort((a, b) => a.date.localeCompare(b.date));
 
   if (points.length < 2) return null;
   const latest = points[points.length - 1];
   if (!latest) return null;
-  const targetMs =
-    Date.parse(latest.date) - lookbackDays * 24 * 60 * 60 * 1000;
+  const latestDate = new Date(`${latest.date}T00:00:00.000Z`);
+  const targetKey = isoDateKey(utcAddWeekdays(latestDate, -lookbackDays));
+  if (!targetKey) return null;
 
   let prior = points[0];
   for (const point of points) {
-    if (Date.parse(point.date) <= targetMs) prior = point;
+    if (point.date <= targetKey) prior = point;
   }
   if (!prior || prior.date === latest.date) return null;
   return round1(latest.hours - prior.hours);

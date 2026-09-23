@@ -11,6 +11,11 @@ import {
   type GithubReviewNavBadge,
 } from "@/lib/github-dashboard";
 import {
+  utcAddWeekdays,
+  utcWeekdayDateRange,
+  weekdayHoursBetween,
+} from "@/lib/weekday-hours";
+import {
   createGithubSettingsService,
   type GithubSettingsService,
 } from "@/services/github-settings-service";
@@ -46,7 +51,7 @@ function median(values: number[]): number | null {
 function hoursBetween(startIso: string, end: Date): number | null {
   const start = Date.parse(startIso);
   if (!Number.isFinite(start)) return null;
-  return Math.max(0, (end.getTime() - start) / (60 * 60 * 1000));
+  return weekdayHoursBetween(new Date(start), end);
 }
 
 export function computeFlowMetrics(
@@ -173,7 +178,7 @@ export class GithubDashboardService {
     org: string,
     githubRepos: string[],
   ): Promise<GithubDashboardResult> {
-    const staleCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    const staleCutoff = utcAddWeekdays(new Date(), -7)
       .toISOString()
       .slice(0, 10);
     const repos = githubRepos.length > 0 ? githubRepos : undefined;
@@ -202,8 +207,11 @@ export class GithubDashboardService {
 
     const published = Math.max(openCount - draftCount, 0);
     const flow = computeFlowMetrics(recent.pulls);
+    const weekdayWeeks = utcWeekdayDateRange(new Date(), 30).length / 5;
     const mergeRatePerWeek =
-      Math.round((merged.totalCount / (30 / 7)) * 10) / 10;
+      weekdayWeeks > 0
+        ? Math.round((merged.totalCount / weekdayWeeks) * 10) / 10
+        : 0;
 
     const hint = (detail?: string) =>
       detail ? `${scopeHint} · ${detail}` : scopeHint;

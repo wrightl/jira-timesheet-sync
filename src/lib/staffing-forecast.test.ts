@@ -8,7 +8,7 @@ describe("computeStaffingForecast", () => {
   const now = new Date("2026-08-13T12:00:00.000Z");
 
   it("computes eng-week gap vs end date at 1 FTE", () => {
-    // 60h = 2 eng-weeks (30h); 7 days left ≈ 1 eng-week capacity → gap 1
+    // 60h = 2 eng-weeks (30h); 5 weekdays left = 1 eng-week capacity → gap 1
     const forecast = computeStaffingForecast({
       remainingHours: 60,
       endDate: "2026-08-20",
@@ -17,7 +17,7 @@ describe("computeStaffingForecast", () => {
       estimateCoveragePct: 95,
     });
     expect(forecast.remainingEngWeeks).toBe(2);
-    expect(forecast.daysToTarget).toBe(7);
+    expect(forecast.daysToTarget).toBe(5);
     expect(forecast.staffingGapEngWeeks).toBe(1);
     expect(forecast.staffingAsk).toBe("Need +1 eng-weeks by 2026-08-20");
     expect(forecast.forecastConfidence).toBe("high");

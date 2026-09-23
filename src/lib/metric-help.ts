@@ -66,24 +66,33 @@ export const SUPPORT_METRIC_IDS = [
   "support.tickets_by_assignee",
 ] as const;
 
+export const UTILISATION_METRIC_IDS = [
+  "utilisation.pct",
+  "utilisation.billable_hours",
+  "utilisation.non_billable_hours",
+  "utilisation.hours_to_target",
+  "utilisation.coverage_pct",
+] as const;
+
 export const ALL_METRIC_HELP_IDS = [
   ...SYNC_METRIC_IDS,
   ...PORTFOLIO_METRIC_IDS,
   ...PROJECT_METRIC_IDS,
   ...GITHUB_METRIC_IDS,
   ...SUPPORT_METRIC_IDS,
+  ...UTILISATION_METRIC_IDS,
 ] as const;
 
 export type MetricHelpId = (typeof ALL_METRIC_HELP_IDS)[number];
 
 const RISK_TIER_SHARED =
-  "Each in-window project is scored, then counted after the current client, owner, team, and risk filters. A project is in the portfolio when its start date is on or before today and its end date is missing, open-ended, or on or after today. Risk is the highest matching signal: budget burn ≥ App Settings budgetBurnPctRisk (default 90%; watch ≥85% when that is below the risk threshold); runway ≤ App Settings runwayDaysRisk (default 5; watch ≤10); forecast end minus planned end ≥ App Settings scheduleSlipDaysRisk (default 7 days late; watch if any days late); ≥3 failing Bitmap health checks (watch ≥1), or marked unhealthy; staffing gap ≥2 eng-weeks (watch ≥0.5). Burn and runway use the same formulas as the project dashboard. If burn, runway, slip, health checks, and remaining eng-weeks are all missing, the project is unavailable and is not counted in Risk, Watch, or Ok.";
+  "Each in-window project is scored, then counted after the current client, owner, team, and risk filters. A project is in the portfolio when its start date is on or before today and its end date is missing, open-ended, or on or after today. Risk is the highest matching signal: budget burn ≥ App Settings budgetBurnPctRisk (default 90%; watch ≥85% when that is below the risk threshold); runway ≤ App Settings runwayDaysRisk (default 5; watch ≤10); forecast end minus planned end ≥ App Settings scheduleSlipDaysRisk (default 7 weekdays late; watch if any weekdays late); ≥3 failing Bitmap health checks (watch ≥1), or marked unhealthy; staffing gap ≥2 eng-weeks (watch ≥0.5). Burn and runway use the same formulas as the project dashboard. If burn, runway, slip, health checks, and remaining eng-weeks are all missing, the project is unavailable and is not counted in Risk, Watch, or Ok.";
 
 export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   "sync.synced": {
     title: "Synced",
     formula:
-      "Count of worklog sync events whose status is synced, limited to the date range selected on the dashboard.",
+      "Count of worklog sync events whose status is synced, limited to weekday events (UTC) in the date range selected on the dashboard. Saturday and Sunday are omitted.",
     sources: [
       "Worklog sync records in this app’s database",
       "Dashboard date range (UTC)",
@@ -92,7 +101,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   "sync.failed": {
     title: "Failed",
     formula:
-      "Count of worklog sync events whose status is failed, limited to the date range selected on the dashboard. The card hint also shows how many failed events are still open all-time (unresolved).",
+      "Count of worklog sync events whose status is failed, limited to weekday events (UTC) in the date range selected on the dashboard. Saturday and Sunday are omitted. The card hint also shows how many failed events are still open all-time (unresolved).",
     sources: [
       "Worklog sync records in this app’s database",
       "Dashboard date range (UTC)",
@@ -101,7 +110,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   "sync.skipped": {
     title: "Skipped",
     formula:
-      "Count of worklog sync events whose status is skipped, limited to the date range selected on the dashboard. Skip reasons are listed in the Skip reasons card.",
+      "Count of worklog sync events whose status is skipped, limited to weekday events (UTC) in the date range selected on the dashboard. Saturday and Sunday are omitted. Skip reasons are listed in the Skip reasons card.",
     sources: [
       "Worklog sync records in this app’s database",
       "Dashboard date range (UTC)",
@@ -116,7 +125,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   "sync.success_rate": {
     title: "Success rate",
     formula:
-      "In the selected date range: synced ÷ (synced + failed + skipped). Pending events are excluded. The percentage is rounded to the nearest whole number.",
+      "In the selected date range, weekday events only: synced ÷ (synced + failed + skipped). Pending events and Saturday/Sunday events are excluded. The percentage is rounded to the nearest whole number.",
     sources: [
       "Worklog sync records in the selected date range",
     ],
@@ -193,15 +202,15 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   schedule_vs_forecast: {
     title: "Schedule vs forecast",
     formula:
-      "Calendar days between the forecast end date and the planned end date (forecast − planned). Positive means the forecast is later than the plan. Forecast end comes from the Bitmap project forecast_end_date, or the last point on the Bitmap burndown forecast if that field is missing.",
+      "Calendar weekdays between the forecast end date and the planned end date (forecast − planned), excluding Saturday and Sunday. Positive means the forecast is later than the plan. Forecast end comes from the Bitmap project forecast_end_date, or the last point on the Bitmap burndown forecast if that field is missing.",
     sources: ["Bitmap project end date and forecast end (or burndown forecast)"],
     unavailable: "Shown as — when either the planned end or a forecast end date is missing.",
-    status: "Risk at ≥7 days late; watch if any days late; on schedule or early is ok.",
+    status: "Risk at ≥7 weekdays late; watch if any weekdays late; on schedule or early is ok.",
   },
   pace_delta_pct: {
     title: "Pace",
     formula:
-      "Budget burn % minus calendar elapsed %. Elapsed % is how far today sits between the project start and end dates, clamped between 0% and 100%. A positive pace means spend is ahead of the calendar.",
+      "Budget burn % minus weekday elapsed %. Elapsed % is how far today sits between the project start and end dates on weekdays only (Saturday and Sunday excluded), clamped between 0% and 100%. A positive pace means spend is ahead of the weekday schedule.",
     sources: [
       "Bitmap time budget / logged hours (budget burn)",
       "Bitmap project start and end dates",
@@ -220,7 +229,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   billable_mix_pct: {
     title: "Billable mix",
     formula:
-      "Sum of timesheet hours where billable is not false, divided by all loaded timesheet hours, × 100.",
+      "Sum of weekday timesheet hours where billable is not false, divided by all loaded weekday timesheet hours, × 100. Saturday and Sunday entries are omitted.",
     sources: ["Bitmap project timesheet entries"],
     unavailable: "Shown as — when no timesheet entries are loaded.",
     status: "Risk below 70% billable; watch below 85%; otherwise ok.",
@@ -228,7 +237,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   runway_days: {
     title: "Runway (days)",
     formula:
-      "Billable remaining hours ÷ daily burn, using the same ladder as Portfolio: mean billable hours per calendar day with billable time in the last 14 days of timesheets; else Bitmap burndown remaining-hours slope; else lifetime logged ÷ days since start; else remaining ÷ 6 hours/day.",
+      "Billable remaining hours ÷ daily burn, using the same ladder as Portfolio: mean billable hours per weekday with billable time in the last 14 days of timesheets (weekend entries omitted); else Bitmap burndown remaining-hours slope over weekdays; else lifetime logged ÷ weekdays since start; else remaining ÷ 6 hours/day.",
     sources: [
       "Bitmap billable remaining hours",
       "Bitmap timesheet entries (14-day window)",
@@ -241,9 +250,9 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   remaining_hours_slip: {
     title: "Remaining hours slip",
     formula:
-      "Latest Bitmap burndown remaining hours minus remaining hours from about 7 days earlier. Positive means remaining work grew (scope or estimates increased).",
+      "Latest Bitmap burndown remaining hours minus remaining hours from about 7 weekdays earlier. Weekend burndown points are omitted. Positive means remaining work grew (scope or estimates increased).",
     sources: ["Bitmap burndown history"],
-    unavailable: "Needs burndown points spanning about 7 days.",
+    unavailable: "Needs weekday burndown points spanning about 7 weekdays.",
     status: "Risk at ≥16 hours of growth; watch at ≥8 hours; otherwise ok.",
   },
   remaining_eng_weeks: {
@@ -259,7 +268,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   staffing_gap_eng_weeks: {
     title: "Staffing gap",
     formula:
-      "Remaining eng-weeks minus calendar weeks left until the target date, treating 1 FTE as 7 calendar days of capacity. Target date is the planned end date, or the forecast end if there is no planned end. If the target date is today or in the past and work remains, the gap equals remaining eng-weeks. Negative gaps are shown as 0.",
+      "Remaining eng-weeks minus weekday weeks left until the target date, treating 1 FTE as 5 weekdays of capacity. Target date is the planned end date, or the forecast end if there is no planned end. If the target date is today or in the past and work remains, the gap equals remaining eng-weeks. Negative gaps are shown as 0.",
     sources: [
       "Remaining hours (see Remaining eng-weeks: 30h = 37.5 × 80%)",
       "Bitmap end date or forecast end date",
@@ -332,7 +341,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   quality_cost_pct: {
     title: "Rework / quality cost",
     formula:
-      "Non-billable timesheet hours whose nonbillable_reason contains “quality”, divided by all loaded timesheet hours, × 100.",
+      "Non-billable weekday timesheet hours whose nonbillable_reason contains “quality”, divided by all loaded weekday timesheet hours, × 100. Saturday and Sunday entries are omitted.",
     sources: ["Bitmap project timesheet entries"],
     unavailable: "Shown as — when no timesheet entries are loaded.",
     status: "Risk at ≥15% of hours; watch at ≥5%.",
@@ -340,7 +349,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   defect_injection_ratio: {
     title: "Defect injection",
     formula:
-      "Bugs created in the last 30 days ÷ story-like issues completed in the last 30 days (stories, tasks, and features). Completion uses statuscategorychangedate, then resolutiondate, then updated.",
+      "Bugs created on a weekday in the last 30 days ÷ story-like issues completed on a weekday in the last 30 days (stories, tasks, and features). Saturday and Sunday created/completed issues are omitted. Completion uses statuscategorychangedate, then resolutiondate, then updated.",
     sources: ["Jira issues in the project’s scoped JQL"],
     unavailable: "Requires Jira metrics; also unavailable when bugs were created but no story-like work completed in 30 days.",
     status: "Risk at ≥1.0 (at least one bug per completed story); watch at ≥0.5.",
@@ -348,7 +357,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   throughput_30d: {
     title: "Throughput (30d)",
     formula:
-      "Count of story-like Jira issues (stories, tasks, features) marked done whose completion date (statuscategorychangedate, else resolutiondate, else updated) was in the last 30 days.",
+      "Count of story-like Jira issues (stories, tasks, features) marked done whose completion date (statuscategorychangedate, else resolutiondate, else updated) was a weekday in the last 30 days. Saturday and Sunday completions are omitted.",
     sources: ["Jira issues in the project’s scoped JQL"],
     unavailable: "Requires a configured Jira Cloud API and a successful search.",
     status: "Ok if at least one completed; watch if none completed but there are still open issues.",
@@ -356,7 +365,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   ageing_wip_count: {
     title: "Ageing WIP",
     formula:
-      "Count of open in-scope Jira issues not updated for 14 or more days.",
+      "Count of open in-scope Jira issues not updated for 14 or more weekdays.",
     sources: ["Jira issues in the project’s scoped JQL"],
     unavailable: "Requires a configured Jira Cloud API and a successful search.",
     status: "Risk at ≥10 stale open issues; watch at ≥5.",
@@ -364,7 +373,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   cycle_time_median_days: {
     title: "Cycle time (median)",
     formula:
-      "Median calendar days from created to completion (statuscategorychangedate, else resolutiondate, else updated) for in-scope issues done in the last 30 days.",
+      "Median weekday days from created to completion (statuscategorychangedate, else resolutiondate, else updated) for in-scope issues done on a weekday in the last 30 days. Saturday and Sunday completions are omitted.",
     sources: ["Jira issues in the project’s scoped JQL"],
     unavailable:
       "Shown as — when Jira is unavailable or no issues were completed in the last 30 days.",
@@ -408,14 +417,14 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   stale_prs: {
     title: "Stale PRs (7d+)",
     formula:
-      "GitHub search count of open pull requests whose updated date is before today minus 7 days, in the Settings repository scope.",
+      "GitHub search count of open pull requests whose updated date is before today minus 7 weekdays, in the Settings repository scope. Saturday and Sunday are skipped when computing the cutoff.",
     sources: ["GitHub Search API (updated:<cutoff)"],
     status: "Watch at ≥5; risk at ≥12.",
   },
   median_open_age_h: {
     title: "Median open age (h)",
     formula:
-      "Median hours from each sampled open PR’s created time to now. The sample is the most recently updated open PRs (up to 100) in the Settings repository scope, not the full org history. Table filters do not apply.",
+      "Median weekday hours from each sampled open PR’s created time to now (Saturday and Sunday excluded). The sample is the most recently updated open PRs (up to 100) in the Settings repository scope, not the full org history. Table filters do not apply.",
     sources: ["GitHub open pull request search sample"],
     unavailable: "Shown as — when the sample has no parseable created timestamps.",
     status: "Watch at ≥48 hours; risk at ≥120 hours.",
@@ -423,7 +432,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   median_ttf_review_h: {
     title: "Median time to first review (h)",
     formula:
-      "Median hours from created to firstReviewedAt for sampled open PRs that already have a first review. Same up-to-100 open PR sample as median open age.",
+      "Median weekday hours from created to firstReviewedAt for sampled open PRs that already have a first review (Saturday and Sunday excluded). Same up-to-100 open PR sample as median open age.",
     sources: ["GitHub open pull request sample (first review timestamp)"],
     unavailable: "Shown as — when none of the sampled open PRs have a first review time.",
     status: "Watch at ≥24 hours; risk at ≥72 hours.",
@@ -431,7 +440,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   merge_rate_weekly: {
     title: "Merges / week (30d)",
     formula:
-      "Count of pull requests merged in the last 30 days in the Settings repository scope, divided by 30/7 (weeks), rounded to one decimal place.",
+      "Count of pull requests merged in the last 30 days in the Settings repository scope, divided by weekdays in that window / 5 (weekday weeks), rounded to one decimal place.",
     sources: ["GitHub merged pull request search (last 30 days)"],
     status: "Watch if the rate is 0; otherwise ok.",
   },
@@ -465,6 +474,59 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
       "Support desk Jira assignee field",
       "Visible tickets (Show Triaged toggle)",
     ],
+  },
+  "utilisation.pct": {
+    title: "Utilisation",
+    formula:
+      "Billable timesheet hours ÷ contracted working hours in the selected range × 100. Contracted hours are Bitmap hours_per_week (or the current user_working_durations row) pro-rated by weekday count / 5. Saturday and Sunday timesheet entries and chart points are omitted. Planned and rejected entries are excluded. Hours on The Curve company projects are included (non-billable company time is logged there). Status bands: under <50%, watch 50–79%, ok 80–109%, risk ≥110%.",
+    sources: [
+      "Bitmap timesheet entries (billable flag, hours, state, date)",
+      "Bitmap user hours_per_week / user_working_durations",
+      "Selected utilisation date range",
+    ],
+    unavailable:
+      "Shown as — when contracted working hours for the range are 0.",
+    status: "Target is 80% billable. Watch below 80%; under below 50%; risk at 110%+.",
+  },
+  "utilisation.billable_hours": {
+    title: "Billable hours",
+    formula:
+      "Sum of countable Bitmap timesheet hours whose billable flag is true in the selected range, including The Curve company projects. Planned and rejected entries and weekend-dated entries are omitted. The hint compares this to 80% of contracted working hours.",
+    sources: [
+      "Bitmap timesheet entries (billable=true)",
+      "Selected utilisation date range",
+    ],
+  },
+  "utilisation.non_billable_hours": {
+    title: "Non-billable hours",
+    formula:
+      "Sum of countable Bitmap timesheet hours whose billable flag is explicitly false, including non-billable time logged against The Curve company projects. Entries with a missing billable flag are ignored. The hint is non-billable ÷ (billable + non-billable) in the range.",
+    sources: [
+      "Bitmap timesheet entries (billable=false)",
+      "nonbillable_reason when present",
+    ],
+  },
+  "utilisation.hours_to_target": {
+    title: "Hours to target",
+    formula:
+      "80% of contracted working hours in the range, minus billable hours. Positive means more billable hours are needed; negative means the person is above the 80% target.",
+    sources: [
+      "Billable hours from Bitmap timesheets",
+          "Pro-rated weekday Bitmap contracted working hours",
+    ],
+    unavailable:
+      "Shown as — when contracted working hours for the range are 0.",
+  },
+  "utilisation.coverage_pct": {
+    title: "Timesheet coverage",
+    formula:
+      "(Billable + non-billable hours) ÷ contracted working hours in the range × 100. This is logging completeness, not billable utilisation — a person can have high coverage and still miss the 80% billable target if too much time is non-billable.",
+    sources: [
+      "Bitmap timesheet entries",
+          "Pro-rated weekday Bitmap contracted working hours",
+    ],
+    unavailable:
+      "Shown as — when contracted working hours for the range are 0.",
   },
 };
 

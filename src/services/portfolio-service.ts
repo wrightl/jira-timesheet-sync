@@ -12,6 +12,7 @@ import {
   type PortfolioResult,
   type PortfolioRiskTier,
 } from "@/lib/portfolio";
+import { utcWeekdayDiffDays } from "@/lib/weekday-hours";
 import {
   computeStaffingForecast,
 } from "@/lib/staffing-forecast";
@@ -42,11 +43,7 @@ export {
 } from "@/lib/bitmap-project-metrics";
 
 function dayDiff(a: string | null | undefined, b: string | null | undefined): number | null {
-  if (!a || !b) return null;
-  const ta = Date.parse(a);
-  const tb = Date.parse(b);
-  if (!Number.isFinite(ta) || !Number.isFinite(tb)) return null;
-  return Math.round((ta - tb) / (24 * 60 * 60 * 1000));
+  return utcWeekdayDiffDays(a, b);
 }
 
 function ownerName(project: BitmapProject): string | null {

@@ -29,6 +29,11 @@ import {
   type AlertThresholds,
 } from "@/lib/alert-thresholds";
 import {
+  isUtcWeekendIsoDate,
+  utcWeekdayDiffDays,
+  weekdayHoursBetween,
+} from "@/lib/weekday-hours";
+import {
   createJiraMetricsService,
   type JiraIssueAggregates,
   type JiraMetricsService,
@@ -149,11 +154,7 @@ function formatDays(d: number | null): string {
 }
 
 function dayDiff(a: string | null | undefined, b: string | null | undefined): number | null {
-  if (!a || !b) return null;
-  const ta = Date.parse(a);
-  const tb = Date.parse(b);
-  if (!Number.isFinite(ta) || !Number.isFinite(tb)) return null;
-  return Math.round((ta - tb) / (24 * 60 * 60 * 1000));
+  return utcWeekdayDiffDays(a, b);
 }
 
 function coverageStatus(pctValue: number | null): MetricStatus {
@@ -209,8 +210,9 @@ export function calendarElapsedPct(
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
     return null;
   }
-  const elapsed = now.getTime() - start;
-  const total = end - start;
+  const total = weekdayHoursBetween(new Date(start), new Date(end));
+  if (total <= 0) return now.getTime() >= end ? 100 : 0;
+  const elapsed = weekdayHoursBetween(new Date(start), now);
   const raw = (elapsed / total) * 100;
   return round1(Math.min(100, Math.max(0, raw)));
 }
@@ -532,6 +534,7 @@ export class ProjectDashboardService {
     let totalHours = 0;
     let qualityHours = 0;
     for (const entry of input.timesheets) {
+      if (isUtcWeekendIsoDate(entry.date)) continue;
       const hours = typeof entry.hours === "number" ? entry.hours : 0;
       totalHours += hours;
       if (entry.billable !== false) {
@@ -810,7 +813,7 @@ export class ProjectDashboardService {
               "remaining_hours_slip",
               "Remaining hours slip",
               "bitmap",
-              "Need burndown history spanning ~7 days",
+              "Need burndown history spanning ~7 weekdays",
             )
           : {
               id: "remaining_hours_slip",
@@ -820,7 +823,7 @@ export class ProjectDashboardService {
               status: remainingHoursSlipStatus(remainingHoursSlip),
               source: "bitmap",
               unit: "h",
-              detail: "Change in remaining budget hours over ~7 days",
+              detail: "Change in remaining budget hours over ~7 weekdays",
             },
       remainingEngWeeks:
         staffing.remainingEngWeeks == null

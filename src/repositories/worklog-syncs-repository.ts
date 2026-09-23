@@ -312,8 +312,16 @@ export class WorklogSyncsRepository {
     return and(...parts);
   }
 
+  private createdAtOnUtcWeekday(): SQL {
+    return sql`EXTRACT(DOW FROM ${worklogSyncs.createdAt} AT TIME ZONE 'UTC') BETWEEN 1 AND 5`;
+  }
+
   async dashboardWindowCounts(scope: DashboardScope, since: Date) {
-    const where = this.scopeAnd(scope, gte(worklogSyncs.createdAt, since));
+    const where = this.scopeAnd(
+      scope,
+      gte(worklogSyncs.createdAt, since),
+      this.createdAtOnUtcWeekday(),
+    );
     return this.db
       .select({
         status: worklogSyncs.status,
@@ -344,6 +352,7 @@ export class WorklogSyncsRepository {
       scope,
       eq(worklogSyncs.status, "skipped"),
       gte(worklogSyncs.createdAt, since),
+      this.createdAtOnUtcWeekday(),
     );
     return this.db
       .select({
@@ -361,6 +370,7 @@ export class WorklogSyncsRepository {
       scope,
       inArray(worklogSyncs.status, ["failed", "skipped"]),
       gte(worklogSyncs.createdAt, since),
+      this.createdAtOnUtcWeekday(),
     );
     return this.db
       .select({
@@ -393,7 +403,11 @@ export class WorklogSyncsRepository {
         ? sql`date_trunc('hour', ${worklogSyncs.createdAt} AT TIME ZONE 'UTC')`
         : sql`(date_trunc('day', ${worklogSyncs.createdAt} AT TIME ZONE 'UTC'))::date`;
 
-    const where = this.scopeAnd(scope, gte(worklogSyncs.createdAt, since));
+    const where = this.scopeAnd(
+      scope,
+      gte(worklogSyncs.createdAt, since),
+      this.createdAtOnUtcWeekday(),
+    );
     return this.db
       .select({
         bucket: volumeBucketExpr,
@@ -409,6 +423,7 @@ export class WorklogSyncsRepository {
       scope,
       inArray(worklogSyncs.status, ["failed", "skipped"]),
       gte(worklogSyncs.createdAt, since),
+      this.createdAtOnUtcWeekday(),
     );
     return this.db
       .select({

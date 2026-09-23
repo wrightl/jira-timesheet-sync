@@ -12,7 +12,12 @@ describe("formatPullAge", () => {
     const now = new Date("2026-08-12T12:00:00.000Z");
     expect(formatPullAge("2026-08-12T11:30:00.000Z", now)).toBe("30m");
     expect(formatPullAge("2026-08-12T08:00:00.000Z", now)).toBe("4h");
-    expect(formatPullAge("2026-08-09T12:00:00.000Z", now)).toBe("3d");
+    expect(formatPullAge("2026-08-10T12:00:00.000Z", now)).toBe("2d");
+  });
+
+  it("does not count Saturday and Sunday in pull age", () => {
+    const monday = new Date("2026-08-17T09:00:00.000Z");
+    expect(formatPullAge("2026-08-14T17:00:00.000Z", monday)).toBe("16h");
   });
 });
 
@@ -288,7 +293,9 @@ describe("GithubDashboardService", () => {
     const service = new GithubDashboardService(
       settings as GithubSettingsService,
     );
+    vi.useFakeTimers({ now: new Date("2026-08-25T12:00:00.000Z") });
     const dashboard = await service.getDashboard("u1");
+    vi.useRealTimers();
     expect(dashboard.configured).toBe(true);
     expect(dashboard.org).toBe("acme");
     expect(dashboard.metrics.find((m) => m.key === "open_prs")?.value).toBe(
@@ -308,7 +315,7 @@ describe("GithubDashboardService", () => {
     );
     expect(
       dashboard.metrics.find((m) => m.key === "merge_rate_weekly")?.value,
-    ).toBe(3.3);
+    ).toBe(3.2);
     expect(dashboard.authorWip[0]?.login).toBe("lee");
     expect(dashboard.recentPullRequests).toHaveLength(1);
     expect(dashboard.recentRepos).toHaveLength(1);

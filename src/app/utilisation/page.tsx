@@ -15,7 +15,7 @@ export default async function UtilisationPage() {
       <PageMain>
         <PageHeader
           title="Utilisation"
-          description="Billable hours from Bitmap timesheets versus each person's contracted working hours, with optional person and team filters."
+          description="Billable hours from Bitmap timesheets versus each person's contracted working hours, with a chart of the 80% target and per-person drill-down."
         />
         <UtilisationDashboard authed />
       </PageMain>

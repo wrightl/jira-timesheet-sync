@@ -96,7 +96,7 @@ describe("successRate", () => {
 });
 
 describe("buildVolumeBuckets", () => {
-  it("fills seven UTC days ending on now, including zeros", () => {
+  it("fills UTC weekdays ending on now, including zeros", () => {
     const now = new Date("2026-08-03T15:00:00.000Z");
     const volume = buildVolumeBuckets(
       [
@@ -107,19 +107,19 @@ describe("buildVolumeBuckets", () => {
       now,
     );
 
-    expect(volume).toHaveLength(7);
     expect(volume.map((v) => ({ key: v.key, count: v.count }))).toEqual([
       { key: "2026-07-28", count: 0 },
       { key: "2026-07-29", count: 0 },
       { key: "2026-07-30", count: 0 },
       { key: "2026-07-31", count: 0 },
-      { key: "2026-08-01", count: 4 },
-      { key: "2026-08-02", count: 0 },
       { key: "2026-08-03", count: 9 },
     ]);
+    expect(volume.every((v) => !["2026-08-01", "2026-08-02"].includes(v.key))).toBe(
+      true,
+    );
   });
 
-  it("builds 24 hourly buckets for the 24h range", () => {
+  it("builds hourly buckets for the 24h range, skipping weekend hours", () => {
     const now = new Date("2026-08-03T15:30:00.000Z");
     const volume = buildVolumeBuckets(
       [{ bucket: "2026-08-03T14:00:00", count: 3 }],
@@ -127,20 +127,23 @@ describe("buildVolumeBuckets", () => {
       now,
     );
 
-    expect(volume).toHaveLength(24);
     expect(volumeBucketCount("24h")).toBe(24);
+    expect(volume).toHaveLength(16);
+    expect(volume[0]?.key).toBe("2026-08-03T00");
     expect(volume.at(-1)?.key).toBe("2026-08-03T15");
     expect(volume.find((v) => v.key === "2026-08-03T14")?.count).toBe(3);
+    expect(volume.some((v) => v.key.startsWith("2026-08-02"))).toBe(false);
   });
 
   it("normalises Date day values to UTC date keys", () => {
     const now = new Date("2026-08-03T12:00:00.000Z");
     const volume = buildVolumeBuckets(
-      [{ bucket: new Date("2026-08-02T00:00:00.000Z"), count: 2 }],
+      [{ bucket: new Date("2026-07-31T00:00:00.000Z"), count: 2 }],
       "7d",
       now,
     );
-    expect(volume.find((d) => d.key === "2026-08-02")?.count).toBe(2);
+    expect(volume.find((d) => d.key === "2026-07-31")?.count).toBe(2);
+    expect(volume.find((d) => d.key === "2026-08-02")).toBeUndefined();
   });
 });
 
@@ -197,7 +200,7 @@ describe("assembleDashboardStats", () => {
     expect(stats.openPending).toBe(0);
     expect(stats.skipReasons).toEqual([]);
     expect(stats.problemSpaces).toEqual([]);
-    expect(stats.volume).toHaveLength(7);
+    expect(stats.volume).toHaveLength(5);
     expect(stats.volume.every((d) => d.count === 0)).toBe(true);
     expect(stats.volumeGranularity).toBe("day");
     expect(stats.config).toEqual(emptyAdminConfig);
@@ -229,7 +232,7 @@ describe("assembleDashboardStats", () => {
 
     expect(stats.scopeType).toBe("user");
     expect(stats.config).toEqual(userConfig);
-    expect(stats.volume).toHaveLength(24);
+    expect(stats.volume).toHaveLength(13);
     expect(stats.window).toEqual(emptyStatusCounts());
   });
 
@@ -304,21 +307,17 @@ describe("assembleDashboardStats", () => {
       usersWithOverrides: 3,
       bitmapTokenConfigured: true,
     });
-    expect(stats.recentIssues).toHaveLength(2);
+    expect(stats.recentIssues).toHaveLength(1);
     expect(stats.recentIssues[0]).toMatchObject({
       id: "a",
       canRetry: true,
       createdAt: "2026-08-03T10:00:00.000Z",
     });
-    expect(stats.recentIssues[1]).toMatchObject({
-      id: "b",
-      canRetry: false,
-      createdAt: "2026-08-02T10:00:00.000Z",
-    });
-    expect(stats.volume).toHaveLength(30);
     expect(stats.volume.at(-1)).toMatchObject({
       key: "2026-08-03",
       count: 7,
     });
+    expect(stats.volume).toHaveLength(21);
+    expect(stats.volume.some((d) => d.key === "2026-08-02")).toBe(false);
   });
 });

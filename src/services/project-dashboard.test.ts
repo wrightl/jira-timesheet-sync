@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BitmapBurndown, BitmapTimesheetEntry } from "@/clients/bitmap-http";
+import { formatWorkingDuration } from "@/lib/working-duration";
 import {
   allocationUtilisationStatus,
   avgDailyBillableBurnHours,
@@ -71,6 +72,18 @@ describe("project-dashboard metric helpers", () => {
     expect(estimateDeltaStatus(-0.5)).toBe("ok");
     expect(estimateDeltaStatus(-8)).toBe("ok");
     expect(estimateDeltaStatus(null)).toBe("unavailable");
+  });
+
+  it("pairs estimate delta hours with working-time display and status", () => {
+    const overBudget = computeEstimateDeltaHours(60, 12.5);
+    expect(overBudget).toBe(47.5);
+    expect(formatWorkingDuration(overBudget)).toBe("1w 1d 2.5h");
+    expect(estimateDeltaStatus(overBudget)).toBe("risk");
+
+    const withinBudget = computeEstimateDeltaHours(10, 20);
+    expect(withinBudget).toBe(-10);
+    expect(formatWorkingDuration(withinBudget)).toBe("-1d 2.5h");
+    expect(estimateDeltaStatus(withinBudget)).toBe("ok");
   });
 
   it("averages recent billable timesheet burn by day", () => {

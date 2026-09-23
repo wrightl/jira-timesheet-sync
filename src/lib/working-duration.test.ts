@@ -39,4 +39,9 @@ describe("formatWorkingDuration", () => {
     expect(formatWorkingDuration(undefined)).toBe("—");
     expect(formatWorkingDuration(Number.NaN)).toBe("—");
   });
+
+  it("treats sub-minute remainders as zero hours", () => {
+    expect(formatWorkingDuration(0.001)).toBe("0h");
+    expect(formatWorkingDuration(-0.001)).toBe("0h");
+  });
 });

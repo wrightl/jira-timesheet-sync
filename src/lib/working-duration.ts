@@ -24,8 +24,10 @@ export function formatWorkingDuration(
 ): string {
   if (hours == null || !Number.isFinite(hours)) return "—";
 
-  const sign = hours < 0 ? "-" : options.signed && hours > 0 ? "+" : "";
   let remainingMinutes = Math.round(Math.abs(hours) * MINUTES_PER_HOUR);
+  if (remainingMinutes === 0) return "0h";
+
+  const sign = hours < 0 ? "-" : options.signed && hours > 0 ? "+" : "";
 
   const weeks = Math.floor(remainingMinutes / MINUTES_PER_WORKING_WEEK);
   remainingMinutes %= MINUTES_PER_WORKING_WEEK;

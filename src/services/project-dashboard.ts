@@ -28,6 +28,7 @@ import {
   DEFAULT_ALERT_THRESHOLDS,
   type AlertThresholds,
 } from "@/lib/alert-thresholds";
+import { formatWorkingDuration } from "@/lib/working-duration";
 import {
   isUtcWeekendIsoDate,
   utcWeekdayDiffDays,
@@ -137,8 +138,7 @@ export {
 } from "@/lib/bitmap-project-metrics";
 
 function formatHours(h: number | null): string {
-  if (h == null || !Number.isFinite(h)) return "—";
-  return `${round1(h)}h`;
+  return formatWorkingDuration(h);
 }
 
 function formatPct(p: number | null): string {
@@ -164,11 +164,30 @@ function coverageStatus(pctValue: number | null): MetricStatus {
   return "ok";
 }
 
-function deltaStatus(hours: number | null): MetricStatus {
-  if (hours == null) return "unavailable";
-  if (hours <= -8) return "risk";
-  if (hours < 0) return "watch";
+export function estimateDeltaStatus(hours: number | null): MetricStatus {
+  if (hours == null || !Number.isFinite(hours)) return "unavailable";
+  if (hours > 0) return "risk";
   return "ok";
+}
+
+/** Remaining Jira effort minus remaining project budget. Positive = over budget. */
+export function computeEstimateDeltaHours(
+  remainingEffortHours: number | null,
+  remainingBudgetHours: number | null,
+  fallbackDeltaHours: number | null = null,
+): number | null {
+  if (
+    remainingEffortHours != null &&
+    Number.isFinite(remainingEffortHours) &&
+    remainingBudgetHours != null &&
+    Number.isFinite(remainingBudgetHours)
+  ) {
+    return round2(remainingEffortHours - remainingBudgetHours);
+  }
+  if (fallbackDeltaHours != null && Number.isFinite(fallbackDeltaHours)) {
+    return fallbackDeltaHours;
+  }
+  return null;
 }
 
 function scheduleStatus(slipDays: number | null): MetricStatus {
@@ -301,9 +320,7 @@ function formatPaceDelta(delta: number | null): string {
 }
 
 function formatSlipHours(hours: number | null): string {
-  if (hours == null || !Number.isFinite(hours)) return "—";
-  const sign = hours > 0 ? "+" : "";
-  return `${sign}${round1(hours)}h`;
+  return formatWorkingDuration(hours, { signed: true });
 }
 
 function formatRatio(ratio: number | null): string {
@@ -572,26 +589,35 @@ export class ProjectDashboardService {
     const bitmapTimeRemaining =
       typeof project.time_remaining === "number"
         ? project.time_remaining
-        : null;
+        : typeof project.billable_time_remaining === "number"
+          ? project.billable_time_remaining
+          : null;
+    const remainingJiraEffort = jiraAgg
+      ? jiraAgg.remainingEstimateHours
+      : bitmapRemaining;
 
-    let estimateDeltaHours = bitmapDelta;
-    let estimateDeltaSource: MetricSource = "bitmap";
-    let estimateDeltaDetail: string | null =
-      project.jira_budget_remaining_effort_last_updated
-        ? `Bitmap sync ${project.jira_budget_remaining_effort_last_updated}`
-        : null;
-
-    if (jiraAgg && bitmapTimeRemaining != null) {
-      const liveDelta = round2(
-        jiraAgg.remainingEstimateHours - bitmapTimeRemaining,
-      );
-      estimateDeltaHours = liveDelta;
-      estimateDeltaSource = "merged";
-      if (bitmapDelta != null && Math.abs(liveDelta - bitmapDelta) >= 4) {
-        estimateDeltaDetail = `Live Jira ${formatHours(liveDelta)} vs Bitmap sync ${formatHours(bitmapDelta)}`;
-      } else {
-        estimateDeltaDetail = `Live remaining ${formatHours(jiraAgg.remainingEstimateHours)} vs budget remaining ${formatHours(bitmapTimeRemaining)}`;
+    const estimateDeltaHours = computeEstimateDeltaHours(
+      remainingJiraEffort,
+      bitmapTimeRemaining,
+      bitmapDelta,
+    );
+    const estimateDeltaSource: MetricSource =
+      jiraAgg && remainingJiraEffort != null && bitmapTimeRemaining != null
+        ? "merged"
+        : "bitmap";
+    let estimateDeltaDetail: string | null = null;
+    if (remainingJiraEffort != null && bitmapTimeRemaining != null) {
+      estimateDeltaDetail = `Remaining effort ${formatHours(remainingJiraEffort)} vs budget remaining ${formatHours(bitmapTimeRemaining)}`;
+      if (
+        jiraAgg &&
+        bitmapDelta != null &&
+        estimateDeltaHours != null &&
+        Math.abs(estimateDeltaHours - bitmapDelta) >= 4
+      ) {
+        estimateDeltaDetail = `${estimateDeltaDetail} · Bitmap sync ${formatHours(bitmapDelta)}`;
       }
+    } else if (project.jira_budget_remaining_effort_last_updated) {
+      estimateDeltaDetail = `Bitmap sync ${project.jira_budget_remaining_effort_last_updated}`;
     }
 
     let remainingEffort = bitmapRemaining;
@@ -902,7 +928,7 @@ export class ProjectDashboardService {
         label: "Jira vs Bitmap estimate delta",
         value: estimateDeltaHours,
         displayValue: formatHours(estimateDeltaHours),
-        status: deltaStatus(estimateDeltaHours),
+        status: estimateDeltaStatus(estimateDeltaHours),
         source: estimateDeltaSource,
         unit: "h",
         detail: estimateDeltaDetail,

@@ -12,6 +12,10 @@ import {
   type PortfolioResult,
   type PortfolioRiskTier,
 } from "@/lib/portfolio";
+import {
+  estimateDeltaFromBitmapProject,
+  scoreEstimateDeltaHealth,
+} from "@/lib/estimate-delta";
 import { utcWeekdayDiffDays } from "@/lib/weekday-hours";
 import {
   computeStaffingForecast,
@@ -22,7 +26,6 @@ import {
   type AlertThresholds,
 } from "@/lib/alert-thresholds";
 import {
-  BUDGET_BURN_WATCH_PCT,
   RECENT_BURN_WINDOW_DAYS,
   billableRemainingHours as remainingHoursOnProject,
   computeBudgetBurnPct,
@@ -57,7 +60,7 @@ function ownerName(project: BitmapProject): string | null {
 
 export function scorePortfolioProject(
   project: BitmapProject,
-  thresholds: AlertThresholds = DEFAULT_ALERT_THRESHOLDS,
+  _thresholds: AlertThresholds = DEFAULT_ALERT_THRESHOLDS,
   options?: {
     timesheets?: BitmapTimesheetEntry[];
     now?: Date;
@@ -78,57 +81,8 @@ export function scorePortfolioProject(
       ? project.unhealthy_checks
       : null;
 
-  const riskReasons: string[] = [];
-  let riskTier: PortfolioRiskTier = "ok";
-
-  const elevate = (tier: PortfolioRiskTier) => {
-    if (tier === "risk") riskTier = "risk";
-    else if (tier === "watch" && riskTier === "ok") riskTier = "watch";
-  };
-
-  if (budgetBurnPct != null && budgetBurnPct >= thresholds.budgetBurnPctRisk) {
-    riskReasons.push(`Budget burn ${budgetBurnPct}%`);
-    elevate("risk");
-  } else if (
-    budgetBurnPct != null &&
-    budgetBurnPct >= BUDGET_BURN_WATCH_PCT &&
-    BUDGET_BURN_WATCH_PCT < thresholds.budgetBurnPctRisk
-  ) {
-    riskReasons.push(`Budget burn ${budgetBurnPct}%`);
-    elevate("watch");
-  }
-
-  if (runwayDays != null && runwayDays <= thresholds.runwayDaysRisk) {
-    riskReasons.push(`Runway ${runwayDays}d`);
-    elevate("risk");
-  } else if (runwayDays != null && runwayDays <= 10) {
-    riskReasons.push(`Runway ${runwayDays}d`);
-    elevate("watch");
-  }
-
-  if (
-    scheduleSlipDays != null &&
-    scheduleSlipDays >= thresholds.scheduleSlipDaysRisk
-  ) {
-    riskReasons.push(`Forecast ${scheduleSlipDays}d late`);
-    elevate("risk");
-  } else if (scheduleSlipDays != null && scheduleSlipDays > 0) {
-    riskReasons.push(`Forecast ${scheduleSlipDays}d late`);
-    elevate("watch");
-  }
-
-  if (unhealthyChecks != null && unhealthyChecks >= 3) {
-    riskReasons.push(`${unhealthyChecks} failing health checks`);
-    elevate("risk");
-  } else if (unhealthyChecks != null && unhealthyChecks >= 1) {
-    riskReasons.push(`${unhealthyChecks} failing health checks`);
-    elevate("watch");
-  }
-
-  if (project.healthy === false && riskReasons.length === 0) {
-    riskReasons.push("Marked unhealthy");
-    elevate("watch");
-  }
+  const estimateDeltaHours = estimateDeltaFromBitmapProject(project);
+  const estimateHealth = scoreEstimateDeltaHealth(estimateDeltaHours);
 
   const billableRemainingHours = remainingHoursOnProject(project);
   const forecast = computeStaffingForecast({
@@ -138,32 +92,6 @@ export function scorePortfolioProject(
     hasJiraRemainingEffort:
       typeof project.jira_budget_remaining_effort === "number",
   });
-
-  if (
-    forecast.staffingGapEngWeeks != null &&
-    forecast.staffingGapEngWeeks >= 2 &&
-    forecast.staffingAsk
-  ) {
-    riskReasons.push(forecast.staffingAsk);
-    elevate("risk");
-  } else if (
-    forecast.staffingGapEngWeeks != null &&
-    forecast.staffingGapEngWeeks >= 0.5 &&
-    forecast.staffingAsk
-  ) {
-    riskReasons.push(forecast.staffingAsk);
-    elevate("watch");
-  }
-
-  if (
-    budgetBurnPct == null &&
-    runwayDays == null &&
-    scheduleSlipDays == null &&
-    unhealthyChecks == null &&
-    forecast.remainingEngWeeks == null
-  ) {
-    riskTier = "unavailable";
-  }
 
   return {
     projectId: project.id,
@@ -183,10 +111,11 @@ export function scorePortfolioProject(
     staffingGapEngWeeks: forecast.staffingGapEngWeeks,
     staffingAsk: forecast.staffingAsk,
     forecastConfidence: forecast.forecastConfidence,
+    estimateDeltaHours,
     unhealthyChecks,
-    healthy: typeof project.healthy === "boolean" ? project.healthy : null,
-    riskTier,
-    riskReasons,
+    healthy: estimateHealth.healthy,
+    riskTier: estimateHealth.riskTier,
+    riskReasons: estimateHealth.riskReasons,
   };
 }
 

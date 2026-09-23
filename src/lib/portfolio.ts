@@ -20,6 +20,7 @@ export type PortfolioProjectRow = {
   staffingGapEngWeeks: number | null;
   staffingAsk: string | null;
   forecastConfidence: "high" | "medium" | "low" | "unavailable";
+  estimateDeltaHours: number | null;
   unhealthyChecks: number | null;
   healthy: boolean | null;
   riskTier: PortfolioRiskTier;

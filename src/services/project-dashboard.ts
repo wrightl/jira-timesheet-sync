@@ -28,6 +28,10 @@ import {
   DEFAULT_ALERT_THRESHOLDS,
   type AlertThresholds,
 } from "@/lib/alert-thresholds";
+import {
+  computeEstimateDeltaHours,
+  estimateDeltaStatus,
+} from "@/lib/estimate-delta";
 import { formatWorkingDuration } from "@/lib/working-duration";
 import {
   isUtcWeekendIsoDate,
@@ -164,31 +168,7 @@ function coverageStatus(pctValue: number | null): MetricStatus {
   return "ok";
 }
 
-export function estimateDeltaStatus(hours: number | null): MetricStatus {
-  if (hours == null || !Number.isFinite(hours)) return "unavailable";
-  if (hours > 0) return "risk";
-  return "ok";
-}
-
-/** Remaining Jira effort minus remaining project budget. Positive = over budget. */
-export function computeEstimateDeltaHours(
-  remainingEffortHours: number | null,
-  remainingBudgetHours: number | null,
-  fallbackDeltaHours: number | null = null,
-): number | null {
-  if (
-    remainingEffortHours != null &&
-    Number.isFinite(remainingEffortHours) &&
-    remainingBudgetHours != null &&
-    Number.isFinite(remainingBudgetHours)
-  ) {
-    return round2(remainingEffortHours - remainingBudgetHours);
-  }
-  if (fallbackDeltaHours != null && Number.isFinite(fallbackDeltaHours)) {
-    return fallbackDeltaHours;
-  }
-  return null;
-}
+export { computeEstimateDeltaHours, estimateDeltaStatus } from "@/lib/estimate-delta";
 
 function scheduleStatus(slipDays: number | null): MetricStatus {
   if (slipDays == null) return "unavailable";
@@ -432,6 +412,7 @@ export class ProjectDashboardService {
     });
 
     const overages = this.buildOverages(jiraTickets, jiraAgg);
+    const estimateHealth = metrics.estimateDeltaHours.status;
 
     return {
       project: {
@@ -442,7 +423,12 @@ export class ProjectDashboardService {
         startDate: project.start_date ?? null,
         endDate: project.end_date ?? null,
         forecastEndDate,
-        healthy: project.healthy ?? null,
+        healthy:
+          estimateHealth === "ok"
+            ? true
+            : estimateHealth === "risk"
+              ? false
+              : null,
         unhealthyChecks: project.unhealthy_checks ?? null,
         projectType: project.project_type ?? null,
       },

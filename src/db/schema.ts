@@ -1,5 +1,6 @@
 import {
   boolean,
+  doublePrecision,
   pgEnum,
   pgTable,
   text,
@@ -395,3 +396,28 @@ export type SupportTicketReminder = typeof supportTicketReminders.$inferSelect;
 export type NewSupportTicketReminder = typeof supportTicketReminders.$inferInsert;
 export type TeamOwnership = typeof teamOwnerships.$inferSelect;
 export type NewTeamOwnership = typeof teamOwnerships.$inferInsert;
+
+/**
+ * Internal cost of one working day for a job role (Senior Engineer, Project
+ * Manager, and so on). Matched to Bitmap and user-mapping job titles.
+ */
+export const roleDayRates = pgTable(
+  "role_day_rates",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    roleName: text("role_name").notNull(),
+    /** Lowercased, whitespace-collapsed role name used for matching. */
+    roleKey: text("role_key").notNull(),
+    dayRateCost: doublePrecision("day_rate_cost").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [uniqueIndex("role_day_rates_role_key_uidx").on(table.roleKey)],
+);
+
+export type RoleDayRate = typeof roleDayRates.$inferSelect;
+export type NewRoleDayRate = typeof roleDayRates.$inferInsert;

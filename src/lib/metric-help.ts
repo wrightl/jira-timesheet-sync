@@ -74,6 +74,15 @@ export const UTILISATION_METRIC_IDS = [
   "utilisation.coverage_pct",
 ] as const;
 
+export const PROFITABILITY_METRIC_IDS = [
+  "profitability.average",
+  "profitability.overall",
+  "profitability.below_threshold",
+  "profitability.gross_profit",
+  "profitability.charged",
+  "profitability.cost",
+] as const;
+
 export const ALL_METRIC_HELP_IDS = [
   ...SYNC_METRIC_IDS,
   ...PORTFOLIO_METRIC_IDS,
@@ -81,6 +90,7 @@ export const ALL_METRIC_HELP_IDS = [
   ...GITHUB_METRIC_IDS,
   ...SUPPORT_METRIC_IDS,
   ...UTILISATION_METRIC_IDS,
+  ...PROFITABILITY_METRIC_IDS,
 ] as const;
 
 export type MetricHelpId = (typeof ALL_METRIC_HELP_IDS)[number];
@@ -530,6 +540,62 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
     ],
     unavailable:
       "Shown as — when contracted working hours for the range are 0.",
+  },
+  "profitability.average": {
+    title: "Average profitability",
+    formula:
+      "Mean of each closed project’s profitability percentage, using only projects where both charge and cost could be calculated. Profitability % = amount charged ÷ delivery cost × 100. Charged is billable days × the Bitmap budget day rate (7.5 hours per day). Cost is countable logged days × the person’s role cost day rate from App Settings. A day rate matches the Bitmap job title, then the user-mapping job title. Planned and rejected entries are omitted. Hours with no role rate or no client day rate are omitted from both sides. The date range selects projects whose end date falls inside it; the percentage uses the project’s timesheets. The Curve company projects are omitted. 100% means fees equal cost.",
+    sources: [
+      "Bitmap completed projects (end date in the selected range)",
+      "Bitmap project budgets (day_rate)",
+      "Bitmap project timesheet entries",
+      "Role day rates in App Settings",
+      "Bitmap user job titles and user-mapping job titles",
+    ],
+    unavailable:
+      "Shown as — when no project in the view has both a charge and a cost.",
+    status:
+      "A project is below the floor when its profitability is under 20%. Under 100% means fees do not cover cost.",
+  },
+  "profitability.overall": {
+    title: "Overall profitability",
+    formula:
+      "Sum of amount charged across the projects in view ÷ sum of delivery cost × 100. Same charge and cost rules as average profitability. This weights larger projects more than the unweighted average.",
+    sources: [
+      "Amount charged and delivery cost on the closed projects in view",
+    ],
+    unavailable: "Shown as — when total delivery cost is zero.",
+  },
+  "profitability.below_threshold": {
+    title: "Below 20%",
+    formula:
+      "Count of closed projects in the current project and date filters whose profitability percentage is under 20. Projects that cannot be scored are not counted.",
+    sources: ["Per-project profitability percentage"],
+  },
+  "profitability.gross_profit": {
+    title: "Gross profit",
+    formula:
+      "Total amount charged minus total delivery cost for the closed projects in view, in GBP. The hint shows the median project profitability percentage when at least one project is scored.",
+    sources: ["Amount charged and delivery cost on the closed projects in view"],
+  },
+  "profitability.charged": {
+    title: "Amount charged",
+    formula:
+      "Sum of billable days × the client day rate. The rate is the timesheet line’s Bitmap budget day rate when present, otherwise the only budget rate or the billable-default rate, otherwise a hours-weighted blend of budget day rates. Non-billable time is not charged.",
+    sources: [
+      "Bitmap timesheet entries (billable flag, hours)",
+      "Bitmap project budget day_rate",
+    ],
+  },
+  "profitability.cost": {
+    title: "Delivery cost",
+    formula:
+      "Sum of countable logged days × the matched role cost day rate. Billable and explicitly non-billable time both count. Entries with a missing billable flag are omitted. A working day is 7.5 hours. Role rates are the GBP day-rate costs stored under App Settings.",
+    sources: [
+      "Bitmap timesheet entries",
+      "Role day rates in App Settings",
+      "Bitmap and user-mapping job titles",
+    ],
   },
 };
 

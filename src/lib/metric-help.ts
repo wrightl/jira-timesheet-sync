@@ -544,7 +544,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   "profitability.average": {
     title: "Average profitability",
     formula:
-      "Mean of each closed project’s profitability percentage, using only projects where both charge and cost could be calculated. Profitability % = amount charged ÷ delivery cost × 100. Charged is billable days × the Bitmap budget day rate (7.5 hours per day). Cost is countable logged days × the person’s role cost day rate from App Settings. A day rate matches the Bitmap job title, then the user-mapping job title. Planned and rejected entries are omitted. Hours with no role rate or no client day rate are omitted from both sides. The date range selects projects whose end date falls inside it; the percentage uses the project’s timesheets. The Curve company projects are omitted. 100% means fees equal cost.",
+      "Mean of each closed project’s profitability percentage, using only projects where both charge and cost could be calculated. Profitability % = amount charged ÷ delivery cost × 100. Charged is billable days × the Bitmap budget day rate (7.5 hours per day). Cost is countable logged days × the person’s role cost day rate from App Settings. A day rate matches the Bitmap job title, then the user-mapping job title. Planned and rejected entries are omitted. Hours with no role rate or no client day rate are omitted from both sides. The date range and client filter select projects whose end date falls inside the range; the percentage uses the project’s timesheets. The Curve company projects are omitted. 100% means fees equal cost.",
     sources: [
       "Bitmap completed projects (end date in the selected range)",
       "Bitmap project budgets (day_rate)",
@@ -569,7 +569,7 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   "profitability.below_threshold": {
     title: "Below 20%",
     formula:
-      "Count of closed projects in the current project and date filters whose profitability percentage is under 20. Projects that cannot be scored are not counted.",
+      "Count of closed projects in the current client, project, and date filters whose profitability percentage is under 20. Projects that cannot be scored are not counted.",
     sources: ["Per-project profitability percentage"],
   },
   "profitability.gross_profit": {

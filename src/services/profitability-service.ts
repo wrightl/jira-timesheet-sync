@@ -30,17 +30,25 @@ import { createSettingsService } from "@/services/settings-service";
 export type ProfitabilityProjectOption = {
   projectId: string;
   projectName: string | null;
+  clientId: string | null;
   clientName: string | null;
+};
+
+export type ProfitabilityClientOption = {
+  clientId: string;
+  clientName: string;
 };
 
 export type ProfitabilityResult = {
   startDate: string;
   endDate: string;
+  clientId: string | null;
   projectId: string | null;
   thresholdPct: number;
   hoursPerDay: number;
   summary: ProfitabilitySummary;
   projects: ProjectProfitability[];
+  clientOptions: ProfitabilityClientOption[];
   projectOptions: ProfitabilityProjectOption[];
   completedWithoutEndDate: number;
   truncated: boolean;
@@ -192,6 +200,15 @@ function toBudget(budget: BitmapProjectBudget): ProfitabilityBudget {
   };
 }
 
+function clientOption(
+  project: BitmapProject,
+): ProfitabilityClientOption | null {
+  const clientId = project.client?.id?.trim() ?? "";
+  if (!clientId) return null;
+  const clientName = project.client?.name?.trim() || clientId;
+  return { clientId, clientName };
+}
+
 function failedProject(
   project: BitmapProject,
   endDate: string,
@@ -220,11 +237,13 @@ export class ProfitabilityService {
   async getProfitability(input: {
     startDate: string;
     endDate: string;
+    clientId?: string | null;
     projectId?: string | null;
   }): Promise<ProfitabilityResult> {
     const startDate = input.startDate.trim();
     const endDate = input.endDate.trim();
     assertProfitabilityDateRange(startDate, endDate);
+    const clientId = input.clientId?.trim() || null;
     const projectId = input.projectId?.trim() || null;
 
     if (!(await this.settings.isTokenConfigured())) {
@@ -268,18 +287,35 @@ export class ProfitabilityService {
       (isoDateKey(b.end_date) ?? "").localeCompare(isoDateKey(a.end_date) ?? ""),
     );
 
-    const projectOptions = inRange.map((project) => ({
+    const clientOptions: ProfitabilityClientOption[] = [];
+    const seenClients = new Set<string>();
+    for (const project of inRange) {
+      const client = clientOption(project);
+      if (!client || seenClients.has(client.clientId)) continue;
+      seenClients.add(client.clientId);
+      clientOptions.push(client);
+    }
+    clientOptions.sort((a, b) =>
+      a.clientName.localeCompare(b.clientName, undefined, { sensitivity: "base" }),
+    );
+
+    const forClient = clientId
+      ? inRange.filter((project) => project.client?.id === clientId)
+      : inRange;
+
+    const projectOptions = forClient.map((project) => ({
       projectId: project.id,
       projectName: project.name ?? null,
+      clientId: project.client?.id ?? null,
       clientName: project.client?.name ?? null,
     }));
 
-    let selected = inRange;
+    let selected = forClient;
     let truncated = false;
     if (projectId) {
-      selected = inRange.filter((project) => project.id === projectId);
-    } else if (inRange.length > PROFITABILITY_PROJECT_CAP) {
-      selected = inRange.slice(0, PROFITABILITY_PROJECT_CAP);
+      selected = forClient.filter((project) => project.id === projectId);
+    } else if (forClient.length > PROFITABILITY_PROJECT_CAP) {
+      selected = forClient.slice(0, PROFITABILITY_PROJECT_CAP);
       truncated = true;
     }
 
@@ -310,11 +346,13 @@ export class ProfitabilityService {
     return {
       startDate,
       endDate,
+      clientId,
       projectId,
       thresholdPct: LOW_PROFITABILITY_PCT,
       hoursPerDay: HOURS_PER_WORKING_DAY,
       summary: summariseProfitability(projects),
       projects,
+      clientOptions,
       projectOptions,
       completedWithoutEndDate,
       truncated,

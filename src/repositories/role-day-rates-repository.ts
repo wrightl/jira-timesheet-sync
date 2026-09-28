@@ -1,123 +1,136 @@
-import { asc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import type { Db } from "@/db";
-import { roleDayRates, type RoleDayRate } from "@/db/schema";
-import { normaliseRoleKey } from "@/lib/profitability";
+import { roleDayRateSchedules } from "@/db/schema";
+import {
+  decodeRoleDayRates,
+  encodeRoleDayRates,
+  type RoleDayRateAmount,
+  type RoleDayRateTitle,
+} from "@/lib/role-day-rates";
 
-export class DuplicateRoleDayRateError extends Error {
+export class DuplicateRoleDayRateScheduleError extends Error {
   constructor() {
-    super("A day rate for this role already exists");
-    this.name = "DuplicateRoleDayRateError";
+    super("A rate set already starts in this month");
+    this.name = "DuplicateRoleDayRateScheduleError";
   }
 }
+
+export type RoleDayRateScheduleRecord = {
+  id: string;
+  effectiveMonth: string;
+  rates: { roleName: RoleDayRateTitle; dayRateCost: number }[];
+  createdAt: Date;
+  updatedAt: Date;
+};
 
 function isUniqueViolation(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
   return (
-    message.includes("role_day_rates_role_key_uidx") ||
+    message.includes("role_day_rate_schedules_month_uidx") ||
     message.includes("duplicate key")
   );
 }
 
-function asDayRate(value: number): number {
-  return Number.isFinite(value) ? value : 0;
+function toRecord(row: {
+  id: string;
+  effectiveMonth: string;
+  ratesJson: string;
+  createdAt: Date;
+  updatedAt: Date;
+}): RoleDayRateScheduleRecord {
+  return {
+    id: row.id,
+    effectiveMonth: row.effectiveMonth,
+    rates: decodeRoleDayRates(row.ratesJson),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
 }
 
 export class RoleDayRatesRepository {
   constructor(private readonly db: Db) {}
 
-  async list(): Promise<RoleDayRate[]> {
+  async list(): Promise<RoleDayRateScheduleRecord[]> {
     const rows = await this.db
       .select()
-      .from(roleDayRates)
-      .orderBy(asc(roleDayRates.roleName));
-    return rows.map((row) => ({
-      ...row,
-      dayRateCost: asDayRate(row.dayRateCost),
-    }));
+      .from(roleDayRateSchedules)
+      .orderBy(desc(roleDayRateSchedules.effectiveMonth));
+    return rows.map(toRecord);
   }
 
-  async findByRoleKey(roleKey: string): Promise<RoleDayRate | null> {
+  async findByMonth(
+    effectiveMonth: string,
+  ): Promise<RoleDayRateScheduleRecord | null> {
     const rows = await this.db
       .select()
-      .from(roleDayRates)
-      .where(eq(roleDayRates.roleKey, roleKey))
+      .from(roleDayRateSchedules)
+      .where(eq(roleDayRateSchedules.effectiveMonth, effectiveMonth))
       .limit(1);
     const row = rows[0];
-    if (!row) return null;
-    return { ...row, dayRateCost: asDayRate(row.dayRateCost) };
+    return row ? toRecord(row) : null;
   }
 
   async create(values: {
-    roleName: string;
-    dayRateCost: number;
-  }): Promise<RoleDayRate> {
-    const roleName = values.roleName.trim().replace(/\s+/g, " ");
-    const roleKey = normaliseRoleKey(roleName);
-    const existing = await this.findByRoleKey(roleKey);
-    if (existing) throw new DuplicateRoleDayRateError();
+    effectiveMonth: string;
+    rates: RoleDayRateAmount[];
+  }): Promise<RoleDayRateScheduleRecord> {
+    const existing = await this.findByMonth(values.effectiveMonth);
+    if (existing) throw new DuplicateRoleDayRateScheduleError();
 
     try {
       const [row] = await this.db
-        .insert(roleDayRates)
+        .insert(roleDayRateSchedules)
         .values({
-          roleName,
-          roleKey,
-          dayRateCost: values.dayRateCost,
+          effectiveMonth: values.effectiveMonth,
+          ratesJson: encodeRoleDayRates(values.rates),
         })
         .returning();
-      return { ...row, dayRateCost: asDayRate(row.dayRateCost) };
+      return toRecord(row);
     } catch (err) {
-      if (isUniqueViolation(err)) throw new DuplicateRoleDayRateError();
+      if (isUniqueViolation(err)) throw new DuplicateRoleDayRateScheduleError();
       throw err;
     }
   }
 
   async update(
     id: string,
-    values: { roleName?: string; dayRateCost?: number },
-  ): Promise<RoleDayRate | null> {
+    values: { effectiveMonth: string; rates: RoleDayRateAmount[] },
+  ): Promise<RoleDayRateScheduleRecord | null> {
     const currentRows = await this.db
       .select()
-      .from(roleDayRates)
-      .where(eq(roleDayRates.id, id))
+      .from(roleDayRateSchedules)
+      .where(eq(roleDayRateSchedules.id, id))
       .limit(1);
     const current = currentRows[0];
     if (!current) return null;
 
-    const roleName =
-      values.roleName !== undefined
-        ? values.roleName.trim().replace(/\s+/g, " ")
-        : current.roleName;
-    const roleKey = normaliseRoleKey(roleName);
-    if (roleKey !== current.roleKey) {
-      const clash = await this.findByRoleKey(roleKey);
-      if (clash && clash.id !== id) throw new DuplicateRoleDayRateError();
+    if (values.effectiveMonth !== current.effectiveMonth) {
+      const clash = await this.findByMonth(values.effectiveMonth);
+      if (clash && clash.id !== id) throw new DuplicateRoleDayRateScheduleError();
     }
 
     try {
       const [row] = await this.db
-        .update(roleDayRates)
+        .update(roleDayRateSchedules)
         .set({
-          roleName,
-          roleKey,
-          dayRateCost: values.dayRateCost ?? current.dayRateCost,
+          effectiveMonth: values.effectiveMonth,
+          ratesJson: encodeRoleDayRates(values.rates),
           updatedAt: new Date(),
         })
-        .where(eq(roleDayRates.id, id))
+        .where(eq(roleDayRateSchedules.id, id))
         .returning();
-      if (!row) return null;
-      return { ...row, dayRateCost: asDayRate(row.dayRateCost) };
+      return row ? toRecord(row) : null;
     } catch (err) {
-      if (isUniqueViolation(err)) throw new DuplicateRoleDayRateError();
+      if (isUniqueViolation(err)) throw new DuplicateRoleDayRateScheduleError();
       throw err;
     }
   }
 
   async delete(id: string): Promise<boolean> {
     const [row] = await this.db
-      .delete(roleDayRates)
-      .where(eq(roleDayRates.id, id))
-      .returning({ id: roleDayRates.id });
+      .delete(roleDayRateSchedules)
+      .where(eq(roleDayRateSchedules.id, id))
+      .returning({ id: roleDayRateSchedules.id });
     return Boolean(row);
   }
 }

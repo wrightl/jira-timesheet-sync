@@ -6,13 +6,30 @@ import type {
   BitmapUser,
 } from "@/clients/bitmap-http";
 import { EXCLUDED_CLIENT_ID_THECURVE } from "@/lib/excluded-clients";
+import { ROLE_DAY_RATE_TITLES } from "@/lib/role-day-rates";
 import { ProfitabilityService } from "@/services/profitability-service";
 
 const senior: BitmapUser = {
   id: "u1",
   full_name: "Amina Shah",
-  job_title: "Senior Engineer",
+  job_title: "Senior Software Engineer",
 };
+
+function rateSchedule(
+  amounts: Partial<Record<(typeof ROLE_DAY_RATE_TITLES)[number], number>>,
+  effectiveMonth = "2020-01",
+) {
+  return {
+    id: `schedule-${effectiveMonth}`,
+    effectiveMonth,
+    rates: ROLE_DAY_RATE_TITLES.flatMap((roleName) => {
+      const dayRateCost = amounts[roleName];
+      return dayRateCost == null ? [] : [{ roleName, dayRateCost }];
+    }),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+}
 
 function project(
   overrides: Partial<BitmapProject> & Pick<BitmapProject, "id" | "end_date">,
@@ -27,10 +44,16 @@ function project(
 
 function entry(
   hours: number,
-  options?: { billable?: boolean; userId?: string; budgetId?: string },
+  options?: {
+    billable?: boolean;
+    userId?: string;
+    budgetId?: string;
+    date?: string;
+  },
 ): BitmapTimesheetEntry {
   return {
     hours,
+    date: options?.date ?? "2026-03-01",
     billable: options?.billable ?? true,
     state: "approved",
     user: { id: options?.userId ?? "u1", full_name: "Amina Shah" },
@@ -100,16 +123,7 @@ describe("ProfitabilityService", () => {
       },
       {
         async list() {
-          return [
-            {
-              id: "r1",
-              roleName: "Senior Engineer",
-              roleKey: "senior engineer",
-              dayRateCost: 500,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            },
-          ];
+          return [rateSchedule({ "Senior Software Engineer": 500 })];
         },
       },
       { async list() { return []; } },
@@ -243,16 +257,7 @@ describe("ProfitabilityService", () => {
       },
       {
         async list() {
-          return [
-            {
-              id: "r1",
-              roleName: "Project Manager",
-              roleKey: "project manager",
-              dayRateCost: 400,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            },
-          ];
+          return [rateSchedule({ "Project Manager": 400 })];
         },
       },
       {

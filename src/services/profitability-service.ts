@@ -20,8 +20,8 @@ import {
   type ProfitabilityEntry,
   type ProfitabilitySummary,
   type ProjectProfitability,
-  type RoleRate,
 } from "@/lib/profitability";
+import type { RoleRateSchedule } from "@/lib/role-day-rates";
 import { HOURS_PER_WORKING_DAY } from "@/lib/working-duration";
 import { RoleDayRatesRepository } from "@/repositories/role-day-rates-repository";
 import { UserMappingsRepository } from "@/repositories/user-mappings-repository";
@@ -180,6 +180,7 @@ function toEntry(
     hours: finiteNumber(entry.hours) ?? 0,
     billable: profitabilityBillableFlag(entry.billable),
     state: entry.state ?? null,
+    date: isoDateKey(entry.date),
     jobTitle: resolveJobTitle(entry, users, mappingTitles),
     projectBudgetId:
       entry.project_budget?.id ?? entry.project_budget_id ?? null,
@@ -222,7 +223,7 @@ function failedProject(
     endDate,
     entries: [],
     budgets: [],
-    roleRates: [],
+    roleRateSchedules: [],
     loadError: err instanceof Error ? err.message : "Failed to load project",
   });
 }
@@ -258,9 +259,12 @@ export class ProfitabilityService {
       listBitmapUsers(bitmap),
     ]);
 
-    const roleRates: RoleRate[] = rateRows.map((row) => ({
-      roleName: row.roleName,
-      dayRateCost: finiteNumber(row.dayRateCost) ?? 0,
+    const roleRateSchedules: RoleRateSchedule[] = rateRows.map((row) => ({
+      effectiveMonth: row.effectiveMonth,
+      rates: row.rates.map((rate) => ({
+        roleName: rate.roleName,
+        dayRateCost: finiteNumber(rate.dayRateCost) ?? 0,
+      })),
     }));
     const mappingTitles = new Map<string, string>();
     for (const mapping of mappingRows) {
@@ -334,7 +338,7 @@ export class ProfitabilityService {
           endDate: end,
           entries: entries.map((entry) => toEntry(entry, users, mappingTitles)),
           budgets: budgets.map(toBudget),
-          roleRates,
+          roleRateSchedules,
         });
       } catch (err) {
         return failedProject(project, end, err);

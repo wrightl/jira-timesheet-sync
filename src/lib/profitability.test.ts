@@ -9,13 +9,20 @@ import {
   scoreClosedProject,
   summariseProfitability,
   type ProjectProfitability,
-  type RoleRate,
 } from "@/lib/profitability";
+import type { RoleRateSchedule } from "@/lib/role-day-rates";
 
-const rates: RoleRate[] = [
-  { roleName: "Senior Engineer", dayRateCost: 450 },
-  { roleName: "Project Manager", dayRateCost: 500 },
+const schedules: RoleRateSchedule[] = [
+  {
+    effectiveMonth: "2020-01",
+    rates: [
+      { roleName: "Senior Software Engineer", dayRateCost: 450 },
+      { roleName: "Project Manager", dayRateCost: 500 },
+    ],
+  },
 ];
+
+const loggedOn = "2026-03-01";
 
 describe("profitability", () => {
   it("divides amount charged by role cost", () => {
@@ -25,7 +32,7 @@ describe("profitability", () => {
       clientId: "c1",
       clientName: "Acme",
       endDate: "2026-03-31",
-      roleRates: rates,
+      roleRateSchedules: schedules,
       budgets: [
         {
           id: "b1",
@@ -39,7 +46,8 @@ describe("profitability", () => {
           hours: 7.5,
           billable: true,
           state: "approved",
-          jobTitle: "senior engineer",
+          date: loggedOn,
+          jobTitle: "senior software engineer",
           projectBudgetId: "b1",
           budgetDayRate: null,
         },
@@ -53,6 +61,53 @@ describe("profitability", () => {
     expect(row.billableHours).toBe(7.5);
   });
 
+  it("costs each line with the rate set that had started that month", () => {
+    const changing: RoleRateSchedule[] = [
+      {
+        effectiveMonth: "2026-01",
+        rates: [{ roleName: "Senior Software Engineer", dayRateCost: 450 }],
+      },
+      {
+        effectiveMonth: "2026-06",
+        rates: [{ roleName: "Senior Software Engineer", dayRateCost: 600 }],
+      },
+    ];
+    const early = scoreClosedProject({
+      projectId: "p1",
+      projectName: "Atlas",
+      clientId: "c1",
+      clientName: "Acme",
+      endDate: "2026-08-31",
+      roleRateSchedules: changing,
+      budgets: [
+        { id: "b1", dayRate: 900, billableDefault: true, weightHours: 16 },
+      ],
+      entries: [
+        {
+          hours: 7.5,
+          billable: true,
+          state: "approved",
+          date: "2026-03-12",
+          jobTitle: "Senior Software Engineer",
+          projectBudgetId: "b1",
+          budgetDayRate: null,
+        },
+        {
+          hours: 7.5,
+          billable: true,
+          state: "approved",
+          date: "2026-06-02",
+          jobTitle: "Senior Software Engineer",
+          projectBudgetId: "b1",
+          budgetDayRate: null,
+        },
+      ],
+    });
+
+    expect(early.cost).toBe(1050);
+    expect(early.charged).toBe(1800);
+  });
+
   it("counts non-billable time as cost with no charge", () => {
     const row = scoreClosedProject({
       projectId: "p1",
@@ -60,7 +115,7 @@ describe("profitability", () => {
       clientId: "c1",
       clientName: "Acme",
       endDate: "2026-03-31",
-      roleRates: rates,
+      roleRateSchedules: schedules,
       budgets: [
         { id: "b1", dayRate: 900, billableDefault: true, weightHours: 10 },
       ],
@@ -69,7 +124,8 @@ describe("profitability", () => {
           hours: 7.5,
           billable: true,
           state: "approved",
-          jobTitle: "Senior Engineer",
+          date: loggedOn,
+          jobTitle: "Senior Software Engineer",
           projectBudgetId: null,
           budgetDayRate: null,
         },
@@ -77,7 +133,8 @@ describe("profitability", () => {
           hours: 7.5,
           billable: false,
           state: "approved",
-          jobTitle: "Senior Engineer",
+          date: loggedOn,
+          jobTitle: "Senior Software Engineer",
           projectBudgetId: null,
           budgetDayRate: null,
         },
@@ -85,7 +142,8 @@ describe("profitability", () => {
           hours: 7.5,
           billable: null,
           state: "approved",
-          jobTitle: "Senior Engineer",
+          date: loggedOn,
+          jobTitle: "Senior Software Engineer",
           projectBudgetId: null,
           budgetDayRate: null,
         },
@@ -105,7 +163,7 @@ describe("profitability", () => {
       clientId: "c1",
       clientName: "Acme",
       endDate: "2026-04-01",
-      roleRates: rates,
+      roleRateSchedules: schedules,
       budgets: [
         { id: "b1", dayRate: 100, billableDefault: true, weightHours: 10 },
       ],
@@ -114,6 +172,7 @@ describe("profitability", () => {
           hours: 15,
           billable: true,
           state: "submitted",
+          date: loggedOn,
           jobTitle: "Project Manager",
           projectBudgetId: "b1",
           budgetDayRate: null,
@@ -122,6 +181,7 @@ describe("profitability", () => {
           hours: 7.5,
           billable: true,
           state: "approved",
+          date: loggedOn,
           jobTitle: "Intern",
           projectBudgetId: "b1",
           budgetDayRate: null,
@@ -130,6 +190,7 @@ describe("profitability", () => {
           hours: 4,
           billable: true,
           state: "planned",
+          date: loggedOn,
           jobTitle: "Project Manager",
           projectBudgetId: "b1",
           budgetDayRate: null,
@@ -171,7 +232,7 @@ describe("profitability", () => {
       clientId: "c1",
       clientName: "Acme",
       endDate: "2026-03-01",
-      roleRates: rates,
+      roleRateSchedules: schedules,
       budgets: [
         { id: "b1", dayRate: 900, billableDefault: true, weightHours: 8 },
       ],
@@ -180,7 +241,8 @@ describe("profitability", () => {
           hours: 7.5,
           billable: true,
           state: null,
-          jobTitle: "Senior Engineer",
+          date: loggedOn,
+          jobTitle: "Senior Software Engineer",
           projectBudgetId: "b1",
           budgetDayRate: null,
         },
@@ -192,7 +254,7 @@ describe("profitability", () => {
       clientId: "c1",
       clientName: "Acme",
       endDate: "2026-03-02",
-      roleRates: rates,
+      roleRateSchedules: schedules,
       budgets: [
         { id: "b1", dayRate: 50, billableDefault: true, weightHours: 8 },
       ],
@@ -201,7 +263,8 @@ describe("profitability", () => {
           hours: 7.5,
           billable: true,
           state: null,
-          jobTitle: "Senior Engineer",
+          date: loggedOn,
+          jobTitle: "Senior Software Engineer",
           projectBudgetId: "b1",
           budgetDayRate: null,
         },

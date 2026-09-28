@@ -83,6 +83,27 @@ function IconPortfolio(props: IconProps) {
     );
 }
 
+function IconProfitability(props: IconProps) {
+    return (
+        <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden
+            {...props}
+        >
+            <path d="M4 19V5" strokeLinecap="round" />
+            <path d="M4 19h16" strokeLinecap="round" />
+            <path
+                d="m7 14 3.5-3.5 2.5 2L18 7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+            />
+        </svg>
+    );
+}
+
 function IconUtilisation(props: IconProps) {
     return (
         <svg
@@ -531,6 +552,15 @@ export function AppShell({
         { href: '/portfolio', label: 'Portfolio', icon: IconPortfolio },
         { href: '/projects', label: 'Projects', icon: IconProjects },
         { href: '/utilisation', label: 'Utilisation', icon: IconUtilisation },
+        ...(user?.role === 'admin' || user?.role === 'exec'
+            ? [
+                  {
+                      href: '/profitability',
+                      label: 'Profitability',
+                      icon: IconProfitability,
+                  },
+              ]
+            : []),
         { href: '/status', label: 'Status', icon: IconStatus },
         { href: '/github', label: 'GitHub', icon: IconGithub, badge: githubReviewBadge },
         { href: '/support-tickets', label: 'Support', icon: IconTicket },

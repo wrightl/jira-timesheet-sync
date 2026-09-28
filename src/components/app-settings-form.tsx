@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { RoleDayRatesSettings } from "@/components/role-day-rates-settings";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -467,6 +468,8 @@ export function AppSettingsForm({ authed }: { authed: boolean }) {
           </Button>
         </form>
       </Card>
+
+      <RoleDayRatesSettings />
 
       <Card>
         <CardTitle className="mb-2">Required environment</CardTitle>

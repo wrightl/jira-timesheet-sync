@@ -148,6 +148,13 @@ export interface BitmapJiraTicket {
 export interface BitmapTimesheetEntryUser {
     id?: string;
     full_name?: string | null;
+    job_title?: string | null;
+}
+
+export interface BitmapTimesheetEntryBudget {
+    id?: string;
+    name?: string | null;
+    day_rate?: number | null;
 }
 
 export interface BitmapTimesheetEntryProject {
@@ -166,6 +173,8 @@ export interface BitmapTimesheetEntry {
     state?: string | null;
     user?: BitmapTimesheetEntryUser | null;
     project?: BitmapTimesheetEntryProject | null;
+    project_budget_id?: string | null;
+    project_budget?: BitmapTimesheetEntryBudget | null;
 }
 
 export interface ListTimesheetEntriesParams {

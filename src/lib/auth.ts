@@ -52,6 +52,18 @@ export async function requireAdmin(request: NextRequest): Promise<AuthResult> {
   return result;
 }
 
+/** Admin and exec can read commercial metrics such as profitability. */
+export async function requireLeadership(
+  request: NextRequest,
+): Promise<AuthResult> {
+  const result = await requireAuth(request);
+  if (result.error) return result;
+  if (result.user.role !== "admin" && result.user.role !== "exec") {
+    return { error: forbidden("Admin or exec access required") };
+  }
+  return result;
+}
+
 export async function createSession(
   db: ReturnType<typeof getDb>,
   userId: string,
@@ -91,7 +103,7 @@ export async function getUserFromCookies(
 
 /** Collapse page auth + role gate for App Router pages. */
 export async function requirePageUser(options?: {
-  role?: "admin";
+  role?: "admin" | "leadership";
 }): Promise<AuthUser> {
   const { cookies } = await import("next/headers");
   const { redirect } = await import("next/navigation");
@@ -102,6 +114,13 @@ export async function requirePageUser(options?: {
   }
   if (options?.role === "admin" && user!.role !== "admin") {
     redirect(user!.role === "exec" ? "/portfolio" : "/my-mappings");
+  }
+  if (
+    options?.role === "leadership" &&
+    user!.role !== "admin" &&
+    user!.role !== "exec"
+  ) {
+    redirect("/my-mappings");
   }
   return user!;
 }

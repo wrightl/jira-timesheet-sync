@@ -234,6 +234,33 @@ export const teamCreateSchema = z.object({
   name: z.string().min(1, "name is required"),
 });
 
+const roleNameSchema = z
+  .string()
+  .trim()
+  .min(1, "roleName is required")
+  .max(120, "roleName is too long");
+
+const dayRateCostSchema = z
+  .number()
+  .finite()
+  .nonnegative("dayRateCost must be zero or greater")
+  .max(1_000_000, "dayRateCost is too large");
+
+export const roleDayRateCreateSchema = z.object({
+  roleName: roleNameSchema,
+  dayRateCost: dayRateCostSchema,
+});
+
+export const roleDayRateUpdateSchema = z
+  .object({
+    roleName: roleNameSchema.optional(),
+    dayRateCost: dayRateCostSchema.optional(),
+  })
+  .refine(
+    (data) => data.roleName !== undefined || data.dayRateCost !== undefined,
+    { message: "At least one role day rate field is required" },
+  );
+
 export const teamMemberCreateSchema = z.object({
   teamId: z.string().uuid(),
   userMappingId: z.string().uuid().nullable().optional(),
@@ -268,3 +295,5 @@ export type GithubSettingsUpdateInput = z.infer<
 >;
 export type UserSettingsUpdateInput = z.infer<typeof userSettingsUpdateSchema>;
 export type SettingsUpdateInput = z.infer<typeof settingsUpdateSchema>;
+export type RoleDayRateCreateInput = z.infer<typeof roleDayRateCreateSchema>;
+export type RoleDayRateUpdateInput = z.infer<typeof roleDayRateUpdateSchema>;

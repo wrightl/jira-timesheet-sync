@@ -163,6 +163,46 @@ describe("ProfitabilityService", () => {
     expect(result.projects[0]?.profitabilityPct).toBe(18);
   });
 
+  it("limits metrics to the selected client", async () => {
+    const result = await service({
+      projects: [
+        project({
+          id: "a",
+          name: "A",
+          end_date: "2026-02-01",
+          client: { id: "c1", name: "Acme" },
+        }),
+        project({
+          id: "b",
+          name: "B",
+          end_date: "2026-02-02",
+          client: { id: "c2", name: "Northwind" },
+        }),
+      ],
+      entries: {
+        a: [entry(7.5)],
+        b: [entry(7.5)],
+      },
+      budgets: {
+        a: [{ id: "b1", name: "A", day_rate: 90, billable_default: true }],
+        b: [{ id: "b1", name: "B", day_rate: 900, billable_default: true }],
+      },
+    }).getProfitability({
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+      clientId: "c2",
+    });
+
+    expect(result.clientOptions).toEqual([
+      { clientId: "c1", clientName: "Acme" },
+      { clientId: "c2", clientName: "Northwind" },
+    ]);
+    expect(result.projectOptions.map((row) => row.projectId)).toEqual(["b"]);
+    expect(result.projects.map((row) => row.projectId)).toEqual(["b"]);
+    expect(result.projects[0]?.profitabilityPct).toBe(180);
+    expect(result.summary.projectCount).toBe(1);
+  });
+
   it("uses the user-mapping job title when Bitmap has none", async () => {
     const withMapping = new ProfitabilityService(
       {

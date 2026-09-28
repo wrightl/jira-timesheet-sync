@@ -231,6 +231,7 @@ export function ProfitabilityDashboard({ authed }: { authed: boolean }) {
   const [pending, setPending] = useState(false);
   const [startDate, setStartDate] = useState(() => isoDaysAgo(90));
   const [endDate, setEndDate] = useState(() => todayIso());
+  const [clientId, setClientId] = useState("all");
   const [projectId, setProjectId] = useState("all");
 
   const load = async () => {
@@ -238,6 +239,7 @@ export function ProfitabilityDashboard({ authed }: { authed: boolean }) {
     setError(null);
     try {
       const params = new URLSearchParams({ startDate, endDate });
+      if (clientId !== "all") params.set("clientId", clientId);
       if (projectId !== "all") params.set("projectId", projectId);
       const res = await fetch(`/api/profitability?${params.toString()}`, {
         cache: "no-store",
@@ -269,7 +271,7 @@ export function ProfitabilityDashboard({ authed }: { authed: boolean }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reload when the filters change
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authed, startDate, endDate, projectId]);
+  }, [authed, startDate, endDate, clientId, projectId]);
 
   if (!authed) {
     return (
@@ -291,6 +293,7 @@ export function ProfitabilityDashboard({ authed }: { authed: boolean }) {
             max={endDate}
             onChange={(event) => {
               setStartDate(event.target.value);
+              setClientId("all");
               setProjectId("all");
             }}
           />
@@ -303,9 +306,28 @@ export function ProfitabilityDashboard({ authed }: { authed: boolean }) {
             min={startDate}
             onChange={(event) => {
               setEndDate(event.target.value);
+              setClientId("all");
               setProjectId("all");
             }}
           />
+        </label>
+        <label className="block min-w-48 flex-1 text-sm">
+          <span className="mb-1 block text-muted">Client</span>
+          <Select
+            value={clientId}
+            onChange={(event) => {
+              setClientId(event.target.value);
+              setProjectId("all");
+            }}
+            aria-label="Client"
+          >
+            <option value="all">All clients</option>
+            {(data?.clientOptions ?? []).map((client) => (
+              <option key={client.clientId} value={client.clientId}>
+                {client.clientName}
+              </option>
+            ))}
+          </Select>
         </label>
         <label className="block min-w-56 flex-1 text-sm">
           <span className="mb-1 block text-muted">Project</span>
@@ -314,7 +336,9 @@ export function ProfitabilityDashboard({ authed }: { authed: boolean }) {
             onChange={(event) => setProjectId(event.target.value)}
             aria-label="Project"
           >
-            <option value="all">All closed projects</option>
+            <option value="all">
+              {clientId === "all" ? "All closed projects" : "All projects"}
+            </option>
             {(data?.projectOptions ?? []).map((option) => (
               <option key={option.projectId} value={option.projectId}>
                 {optionLabel(option)}
@@ -332,7 +356,8 @@ export function ProfitabilityDashboard({ authed }: { authed: boolean }) {
       {data?.truncated ? (
         <Alert>
           Showing the {data.projects.length} most recently closed projects in
-          this range. Narrow the dates or pick a project to load the rest.
+          this range. Narrow the dates or pick a client or project to load the
+          rest.
         </Alert>
       ) : null}
 

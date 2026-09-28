@@ -9,12 +9,14 @@ export async function GET(request: NextRequest) {
 
   const startDate = request.nextUrl.searchParams.get("startDate") ?? "";
   const endDate = request.nextUrl.searchParams.get("endDate") ?? "";
+  const clientId = request.nextUrl.searchParams.get("clientId");
   const projectId = request.nextUrl.searchParams.get("projectId");
 
   try {
     const result = await createProfitabilityService().getProfitability({
       startDate,
       endDate,
+      clientId,
       projectId,
     });
     return Response.json(result);

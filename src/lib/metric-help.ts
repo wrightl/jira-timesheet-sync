@@ -544,12 +544,12 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   "profitability.average": {
     title: "Average profitability",
     formula:
-      "Mean of each closed project’s profitability percentage, using only projects where both charge and cost could be calculated. Profitability % = amount charged ÷ delivery cost × 100. Charged is billable days × the Bitmap budget day rate (7.5 hours per day). Cost is countable logged days × the person’s role cost day rate from App Settings. A day rate matches the Bitmap job title, then the user-mapping job title. Planned and rejected entries are omitted. Hours with no role rate or no client day rate are omitted from both sides. The date range and client filter select projects whose end date falls inside the range; the percentage uses the project’s timesheets. The Curve company projects are omitted. 100% means fees equal cost.",
+      "Mean of each closed project’s profitability percentage, using only projects where both charge and cost could be calculated. Profitability % = amount charged ÷ delivery cost × 100. Charged is billable days × the Bitmap budget day rate (7.5 hours per day). Cost is countable logged days × the role cost day rate in force for the month the time was logged. Rate sets are stored in App Settings and start on the first day of a month. A day rate matches the Bitmap job title, then the user-mapping job title. Planned and rejected entries are omitted. Hours with no role rate or no client day rate are omitted from both sides. The date range and client filter select projects whose end date falls inside the range; the percentage uses the project’s timesheets. The Curve company projects are omitted. 100% means fees equal cost.",
     sources: [
       "Bitmap completed projects (end date in the selected range)",
       "Bitmap project budgets (day_rate)",
       "Bitmap project timesheet entries",
-      "Role day rates in App Settings",
+      "Monthly role day-rate schedules in App Settings",
       "Bitmap user job titles and user-mapping job titles",
     ],
     unavailable:
@@ -590,10 +590,10 @@ export const METRIC_HELP: Record<MetricHelpId, MetricHelpEntry> = {
   "profitability.cost": {
     title: "Delivery cost",
     formula:
-      "Sum of countable logged days × the matched role cost day rate. Billable and explicitly non-billable time both count. Entries with a missing billable flag are omitted. A working day is 7.5 hours. Role rates are the GBP day-rate costs stored under App Settings.",
+      "Sum of countable logged days × the matched role cost day rate. Billable and explicitly non-billable time both count. Entries with a missing billable flag are omitted. A working day is 7.5 hours. The day rate is the job-title set that had started by the month of the timesheet, from the monthly schedules in App Settings.",
     sources: [
       "Bitmap timesheet entries",
-      "Role day rates in App Settings",
+      "Monthly role day-rate schedules in App Settings",
       "Bitmap and user-mapping job titles",
     ],
   },

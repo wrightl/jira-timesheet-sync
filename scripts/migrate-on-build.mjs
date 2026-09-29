@@ -34,6 +34,16 @@ if (backfill.status !== 0) {
   process.exit(backfill.status ?? 1);
 }
 
+console.log("[migrate-on-build] Removing legacy role day rates…");
+const dropRates = spawnSync("node", ["scripts/drop-legacy-role-day-rates.mjs"], {
+  stdio: "inherit",
+  env: process.env,
+});
+if (dropRates.status !== 0) {
+  console.error("[migrate-on-build] Legacy role day rate drop failed.");
+  process.exit(dropRates.status ?? 1);
+}
+
 console.log("[migrate-on-build] Syncing schema with drizzle-kit push…");
 const result = spawnSync("npx", ["drizzle-kit", "push", "--force"], {
   stdio: "inherit",

@@ -1,3 +1,7 @@
+import {
+  rateForTitleOnDate,
+  type RoleRateSchedule,
+} from "@/lib/role-day-rates";
 import { HOURS_PER_WORKING_DAY } from "@/lib/working-duration";
 
 /** Projects whose profitability percentage is under this value are flagged. */
@@ -8,11 +12,6 @@ export const PROFITABILITY_PROJECT_CAP = 60;
 
 const MAX_RANGE_DAYS = 366 * 5;
 
-export type RoleRate = {
-  roleName: string;
-  dayRateCost: number;
-};
-
 export type ProfitabilityBudget = {
   id: string;
   dayRate: number | null;
@@ -22,6 +21,8 @@ export type ProfitabilityBudget = {
 
 export type ProfitabilityEntry = {
   hours: number;
+  /** Timesheet date. The cost rate is the set in force for this month. */
+  date: string | null;
   /** True when the client was charged for the time. */
   billable: boolean | null;
   state: string | null;
@@ -38,7 +39,7 @@ export type ClosedProjectInput = {
   endDate: string;
   entries: ProfitabilityEntry[];
   budgets: ProfitabilityBudget[];
-  roleRates: RoleRate[];
+  roleRateSchedules: RoleRateSchedule[];
   loadError?: string | null;
 };
 
@@ -79,10 +80,6 @@ export class ProfitabilityQueryError extends Error {
     super(message);
     this.name = "ProfitabilityQueryError";
   }
-}
-
-export function normaliseRoleKey(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 export function isoDateKey(value: string | null | undefined): string | null {
@@ -154,18 +151,6 @@ function positiveRate(value: number | null | undefined): number | null {
   return value;
 }
 
-export function roleRateMap(rates: RoleRate[]): Map<string, number> {
-  const map = new Map<string, number>();
-  for (const rate of rates) {
-    const key = normaliseRoleKey(rate.roleName);
-    if (!key) continue;
-    const amount = positiveRate(rate.dayRateCost);
-    if (amount == null) continue;
-    map.set(key, amount);
-  }
-  return map;
-}
-
 /**
  * Client day rate for a timesheet line.
  * Prefer the entry's budget, then a single project rate or the billable
@@ -228,14 +213,13 @@ export function profitabilityPct(
 /**
  * Profitability for one closed project.
  * Charged = billable days × client day rate.
- * Cost = countable days × the person's role cost day rate.
+ * Cost = countable days × the role cost day rate in force that month.
  * Profitability % = charged ÷ cost × 100.
  * Lines missing a role rate or a client rate are omitted from both sides.
  */
 export function scoreClosedProject(
   input: ClosedProjectInput,
 ): ProjectProfitability {
-  const rates = roleRateMap(input.roleRates);
   let hours = 0;
   let billableHours = 0;
   let charged = 0;
@@ -250,8 +234,11 @@ export function scoreClosedProject(
       if (!isCountableProfitabilityEntry(entry.state)) continue;
       if (!Number.isFinite(entry.hours) || entry.hours <= 0) continue;
 
-      const roleKey = entry.jobTitle ? normaliseRoleKey(entry.jobTitle) : "";
-      const roleRate = roleKey ? rates.get(roleKey) : undefined;
+      const roleRate = rateForTitleOnDate(
+        input.roleRateSchedules,
+        entry.jobTitle,
+        entry.date,
+      );
       if (roleRate == null) {
         unratedHours += entry.hours;
         missingRoles.add(entry.jobTitle?.trim() || "Unknown role");

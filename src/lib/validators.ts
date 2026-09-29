@@ -4,6 +4,7 @@ import {
   isAllowedJiraBaseUrl,
   isAllowedSlackWebhookUrl,
 } from "@/lib/outbound-urls";
+import { ROLE_DAY_RATE_TITLES } from "@/lib/role-day-rates";
 
 const optionalJiraBaseUrl = z
   .string()
@@ -234,32 +235,35 @@ export const teamCreateSchema = z.object({
   name: z.string().min(1, "name is required"),
 });
 
-const roleNameSchema = z
-  .string()
-  .trim()
-  .min(1, "roleName is required")
-  .max(120, "roleName is too long");
-
 const dayRateCostSchema = z
   .number()
   .finite()
   .nonnegative("dayRateCost must be zero or greater")
   .max(1_000_000, "dayRateCost is too large");
 
-export const roleDayRateCreateSchema = z.object({
-  roleName: roleNameSchema,
-  dayRateCost: dayRateCostSchema,
-});
+const roleDayRateTitleSchema = z.enum(ROLE_DAY_RATE_TITLES);
 
-export const roleDayRateUpdateSchema = z
-  .object({
-    roleName: roleNameSchema.optional(),
-    dayRateCost: dayRateCostSchema.optional(),
-  })
+const roleDayRateAmountsSchema = z
+  .array(
+    z.object({
+      roleName: roleDayRateTitleSchema,
+      dayRateCost: dayRateCostSchema,
+    }),
+  )
+  .length(ROLE_DAY_RATE_TITLES.length)
   .refine(
-    (data) => data.roleName !== undefined || data.dayRateCost !== undefined,
-    { message: "At least one role day rate field is required" },
+    (rates) =>
+      new Set(rates.map((rate) => rate.roleName)).size ===
+      ROLE_DAY_RATE_TITLES.length,
+    { message: "Each job title needs exactly one day rate" },
   );
+
+export const roleDayRateScheduleSchema = z.object({
+  effectiveMonth: z
+    .string()
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "effectiveMonth must be YYYY-MM"),
+  rates: roleDayRateAmountsSchema,
+});
 
 export const teamMemberCreateSchema = z.object({
   teamId: z.string().uuid(),
@@ -295,5 +299,4 @@ export type GithubSettingsUpdateInput = z.infer<
 >;
 export type UserSettingsUpdateInput = z.infer<typeof userSettingsUpdateSchema>;
 export type SettingsUpdateInput = z.infer<typeof settingsUpdateSchema>;
-export type RoleDayRateCreateInput = z.infer<typeof roleDayRateCreateSchema>;
-export type RoleDayRateUpdateInput = z.infer<typeof roleDayRateUpdateSchema>;
+export type RoleDayRateScheduleInput = z.infer<typeof roleDayRateScheduleSchema>;

@@ -15,7 +15,7 @@ export default async function ProfitabilityPage() {
       <PageMain>
         <PageHeader
           title="Profitability"
-          description="Closed Bitmap projects for a client and date range. Profitability is the amount charged to the client divided by delivery cost: billable days times the budget day rate, over logged days times each person’s role cost day rate."
+          description="Closed Bitmap projects for a client and date range. Profitability is the amount charged to the client divided by delivery cost: billable days times the budget day rate, over logged days times the role cost day rate in force for the month the time was logged."
         />
         <ProfitabilityDashboard authed />
       </PageMain>

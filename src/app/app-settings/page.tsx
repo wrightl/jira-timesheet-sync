@@ -15,7 +15,7 @@ export default async function AppSettingsPage() {
       <PageMain>
         <PageHeader
           title="App Settings"
-          description="Configure Bitmap and Jira Cloud API credentials, alerts, and the role day rates used by project profitability."
+          description="Configure Bitmap and Jira Cloud API credentials, alerts, and the monthly role day-rate schedules used by project profitability."
         />
         <AppSettingsForm authed />
       </PageMain>

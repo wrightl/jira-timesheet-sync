@@ -2,43 +2,52 @@ import { NextRequest } from "next/server";
 import { getDb } from "@/db";
 import { requireAdmin } from "@/lib/auth";
 import { parseJsonBody } from "@/lib/api";
-import { roleDayRateCreateSchema } from "@/lib/validators";
 import {
-  DuplicateRoleDayRateError,
+  ROLE_DAY_RATE_TITLES,
+  activeSchedule,
+  currentEffectiveMonth,
+  scheduleTiming,
+} from "@/lib/role-day-rates";
+import { roleDayRateScheduleSchema } from "@/lib/validators";
+import {
+  DuplicateRoleDayRateScheduleError,
   RoleDayRatesRepository,
+  type RoleDayRateScheduleRecord,
 } from "@/repositories/role-day-rates-repository";
-import { UserMappingsRepository } from "@/repositories/user-mappings-repository";
 
-function knownJobTitles(
-  titles: Array<string | null | undefined>,
-): string[] {
-  const seen = new Set<string>();
-  const unique: string[] = [];
-  for (const title of titles) {
-    const trimmed = title?.trim().replace(/\s+/g, " ") ?? "";
-    if (!trimmed) continue;
-    const key = trimmed.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    unique.push(trimmed);
-  }
-  unique.sort((a, b) => a.localeCompare(b));
-  return unique;
+function presentSchedule(
+  schedule: RoleDayRateScheduleRecord,
+  schedules: RoleDayRateScheduleRecord[],
+  todayMonth: string,
+) {
+  return {
+    id: schedule.id,
+    effectiveMonth: schedule.effectiveMonth,
+    timing: scheduleTiming(schedule.effectiveMonth, schedules, todayMonth),
+    rates: ROLE_DAY_RATE_TITLES.map((roleName) => ({
+      roleName,
+      dayRateCost:
+        schedule.rates.find((rate) => rate.roleName === roleName)?.dayRateCost ??
+        null,
+    })),
+  };
 }
 
 export async function GET(request: NextRequest) {
   const auth = await requireAdmin(request);
   if (auth.error) return auth.error;
 
-  const db = getDb();
-  const [rates, mappings] = await Promise.all([
-    new RoleDayRatesRepository(db).list(),
-    new UserMappingsRepository(db).list(),
-  ]);
+  const schedules = await new RoleDayRatesRepository(getDb()).list();
+  const todayMonth = currentEffectiveMonth();
+  const active = activeSchedule(schedules, todayMonth);
 
   return Response.json({
-    rates,
-    knownJobTitles: knownJobTitles(mappings.map((mapping) => mapping.jobTitle)),
+    titles: ROLE_DAY_RATE_TITLES,
+    todayMonth,
+    activeEffectiveMonth: active?.effectiveMonth ?? null,
+    schedules: schedules.map((schedule) =>
+      presentSchedule(schedule, schedules, todayMonth),
+    ),
   });
 }
 
@@ -46,19 +55,24 @@ export async function POST(request: NextRequest) {
   const auth = await requireAdmin(request);
   if (auth.error) return auth.error;
 
-  const parsed = await parseJsonBody(request, roleDayRateCreateSchema);
+  const parsed = await parseJsonBody(request, roleDayRateScheduleSchema);
   if ("error" in parsed) return parsed.error;
 
   try {
-    const rate = await new RoleDayRatesRepository(getDb()).create(parsed.data);
-    return Response.json(rate, { status: 201 });
+    const schedule = await new RoleDayRatesRepository(getDb()).create(
+      parsed.data,
+    );
+    const todayMonth = currentEffectiveMonth();
+    return Response.json(presentSchedule(schedule, [schedule], todayMonth), {
+      status: 201,
+    });
   } catch (err) {
-    if (err instanceof DuplicateRoleDayRateError) {
+    if (err instanceof DuplicateRoleDayRateScheduleError) {
       return Response.json({ error: err.message }, { status: 409 });
     }
     return Response.json(
       {
-        error: err instanceof Error ? err.message : "Failed to save day rate",
+        error: err instanceof Error ? err.message : "Failed to save rate set",
       },
       { status: 400 },
     );

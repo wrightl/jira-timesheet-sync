@@ -1,6 +1,5 @@
 import {
   boolean,
-  doublePrecision,
   pgEnum,
   pgTable,
   text,
@@ -398,17 +397,16 @@ export type TeamOwnership = typeof teamOwnerships.$inferSelect;
 export type NewTeamOwnership = typeof teamOwnerships.$inferInsert;
 
 /**
- * Internal cost of one working day for a job role (Senior Engineer, Project
- * Manager, and so on). Matched to Bitmap and user-mapping job titles.
+ * One complete set of job-title cost day rates. The set starts on the first
+ * day of effectiveMonth (YYYY-MM) and stays in force until the next set.
+ * ratesJson is a map of the fixed job titles to GBP day rates.
  */
-export const roleDayRates = pgTable(
-  "role_day_rates",
+export const roleDayRateSchedules = pgTable(
+  "role_day_rate_schedules",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    roleName: text("role_name").notNull(),
-    /** Lowercased, whitespace-collapsed role name used for matching. */
-    roleKey: text("role_key").notNull(),
-    dayRateCost: doublePrecision("day_rate_cost").notNull(),
+    effectiveMonth: text("effective_month").notNull(),
+    ratesJson: text("rates_json").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -416,8 +414,10 @@ export const roleDayRates = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => [uniqueIndex("role_day_rates_role_key_uidx").on(table.roleKey)],
+  (table) => [
+    uniqueIndex("role_day_rate_schedules_month_uidx").on(table.effectiveMonth),
+  ],
 );
 
-export type RoleDayRate = typeof roleDayRates.$inferSelect;
-export type NewRoleDayRate = typeof roleDayRates.$inferInsert;
+export type RoleDayRateScheduleRow = typeof roleDayRateSchedules.$inferSelect;
+export type NewRoleDayRateSchedule = typeof roleDayRateSchedules.$inferInsert;
